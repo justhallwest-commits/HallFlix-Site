@@ -11,8 +11,8 @@ In **Files**, inside your `docker` shared folder, create `hallflix`, and inside 
 1. Open the **Docker** app, go to **Project**, and press **Create**.
 2. Name it `hallflix` and pick the `docker/hallflix` folder as its location.
 3. Paste in the contents of [`docker-compose.yml`](docker-compose.yml).
-4. Change the two lines marked `<-- CHANGE` so the left side is the shared folder that holds your movies and shows
-   (for example `/volume1/Media`). If your `docker` folder is not on `volume1`, fix those paths too.
+4. Change the two lines marked `<-- CHANGE`. Replace only the part before the first colon with the shared folder that holds
+   your movies and shows, and keep `:/media:ro` on the end. For media in `/volume1/Media` the line is `- /volume1/Media:/media:ro`. If your `docker` folder is not on `volume1`, fix those paths too.
 5. Press **Deploy**. The first start downloads about 600 MB.
 
 ## 3. Set it up
