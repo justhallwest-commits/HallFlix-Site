@@ -10,6 +10,7 @@ import * as catalog from './catalog.js';
 import * as playback from './playback.js';
 import * as studio from './studio.js';
 import * as manage from './manage.js';
+import * as extras from './extras.js';
 import * as look from './look.js';
 import * as plugins from './plugins.js';
 import * as scan from './scan.js';
@@ -74,6 +75,7 @@ catalog.routes(r);
 playback.routes(r);
 studio.routes(r);
 manage.routes(r);
+extras.routes(r);
 
 // TMDb artwork, fetched once and then served from the NAS.
 const SIZES = new Set(['w185', 'w300', 'w342', 'w500', 'w780', 'w1280', 'original']);

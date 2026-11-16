@@ -82,6 +82,7 @@ class PlayerActivity : Activity() {
         })
         start(intent.getLongExtra("itemId", 0), intent.getDoubleExtra("start", -1.0).takeIf { it >= 0 }, prerolls = true)
         ui.postDelayed(tick, 10_000)
+        ui.postDelayed(introWatch, 1000)
     }
 
     private fun current(): Entry? = entries.getOrNull(exo.currentMediaItemIndex)
@@ -142,7 +143,7 @@ class PlayerActivity : Activity() {
     private fun onEntryChanged() {
         val e = current() ?: return
         val title = findViewById<TextView>(R.id.title)
-        findViewById<View>(R.id.badge).visibility = if (e.main) View.GONE else View.VISIBLE
+        findViewById<View>(R.id.badge).visibility = if (e.main || e.json.optString("kind") == "ident") View.GONE else View.VISIBLE
         title.text = if (e.main) listOf(e.json.optString("title"), e.json.optString("subtitle")).filter { it.isNotEmpty() }.joinToString("  ·  ") else ""
         // A file that plays as-is resumes by seeking; a converted stream already starts at the resume point.
         if (e.main && !resumed) {
@@ -246,6 +247,22 @@ class PlayerActivity : Activity() {
             if (exo.isPlaying) report()
             for (sid in entries.mapNotNull { it.sid }) io.execute { try { Server.call(server, token, "POST", "/api/play/ping/$sid") } catch (_: Exception) { } }
             ui.postDelayed(this, 10_000)
+        }
+    }
+
+    /** While the intro the Studio marked is playing, offer to skip it. */
+    private var introShown = false
+    private val introWatch = object : Runnable {
+        override fun run() {
+            val e = current()
+            val m = if (e != null && e.main) e.json.optJSONObject("marks") else null
+            val end = m?.optDouble("introEnd", 0.0) ?: 0.0
+            val inIntro = e != null && end > 0 && nextUp == null && position(e) >= (m?.optDouble("introStart", 0.0) ?: 0.0) && position(e) < end - 1
+            if (inIntro && !introShown) {
+                introShown = true
+                showMessage("Intro", "Skip ahead to the episode", "Skip intro") { view.player?.seekTo(((end - e!!.offset) * 1000).toLong().coerceAtLeast(0)); hideMessage(); introShown = false }
+            } else if (!inIntro && introShown) { introShown = false; if (nextUp == null) hideMessage() }
+            ui.postDelayed(this, 1000)
         }
     }
 

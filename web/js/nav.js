@@ -3,6 +3,8 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 const DIR = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
 function scope() {
+  const top = document.querySelector('.confirm, .surprise'); // dialogs above everything else
+  if (top) return top;
   const player = document.getElementById('player');
   if (player && !player.hidden) return player;
   const overlay = document.getElementById('overlay');

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { cfg } from './config.js';
+import { currentLook } from './look.js';
 import { q, q1, getSetting } from './db.js';
 import { HttpError, readJson, sendFile, json } from './http.js';
 import { run } from './probe.js';
@@ -147,8 +148,15 @@ export function routes(r) {
         }
       }
     }
+    // The HallFlix ident (a logo card) plays last before the feature. An uploaded video reaches every app;
+    // without one, the web app draws its own animation.
+    const ident = (await currentLook()).theme.ident;
+    if (item.kind !== 'clip' && body.prerolls !== false && resumeAt < 60 && ident?.enabled && /^\/uploads\/[\w.-]+\.(mp4|webm)$/.test(ident.video || '')) {
+      queue.push({ kind: 'ident', itemId: 0, title: '', duration: 0, container: 'mp4', mode: 'direct', url: ident.video, audio: [], subs: [] });
+    }
     const main = await entryFor(item, body.caps, { audio: body.audio, quality: body.quality }, 'main');
     main.resumeAt = resumeAt;
+    main.marks = item.marks || {};
     main.subtitle = item.kind === 'episode' ? `${item.show_title} · S${item.season_no} E${item.episode_no}` : item.year ? String(item.year) : '';
     main.backdrop = img(item.backdrop || item.show_backdrop, 'w1280');
     main.logo = img(item.kind === 'episode' ? item.show_logo : item.logo, 'w500');

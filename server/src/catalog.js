@@ -1,5 +1,6 @@
 // Browsing: home rows, libraries, title pages, search, watch progress and My List.
-import { q, q1 } from './db.js';
+import { q, q1, getSetting } from './db.js';
+import { MOODS, collectionCards } from './extras.js';
 import { HttpError, readJson } from './http.js';
 
 export function img(ref, size) {
@@ -9,9 +10,9 @@ export function img(ref, size) {
   return ref;
 }
 
-const SEL = `i.*, s.title as show_title, s.poster as show_poster, s.backdrop as show_backdrop, s.logo as show_logo,
+export const SEL = `i.*, s.title as show_title, s.poster as show_poster, s.backdrop as show_backdrop, s.logo as show_logo,
   s.rating as show_rating, s.genres as show_genres, p.position_s, p.duration_s, p.watched`;
-const FROM = `from items i left join items s on s.id = i.show_id
+export const FROM = `from items i left join items s on s.id = i.show_id
   left join progress p on p.item_id = i.id and p.profile_id = $1`;
 
 const hash = (str) => { let h = 0; for (const c of String(str)) h = (h * 31 + c.charCodeAt(0)) | 0; return h; };
@@ -72,25 +73,43 @@ export function routes(r) {
     const pid = profile.id;
     const day = new Date().toISOString().slice(0, 10);
     const libs = await q(`select id, name, kind from libraries where kind in ('movies','shows') order by position, id`);
-    const rows = [];
+    const home = await getSetting('home', {});
+    const sec = { continue: [], mylist: [], recent: [], top: [], genres: [] };
     const cont = await continueRow(pid);
-    if (cont.length) rows.push({ id: 'continue', title: `Continue watching for ${profile.name}`, shape: 'wide', items: cont });
+    if (cont.length) sec.continue.push({ id: 'continue', title: `Continue watching for ${profile.name}`, shape: 'wide', items: cont });
     const mine = await q(`select ${SEL} ${FROM} join mylist m on m.item_id = i.id and m.profile_id = $1 order by m.added_at desc limit 30`, [pid]);
-    if (mine.length) rows.push({ id: 'mylist', title: 'My List', items: mine.map(card) });
+    if (mine.length) sec.mylist.push({ id: 'mylist', title: 'My List', items: mine.map(card) });
     for (const l of libs) {
       const kind = l.kind === 'movies' ? 'movie' : 'show';
       const recent = await q(`select ${SEL} ${FROM} where i.library_id = $2 and i.kind = $3 order by i.added_at desc, i.id desc limit 24`, [pid, l.id, kind]);
-      if (recent.length) rows.push({ id: `recent-${l.id}`, title: `New in ${l.name}`, library: l.id, items: recent.map(card) });
+      if (recent.length) sec.recent.push({ id: `recent-${l.id}`, title: `New in ${l.name}`, library: l.id, items: recent.map(card) });
     }
     const genres = await q(
       `select g, count(*)::int as n from items i, unnest(i.genres) g where i.kind in ('movie','show') group by g having count(*) >= 4
        order by md5(g || $1) limit 8`, [day]);
     for (const g of genres) {
       const items = await q(`select ${SEL} ${FROM} where i.kind in ('movie','show') and $2 = any(i.genres) order by md5(i.id::text || $3) limit 24`, [pid, g.g, day]);
-      rows.push({ id: `genre-${g.g}`, title: g.g, items: items.map(card) });
+      sec.genres.push({ id: `genre-${g.g}`, title: g.g, items: items.map(card) });
     }
     const top = await q(`select ${SEL} ${FROM} where i.kind in ('movie','show') and i.score is not null order by i.score desc, i.id limit 20`, [pid]);
-    if (top.length >= 6) rows.splice(Math.min(rows.length, 3), 0, { id: 'top', title: 'Top rated', items: top.map(card) });
+    if (top.length >= 6) sec.top.push({ id: 'top', title: 'Top rated', items: top.map(card) });
+    // The Studio's Home layout decides the order of sections and which are hidden.
+    const known = ['libraries', 'continue', 'mylist', 'recent', 'top', 'collections', 'genres'];
+    const order = [...(home.order || []).filter((x) => known.includes(x)), ...known.filter((x) => !(home.order || []).includes(x))];
+    const hidden = new Set(home.hidden || []);
+    const rows = [];
+    const layout = { tilesAt: -1, collectionsAt: -1 };
+    for (const id of order) {
+      if (hidden.has(id)) continue;
+      if (id === 'libraries') layout.tilesAt = rows.length;
+      else if (id === 'collections') layout.collectionsAt = rows.length;
+      else rows.push(...sec[id]);
+    }
+    let pinned = [];
+    if (home.spotlight?.length) {
+      const got = await q(`select ${SEL} ${FROM} where i.id = any($2) and i.kind in ('movie','show')`, [pid, home.spotlight]);
+      pinned = home.spotlight.map((id) => got.find((x) => x.id === id)).filter(Boolean);
+    }
     const spotlight = await q(
       `select ${SEL} ${FROM} where i.kind in ('movie','show') and i.backdrop is not null
        order by (i.added_at > now() - interval '45 days') desc, md5(i.id::text || $2) limit 6`, [pid, day]);
@@ -108,7 +127,17 @@ export function routes(r) {
         posters: art.filter((a) => a.poster).slice(0, 3).map((a) => img(a.poster, 'w342')),
       });
     }
-    return { spotlight: spotlight.map((x) => ({ ...card(x), backdrop: img(x.backdrop, 'w1280'), tagline: x.tagline })), libraries: tiles, rows };
+    const spot = [...pinned, ...spotlight.filter((x) => !pinned.some((p) => p.id === x.id))].slice(0, Math.max(6, pinned.length));
+    const moods = await q(`select distinct g from items i, unnest(i.genres) g where i.kind in ('movie','show')`);
+    const have = new Set(moods.map((m) => m.g));
+    const ann = home.announcement?.text ? { text: home.announcement.text, link: home.announcement.link || '' } : null;
+    return {
+      spotlight: spot.map((x) => ({ ...card(x), backdrop: img(x.backdrop || x.poster, 'w1280'), tagline: x.tagline, trailer: x.trailer })),
+      libraries: layout.tilesAt < 0 ? [] : tiles, rows, layout,
+      collections: layout.collectionsAt < 0 ? [] : await collectionCards(),
+      moods: MOODS.filter((m) => m.genres.some((g) => have.has(g))).map((m) => ({ id: m.id, name: m.name })),
+      announcement: ann,
+    };
   });
 
   r.get('/api/library/:id', async ({ profile, params, query }) => {

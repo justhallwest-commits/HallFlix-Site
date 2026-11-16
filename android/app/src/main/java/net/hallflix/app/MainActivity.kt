@@ -9,6 +9,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -135,6 +136,14 @@ class MainActivity : Activity() {
         }
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != VOICE || resultCode != RESULT_OK) return
+        val heard = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: return
+        web.evaluateJavascript("window.dispatchEvent(new CustomEvent('hallflix-voice',{detail:${JSONObject.quote(heard)}}))", null)
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && panel.visibility != View.VISIBLE && web.canGoBack()) { web.goBack(); return true }
         return super.onKeyDown(keyCode, event)
@@ -160,6 +169,20 @@ class MainActivity : Activity() {
             runOnUiThread { showPanel("Change server", "Enter the address of your HallFlix server.", retry = false) }
         }
 
+        /** Listen for a spoken search. The words come back to the page as a "hallflix-voice" event. */
+        @JavascriptInterface
+        fun voice() {
+            runOnUiThread {
+                try {
+                    startActivityForResult(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        .putExtra(RecognizerIntent.EXTRA_PROMPT, "Search HallFlix"), VOICE)
+                } catch (e: Exception) {
+                    web.evaluateJavascript("window.HallFlix && HallFlix.toast('Voice search is not available on this device')", null)
+                }
+            }
+        }
+
         @JavascriptInterface
         fun isTv(): Boolean = this@MainActivity.isTv()
 
@@ -167,6 +190,8 @@ class MainActivity : Activity() {
         fun version(): String = BuildConfigVersion.name(this@MainActivity)
     }
 }
+
+private const val VOICE = 41
 
 object BuildConfigVersion {
     fun name(ctx: Context): String = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1" } catch (e: Exception) { "1" }

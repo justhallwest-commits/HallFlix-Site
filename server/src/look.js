@@ -16,6 +16,13 @@ export const DEFAULT_THEME = {
   login: { image: '', dim: 0.45 },
   logo: { image: '', height: 46 },
   effect: 'none', // none | snow | embers | hearts | leaves | confetti | stars | bats
+  artColor: true, // the accent follows the artwork in focus
+  heroMotion: 'trailer', // none | pan | trailer: what the spotlight does after a moment
+  depth: true, // posters tilt toward the pointer
+  sounds: 'off', // off | soft | arcade: navigation sounds
+  profileColors: true, // each profile's colour tints its own session
+  ident: { enabled: true, video: '' }, // the HallFlix logo card before a feature; `video` replaces the built-in animation
+  night: { enabled: false, from: '20:00', to: '06:00', theme: {} }, // a second look for the evening, by the viewer's clock
 };
 
 const P = (name, description, patch) => ({ id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, description, theme: patch });
@@ -56,6 +63,8 @@ export const OPTIONS = {
   effects: ['none', 'snow', 'embers', 'hearts', 'leaves', 'confetti', 'stars', 'bats'],
   cardShapes: ['poster', 'wide'],
   interfaces: ['futuristic', 'classic'],
+  heroMotions: ['none', 'pan', 'trailer'],
+  sounds: ['off', 'soft', 'arcade'],
 };
 
 export function merge(base, patch) {
@@ -97,7 +106,13 @@ export function resolve({ theme, libraries, seasons, date = new Date(), forceSea
     for (const s of active) look = merge(look, prune(s.look?.libraries?.[l.id] || {}));
     libs[l.id] = look;
   }
-  return { theme: out, libraries: libs, season: active.length ? active[active.length - 1].name : null };
+  // The evening look is resolved here and chosen by each device from its own clock. A running season wins over it.
+  let night = null;
+  const n = out.night;
+  if (n?.enabled && !active.length && /^\d\d:\d\d$/.test(n.from || '') && /^\d\d:\d\d$/.test(n.to || '')) {
+    night = { from: n.from, to: n.to, theme: { ...merge(out, prune(n.theme || {})), night: undefined } };
+  }
+  return { theme: { ...out, night: { enabled: !!n?.enabled, from: n?.from, to: n?.to } }, libraries: libs, season: active.length ? active[active.length - 1].name : null, night };
 }
 
 export async function currentLook(opts = {}) {

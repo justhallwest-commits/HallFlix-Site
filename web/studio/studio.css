@@ -105,3 +105,5 @@ input[type=checkbox] { accent-color: var(--cyan); width: 16px; height: 16px; }
   .preview { height: 70vh; }
   .f { grid-template-columns: 1fr; gap: 4px; }
 }
+#modal [data-pick] { display: none; }
+input[type=time] { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; color-scheme: dark; }

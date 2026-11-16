@@ -1,5 +1,7 @@
 // Screens: first-run setup, sign-in, home, libraries, search and the title sheet.
-import { $, $$, api, html, raw, esc, icons, state, applyLook, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit } from './core.js';
+import { $, $$, api, html, raw, esc, icons, state, applyLook, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, themeNow } from './core.js';
+import * as browse from './browse.js';
+import * as feel from './feel.js';
 
 export const extraRows = []; // rows added by plugins through HallFlix.addHomeRow()
 const app = () => $('#app');
@@ -79,10 +81,11 @@ function startHero(list) {
     void c.offsetWidth; c.classList.add('swap');
     if (hadFocus) $('.btn.primary', c)?.focus();
     $$('.dots button', hero).forEach((d, k) => d.classList.toggle('on', k === i));
+    feel.tint(hero, it.backdrop); feel.wash(it.backdrop); feel.queueTrailer(hero, it);
   };
   hero.show = show;
   show(0);
-  if (list.length > 1) heroTimer = setInterval(() => { if (!hero.matches(':hover') && !hero.contains(document.activeElement) && !document.hidden && !$('#overlay').childElementCount && $('#player').hidden) show(i + 1); }, 9000);
+  if (list.length > 1) heroTimer = setInterval(() => { if (feel.trailerPlaying() && (hero.beats = (hero.beats || 0) + 1) < 5) return; hero.beats = 0; if (!hero.matches(':hover') && !hero.contains(document.activeElement) && !document.hidden && !$('#overlay').childElementCount && $('#player').hidden && !$('.surprise')) show(i + 1); }, 9000);
 }
 
 function syncArrows(row) {
@@ -96,9 +99,10 @@ function syncArrows(row) {
 export function shell() {
   const p = state.profile;
   app().innerHTML = String(html`
-    <header class="nav"><a class="logo" href="#/" aria-label="Home"><img data-site-logo src="${logoUrl()}" alt="${state.look?.theme?.siteName || 'HallFlix'}"></a>
-      <nav class="links"><a href="#/" data-nav="home">Home</a>${state.libraries.map((l) => html`<a href="#/library/${l.id}" data-nav="library-${l.id}">${l.name}</a>`)}<a href="#/list" data-nav="list">My List</a></nav>
-      <div class="search"><input type="search" placeholder="Titles, people, genres" aria-label="Search" autocomplete="off"></div>
+    <header class="nav"><a class="logo" href="#/" aria-label="Home"><img data-site-logo src="${logoUrl()}" alt="${themeNow()?.siteName || 'HallFlix'}"></a>
+      <nav class="links"><a href="#/" data-nav="home">Home</a>${state.libraries.map((l) => html`<a href="#/library/${l.id}" data-nav="library-${l.id}">${l.name}</a>`)}<a href="#/timeline" data-nav="timeline">Timeline</a><a href="#/list" data-nav="list">My List</a></nav>
+      <button class="btn round navbtn" data-surprise aria-label="Surprise me" title="Surprise me">${icons.dice}</button>
+      <div class="search"><input type="search" placeholder="Titles, people, genres" aria-label="Search" autocomplete="off">${browse.canListen() ? html`<button class="mic" data-mic aria-label="Search by voice" title="Search by voice">${icons.mic}</button>` : ''}</div>
       <button class="avatar" style="${avatarStyle(p)}" aria-label="Profile menu" data-menu>${p.avatar ? html`<img src="${p.avatar}" alt="" style="width:100%;height:100%;border-radius:8px;object-fit:cover">` : p.name[0].toUpperCase()}</button>
     </header><main id="view"></main>`);
   addEventListener('scroll', () => $('.nav')?.classList.toggle('solid', scrollY > 30), { passive: true });
@@ -106,7 +110,7 @@ export function shell() {
   $('.search input').addEventListener('input', (e) => {
     clearTimeout(timer);
     const qv = e.target.value.trim();
-    timer = setTimeout(() => { location.hash = qv ? `#/search/${encodeURIComponent(qv)}` : '#/'; }, 280);
+    timer = setTimeout(() => { location.hash = qv ? `#/search/${encodeURIComponent(qv)}` : '#/'; }, 160);
   });
   app().addEventListener('click', onClick);
   app().addEventListener('scroll', (e) => { const row = e.target.closest?.('.row'); if (row) syncArrows(row); }, true);
@@ -127,11 +131,17 @@ async function onClick(e) {
   }
   const chip = t.closest('.chip');
   if (chip) { base.genre = chip.dataset.genre || ''; loadLibrary(true); return; }
+  if (t.closest('[data-surprise]')) { browse.surprise(base?.mood ? { mood: base.mood } : {}); return; }
+  if (t.closest('[data-mic]')) { browse.listen($('.search input')); return; }
+  if (t.closest('[data-dismiss]')) { const a = t.closest('.announce'); try { sessionStorage.setItem('hf_ann', a.textContent); } catch { /* fine */ } a.remove(); return; }
+  const mood = t.closest('[data-mood]');
+  if (mood && base?.name === 'home') { base.mood = mood.dataset.mood; for (const b of $$('.mood[data-mood]')) b.classList.toggle('on', b === mood); await drawRows(); return; }
   if (t.closest('[data-menu]')) { toggleMenu(); return; }
   if (!t.closest('.menu')) $('.menu')?.remove();
   const act = t.closest('[data-do]')?.dataset.do;
   if (act === 'signout' || act === 'switch') { await api('POST', '/api/logout'); location.hash = '#/'; location.reload(); }
   if (act === 'server') window.HallFlixNative?.changeServer();
+  if (act === 'sounds') { feel.setSounds(!feel.soundsOn()); $('.menu')?.remove(); toast(feel.soundsOn() ? 'Sounds on' : 'Sounds off'); }
   if (act === 'password') {
     $('.menu')?.remove();
     const current = prompt('Current password'); if (current == null) return;
@@ -145,8 +155,10 @@ function toggleMenu() {
   const p = state.profile;
   $('.nav').insertAdjacentHTML('beforeend', String(html`<div class="menu"><div class="who">Signed in as <b>${p.name}</b></div>
     <button data-do="switch">Switch profile</button>${p.admin ? html`<a href="/studio">Open the Studio</a>` : ''}
+    <a href="#/wrapped">Your year in review</a>${feel.soundsAvailable() ? html`<button data-do="sounds">${feel.soundsOn() ? 'Turn sounds off' : 'Turn sounds on'}</button>` : ''}
     <button data-do="password">Change password</button>${window.HallFlixNative ? html`<button data-do="server">Change server</button>` : ''}<button data-do="signout">Sign out</button></div>`));
   $('.menu button').focus();
+  for (const a of $$('.menu a')) a.addEventListener('click', () => $('.menu')?.remove());
 }
 
 function setNav(key) { for (const a of $$('.nav .links a')) a.classList.toggle('on', a.dataset.nav === key); }
@@ -156,11 +168,17 @@ export async function show(name, arg) {
   clearInterval(heroTimer);
   stale = false;
   const keepY = base && base.name === name && base.arg === arg ? scrollY : 0;
-  base = { name, arg, sort: base?.name === name && base?.arg === arg ? base.sort : 'title', genre: base?.name === name && base?.arg === arg ? base.genre : '' };
+  feel.stopTrailer();
+  if (name !== 'home') feel.wash(null);
+  const same = base?.name === name && base?.arg === arg;
+  base = { name, arg, sort: same ? base.sort : 'title', genre: same ? base.genre : '', mood: name === 'home' ? base?.mood || '' : '' };
   try {
     if (name === 'library') await library(+arg);
     else if (name === 'search') await search(decodeURIComponent(arg || ''));
     else if (name === 'list') await myList();
+    else if (name === 'timeline') { setNav('timeline'); applyLook(state.look, null); await browse.timeline(view(), arg); }
+    else if (name === 'collection') { setNav(''); applyLook(state.look, null); await browse.collection(view(), +arg); }
+    else if (name === 'wrapped') { setNav(''); applyLook(state.look, null); await browse.wrapped(view(), arg); }
     else await home();
   } catch (e) { view().innerHTML = String(html`<div class="page"><div class="empty"><h2>Something went wrong</h2><p>${e.message}</p></div></div>`); }
   scrollTo(0, keepY);
@@ -180,8 +198,31 @@ async function home() {
       <p>${state.profile.admin ? raw('Add your movie and show folders in the Studio and they will appear here as soon as the first scan finishes.<br><br><a class="btn primary" href="/studio#libraries">Open the Studio</a>') : 'Nothing has been added yet. Check back soon.'}</p></div></div>`);
     return;
   }
-  view().innerHTML = String(html`${heroHtml(data.spotlight)}<div class="${data.spotlight.length ? 'rows' : 'page'}">${tilesHtml(data.libraries)}${rows.map(rowHtml)}</div>`);
+  base.home = { data, rows };
+  let ann = data.announcement;
+  try { if (ann && sessionStorage.getItem('hf_ann')?.startsWith(ann.text)) ann = null; } catch { /* fine */ }
+  view().innerHTML = String(html`${heroHtml(data.spotlight)}<div class="${data.spotlight.length ? 'rows' : 'page'}">${browse.announcement(ann)}${browse.moodBar(data.moods, base.mood)}<div id="homerows"></div></div>`);
   startHero(data.spotlight);
+  await drawRows();
+}
+
+/** The rows under the spotlight: the Studio's layout, or one mood's picks when the dial is turned. */
+async function drawRows() {
+  const box = $('#homerows');
+  if (!box || !base.home) return;
+  const { data, rows } = base.home;
+  let out;
+  if (base.mood) {
+    let m;
+    try { m = await api('GET', `/api/mood/${base.mood}`); } catch (e) { toast(e.message); return; }
+    out = m.rows.length ? m.rows.map(rowHtml) : [html`<div class="empty"><p>Nothing in the library fits that mood yet.</p></div>`];
+  } else {
+    out = rows.map(rowHtml);
+    const extra = [[data.layout?.collectionsAt ?? -1, browse.collectionsRow(data.collections)], [data.layout?.tilesAt ?? 0, tilesHtml(data.libraries)]];
+    for (const [at, piece] of extra.sort((x, y) => y[0] - x[0])) if (at >= 0 && piece) out.splice(Math.min(at, out.length), 0, piece);
+  }
+  if (!$('#homerows')) return;
+  box.innerHTML = String(html`${out}`);
   for (const r of $$('.row')) syncArrows(r);
 }
 
@@ -272,6 +313,7 @@ export async function title(id) {
       ${d.similar.length ? html`<h3>More like this</h3><div class="similar">${d.similar.map((it) => cardHtml(it))}</div>` : ''}
     </div></article>`);
   document.body.classList.add('locked');
+  feel.grow($('.sheet', o)); feel.tint($('.sheet', o), d.backdrop || d.poster);
   const eps = (s) => {
     $('.episodes', o).innerHTML = String(html`${s.episodes.map((e) => {
       const pct = e.progress && !e.progress.watched && e.progress.duration ? (e.progress.position / e.progress.duration) * 100 : 0;
@@ -381,7 +423,7 @@ export function login(boot) {
     form.onsubmit = async (e) => {
       e.preventDefault();
       const f = new FormData(form);
-      try { await api('POST', '/api/login', { profileId: p?.id, name: f.get('name'), password: f.get('password') }); location.hash = '#/'; location.reload(); }
+      try { await api('POST', '/api/login', { profileId: p?.id, name: f.get('name'), password: f.get('password') }); if (!/^#\/party\//.test(location.hash)) location.hash = '#/'; location.reload(); }
       catch (err) { $('.err', form).textContent = err.message; $('[name=password]', form).select(); }
     };
     $('[data-back]')?.addEventListener('click', picker);

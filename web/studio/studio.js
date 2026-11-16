@@ -23,7 +23,7 @@ const niceDate = (md) => (/^\d\d-\d\d$/.test(md || '') ? `${MONTHS[+md.slice(0, 
 const mins = (s) => (s >= 60 ? `${Math.round(s / 60)} min` : `${Math.round(s || 0)} sec`);
 
 const PAGES = [
-  ['overview', 'Overview'], ['libraries', 'Libraries'], ['look', 'Look and feel'], ['seasons', 'Seasons'],
+  ['overview', 'Overview'], ['libraries', 'Libraries'], ['home', 'Home screen'], ['collections', 'Collections'], ['look', 'Look and feel'], ['seasons', 'Seasons'],
   ['prerolls', 'Pre-rolls'], ['profiles', 'Profiles'], ['plugins', 'Plugins'], ['settings', 'Settings'],
 ];
 let timer = null; // the current page's refresh timer, cleared on every page change
@@ -228,6 +228,98 @@ pages.libraries = async (main) => {
   timer = setInterval(() => { if (!$('#modal').childElementCount) draw().catch(() => {}); }, 5000);
 };
 
+// ---------- choosing titles (Home spotlight, collections) ----------
+/** A search box with results to add, and the chosen titles in order with move and remove buttons. */
+function titlePicker(el, chosen, changed) {
+  el.innerHTML = String(html`<input type="text" data-find placeholder="Search for a movie or show to add"><div class="browser" data-found hidden></div><div data-chosen></div>`);
+  const draw = () => {
+    $('[data-chosen]', el).innerHTML = String(html`${chosen.length ? chosen.map((t, i) => html`<div class="row" data-i="${i}"><span class="pill">${i + 1}</span>${t.poster ? html`<img src="${t.poster}" alt="" style="width:30px;height:45px;object-fit:cover;border-radius:3px">` : ''}
+      <div class="grow"><b>${t.title}</b><span>${[t.year, t.kind === 'show' ? 'Show' : 'Movie'].filter(Boolean).join(' · ')}</span></div>
+      <div class="tools">${i ? html`<button class="btn sm" data-up title="Move up">↑</button>` : ''}${i < chosen.length - 1 ? html`<button class="btn sm" data-down title="Move down">↓</button>` : ''}<button class="btn sm danger" data-drop title="Remove">✕</button></div></div>`)
+    : html`<p class="muted small" style="margin-top:10px">Nothing chosen yet.</p>`}`);
+  };
+  const find = debounce(async (term) => {
+    const box = $('[data-found]', el);
+    if (!term.trim()) { box.hidden = true; return; }
+    const r = await api('GET', `/api/search?q=${encodeURIComponent(term)}`).catch(() => ({ items: [] }));
+    const list = r.items.filter((x) => !chosen.some((c) => c.id === x.id)).slice(0, 8);
+    box.hidden = false;
+    box.innerHTML = String(html`${list.length ? list.map((x) => html`<button data-add="${x.id}">＋ ${x.title} ${x.year ? `(${x.year})` : ''}</button>`) : html`<button disabled class="muted">No matches</button>`}`);
+    box.list = list;
+  }, 220);
+  el.addEventListener('input', (e) => { if (e.target.matches('[data-find]')) { e.stopPropagation(); find(e.target.value); } });
+  el.addEventListener('click', (e) => {
+    const add = e.target.closest('[data-add]'), row = e.target.closest('[data-i]');
+    if (add) { const x = $('[data-found]', el).list.find((i) => i.id === +add.dataset.add); chosen.push({ id: x.id, title: x.title, year: x.year, kind: x.kind, poster: x.poster }); $('[data-find]', el).value = ''; $('[data-found]', el).hidden = true; }
+    else if (row && e.target.closest('button')) {
+      const i = +row.dataset.i;
+      if (e.target.closest('[data-drop]')) chosen.splice(i, 1);
+      else { const j = e.target.closest('[data-up]') ? i - 1 : i + 1; [chosen[i], chosen[j]] = [chosen[j], chosen[i]]; }
+    } else return;
+    e.preventDefault(); draw(); changed?.();
+  });
+  draw();
+}
+
+// ---------- home screen ----------
+pages.home = async (main) => {
+  const H = await api('GET', '/api/studio/home');
+  const order = [...H.order.filter((id) => H.sections.some((s) => s.id === id)), ...H.sections.map((s) => s.id).filter((id) => !H.order.includes(id))];
+  const hidden = new Set(H.hidden), spot = [...H.spotlight], ann = { ...H.announcement };
+  const save = debounce(async () => { try { await api('PUT', '/api/studio/home', { order, hidden: [...hidden], spotlight: spot.map((x) => x.id), announcement: ann }); toast('Saved', 1200); } catch (e) { fail(e); } }, 350);
+  main.innerHTML = String(html`${head('Home screen', 'Decide what Home shows and in what order. Changes save as you make them and show on every device.')}
+    <div class="card"><h2>Sections, top to bottom</h2><div data-order></div></div>
+    <div class="card"><h2>Spotlight</h2><p class="muted small" style="margin-bottom:10px">Pin titles to the big banner. They show first, in this order; HallFlix fills the rest with recent additions.</p><div data-spot></div></div>
+    <div class="card" data-ann><h2>Announcement</h2><p class="muted small">A banner above the rows, such as “New this week: three more seasons of…”. Leave empty for none.</p>
+      ${text(ann, 'text', 'Message', 'New this week…')}${text(ann, 'link', 'Link (optional)', '#/library/1 or https://…')}</div>`);
+  const drawOrder = () => {
+    $('[data-order]', main).innerHTML = String(html`${order.map((id, i) => html`<div class="row" data-id="${id}"><span class="pill">${i + 1}</span><div class="grow"><b>${H.sections.find((s) => s.id === id).name}</b></div>
+      <div class="tools"><label class="check"><input type="checkbox" data-show ${hidden.has(id) ? '' : 'checked'}> Show</label>${i ? html`<button class="btn sm" data-up>↑</button>` : ''}${i < order.length - 1 ? html`<button class="btn sm" data-down>↓</button>` : ''}</div></div>`)}`);
+  };
+  $('[data-order]', main).addEventListener('click', (e) => {
+    const row = e.target.closest('[data-id]'), b = e.target.closest('button');
+    if (!row || !b) return;
+    const i = order.indexOf(row.dataset.id), j = b.hasAttribute('data-up') ? i - 1 : i + 1;
+    [order[i], order[j]] = [order[j], order[i]]; drawOrder(); save();
+  });
+  $('[data-order]', main).addEventListener('change', (e) => { if (!e.target.matches('[data-show]')) return; const id = e.target.closest('[data-id]').dataset.id; if (e.target.checked) hidden.delete(id); else hidden.add(id); save(); });
+  drawOrder();
+  titlePicker($('[data-spot]', main), spot, save);
+  bind($('[data-ann]', main), ann, save);
+};
+
+// ---------- collections ----------
+pages.collections = async (main) => {
+  const draw = async () => {
+    const list = await api('GET', '/api/studio/collections');
+    main.innerHTML = String(html`${head('Collections', 'Group titles into a world of their own, with a backdrop, a logo and a viewing order: a franchise, a marathon, a director.', html`<button class="btn primary" data-new>New collection</button>`)}
+      <div class="card">${list.length ? list.map((c) => html`<div class="row" data-id="${c.id}"><div class="grow"><b>${c.name}</b><span>${c.items.length} title${c.items.length === 1 ? '' : 's'}${c.items.length ? `: ${c.items.slice(0, 4).map((i) => i.title).join(', ')}${c.items.length > 4 ? '…' : ''}` : ''}</span></div>
+        <div class="tools"><button class="btn sm" data-edit>Edit</button><button class="btn sm danger" data-del>Delete</button></div></div>`)
+    : html`<p class="muted">No collections yet. Make one and it appears as a row on Home.</p>`}</div>`);
+    const form = (c) => {
+      const v = { id: c?.id, name: c?.name || '', description: c?.description || '', backdrop: c?.backdrop || '', logo: c?.logo || '' };
+      const chosen = [...(c?.items || [])];
+      const body = () => html`<div data-fields>${text(v, 'name', 'Name', 'Halloween marathon')}${text(v, 'description', 'Description')}
+        ${image(v, 'backdrop', 'Backdrop (empty uses art from the first title)')}${image(v, 'logo', 'Logo instead of the name (optional)')}</div>
+        <h3 style="margin:16px 0 8px">Titles, in viewing order</h3><div data-titles></div>`;
+      const d = dialog(c ? `Edit ${c.name}` : 'New collection', body(), { wide: true, onOk: async () => {
+        await api('POST', '/api/studio/collections', { ...v, items: chosen.map((x) => x.id) }); toast('Collection saved'); draw();
+      } });
+      const wire = () => { bind($('[data-fields]', d.el), v, (redraw) => { if (redraw) { const fresh = document.createElement('div'); fresh.innerHTML = String(body()); $('[data-fields]', d.el).replaceWith($('[data-fields]', fresh)); wire(); } }); };
+      wire();
+      titlePicker($('[data-titles]', d.el), chosen);
+    };
+    $('[data-new]', main).onclick = () => form(null);
+    main.onclick = (e) => {
+      const b = e.target.closest('button'), row = e.target.closest('[data-id]'); if (!b || !row) return;
+      const c = list.find((x) => x.id === +row.dataset.id);
+      if (b.hasAttribute('data-edit')) form(c);
+      if (b.hasAttribute('data-del')) confirmBox(`Delete ${c.name}?`, 'Only the collection goes. The titles stay in your libraries.', 'Delete', async () => { await api('DELETE', `/api/studio/collections/${c.id}`); draw(); });
+    };
+  };
+  await draw();
+};
+
 // ---------- live preview shared by Look and Seasons ----------
 function previewPane(libraries) {
   return html`<section class="preview"><div class="bar"><h3 style="margin-right:auto">Live preview</h3>
@@ -279,6 +371,18 @@ pages.look = async (main) => {
         <div class="card"><h2>Texture and effects</h2>${select(theme, 'texture', 'Texture', L.options.textures)}${select(theme, 'effect', 'Moving effect', L.options.effects)}</div>
         <div class="card"><h2>Backgrounds</h2>${image(theme, 'background.image', 'Home background picture or video')}${range(theme, 'background.dim', 'Darken', 0, 0.95, 0.05)}${range(theme, 'background.blur', 'Blur', 0, 30, 1)}
           ${image(theme, 'login.image', 'Sign-in screen background')}${range(theme, 'login.dim', 'Darken sign-in', 0, 0.95, 0.05)}</div>
+        <div class="card"><h2>Motion and sound</h2>
+          ${check(theme, 'artColor', 'Colour follows the artwork in focus')}${check(theme, 'depth', 'Posters lean toward the pointer')}
+          ${select(theme, 'heroMotion', 'Spotlight', L.options.heroMotions)}<p class="muted small">“Trailer” plays a muted trailer behind the spotlight on computers. “Pan” moves the picture slowly.</p>
+          ${select(theme, 'sounds', 'Navigation sounds', L.options.sounds)}${check(theme, 'profileColors', 'Tint each profile’s session with its own colour')}</div>
+        <div class="card"><h2>Ident before a feature</h2>${check(theme, 'ident.enabled', 'Play the HallFlix logo card before a movie or episode')}
+          ${image(theme, 'ident.video', 'Your own ident video (MP4, H.264). Empty uses the built-in animation on the website.')}
+          <p class="muted small">An uploaded video also plays in the Fire TV, phone and Roku apps. A season can carry its own.</p></div>
+        <div class="card"><h2>Evening look</h2>${check(theme, 'night.enabled', 'Switch to a second look in the evening')}
+          <label class="f"><span>From</span><input type="time" data-path="night.from" value="${theme.night?.from || '20:00'}"></label>
+          <label class="f"><span>Until</span><input type="time" data-path="night.to" value="${theme.night?.to || '06:00'}"></label>
+          <label class="f"><span>Look</span><select data-path="night.preset"><option value="">Choose a look</option>${L.presets.map((p) => html`<option value="${p.id}" ${theme.night?.preset === p.id ? 'selected' : ''}>${p.name}</option>`)}</select></label>
+          <p class="muted small">Each device goes by its own clock. A running season takes priority.</p></div>
         <div class="card"><h2>Name and logo</h2>${text(theme, 'siteName', 'Site name')}${image(theme, 'logo.image', 'Logo (empty uses the HallFlix neon logo)')}${range(theme, 'logo.height', 'Logo size', 20, 120, 2)}</div></div>`}
       <div class="savebar"><button class="btn primary" data-save ${dirty ? '' : 'disabled'}>Save and go live</button><button class="btn" data-undo ${dirty ? '' : 'disabled'}>Undo changes</button></div>`);
   };
@@ -310,6 +414,7 @@ pages.look = async (main) => {
     } else if (t.hasAttribute('data-undo')) route();
     else if (t.hasAttribute('data-save')) {
       try {
+        if (theme.night) theme.night.theme = clone(L.presets.find((x) => x.id === theme.night.preset)?.theme || {});
         await api('PUT', '/api/studio/theme', { theme });
         for (const l of L.libraries) if (JSON.stringify(libs[l.id]) !== JSON.stringify(l.look)) { await api('PUT', `/api/studio/libraries/${l.id}`, { look: libs[l.id] }); l.look = clone(libs[l.id]); }
         dirty = false; draw(); toast('Saved. The new look is live on every device.');
@@ -345,7 +450,7 @@ pages.seasons = async (main) => {
         ${check(cur, 'look.custom', 'Fine-tune the colours')}
         ${cur.look.custom ? html`${color(cur, 'look.theme.colors.bg', 'Background')}${color(cur, 'look.theme.colors.surface', 'Panels')}${color(cur, 'look.theme.colors.accent', 'Accent')}${color(cur, 'look.theme.colors.accent2', 'Second accent')}` : ''}
         ${select(cur, 'look.theme.effect', 'Moving effect', L.options.effects, 'Keep the usual')}${select(cur, 'look.theme.texture', 'Texture', L.options.textures, 'Keep the usual')}
-        ${image(cur, 'look.theme.background.image', 'Home background')}${image(cur, 'look.theme.login.image', 'Sign-in background')}${image(cur, 'look.theme.logo.image', 'Seasonal logo')}</div>
+        ${image(cur, 'look.theme.background.image', 'Home background')}${image(cur, 'look.theme.login.image', 'Sign-in background')}${image(cur, 'look.theme.logo.image', 'Seasonal logo')}${image(cur, 'look.theme.ident.video', 'Seasonal ident video (MP4)')}</div>
       ${L.libraries.length ? html`<div class="card"><h2>Library backgrounds for this season</h2>${L.libraries.map((l) => image(cur, `look.libraries.${l.id}.background`, l.name))}</div>` : ''}
       <div class="savebar"><button class="btn primary" data-save>Save season</button><button class="btn" data-back>Cancel</button></div>`);
   };

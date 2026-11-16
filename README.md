@@ -6,6 +6,8 @@ A self-hosted media service with its own server, web app and design Studio. It r
 - **Pre-rolls:** rules decide which clips play before which titles, the same on every device.
 - **The Studio** (`/studio`): themes with live preview, a background and logo per library, seasons that switch on by date,
   pre-roll rules, profiles and plugins.
+- **Ways to browse:** a mood dial, Surprise Me, a timeline by decade, hand-made collections, voice search and a year in review.
+- **Cinema touches:** a logo ident before the feature, scrub previews, skip intro, ambient glow and watch parties.
 - **Plugins:** add themes, styles and features from a zip. See [docs/PLUGINS.md](docs/PLUGINS.md).
 
 Install on a UGREEN NAS: [docker/INSTALL.md](docker/INSTALL.md).

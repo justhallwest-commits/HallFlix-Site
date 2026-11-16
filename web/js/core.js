@@ -64,6 +64,9 @@ export const icons = {
   full: I('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'), next: raw('<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 5v14l10-7L5 5z"/><rect x="16.5" y="5" width="2.6" height="14" rx="1"/></svg>'),
   cc: I('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10.5 10.2a2.2 2.2 0 1 0 0 3.6M17 10.2a2.2 2.2 0 1 0 0 3.6"/>'),
   audio: I('<path d="M4 10v4M8 6v12M12 9v6M16 4v16M20 10v4"/>'), gear: I('<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M5.2 18.8l2.1-2.1M16.7 7.3l2.1-2.1"/>'),
+  dice: I('<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/>'),
+  mic: I('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>'),
+  people: I('<circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 14.3A6 6 0 0 1 21 20"/>'),
   rew: I('<path d="M11 6 5 12l6 6M19 6l-6 6 6 6"/>'), fwd: I('<path d="m13 6 6 6-6 6M5 6l6 6-6 6"/>'), trailer: I('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3V9z" fill="currentColor"/>'),
 };
 
@@ -81,15 +84,28 @@ export function rgb(hex) {
 const isVideo = (u) => /\.(mp4|webm)(\?|$)/i.test(u || '');
 let currentLibrary = null;
 
+const mins = (hm) => +hm.slice(0, 2) * 60 + +hm.slice(3);
+/** Is the evening look due right now, by this device's clock? */
+export function isNight(look = state.look, d = new Date()) {
+  const n = look?.night;
+  if (!n) return false;
+  const now = d.getHours() * 60 + d.getMinutes(), a = mins(n.from), z = mins(n.to);
+  return a <= z ? now >= a && now < z : now >= a || now < z;
+}
+/** The theme in force: the evening look when it is due, otherwise the everyday (or seasonal) one. */
+export const themeNow = (look = state.look) => (isNight(look) ? look.night.theme : look?.theme);
+
 /** Apply the look. `libraryId` adds that library's own background, accent and logo on top. */
 export function applyLook(look = state.look, libraryId = currentLibrary) {
   if (!look) return;
   state.look = look; currentLibrary = libraryId;
-  const t = look.theme, lib = (libraryId != null && look.libraries?.[libraryId]) || {};
+  state.night = isNight(look);
+  const t = themeNow(look), lib = (libraryId != null && look.libraries?.[libraryId]) || {};
   const root = document.documentElement.style;
   const colors = { ...t.colors };
   if (lib.accent) colors.accent = lib.accent;
   if (lib.accent2) colors.accent2 = lib.accent2;
+  else if (t.profileColors !== false && /^#[0-9a-f]{6}$/i.test(state.profile?.color || '')) colors.accent2 = state.profile.color;
   for (const [k, v] of Object.entries(colors)) { root.setProperty(`--${k}`, v); const c = rgb(v); if (c) root.setProperty(`--${k}-rgb`, c); }
   root.setProperty('--radius', `${+t.radius || 0}px`);
   root.setProperty('--glow', String(Math.max(0, Math.min(1, +t.glow || 0))));
@@ -102,6 +118,8 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   if (t.texture && t.texture !== 'none') body.classList.add(`tex-${t.texture}`);
   body.classList.toggle('wide-cards', t.cardShape === 'wide');
   body.classList.toggle('ui-hud', (t.interface || 'futuristic') === 'futuristic');
+  body.classList.toggle('hero-pan', (t.heroMotion || 'trailer') !== 'none');
+  body.classList.toggle('depth', t.depth !== false);
   const signedOut = !state.profile;
   const bg = signedOut ? (t.login?.image || t.background?.image) : (lib.background || t.background?.image);
   const dim = signedOut ? (t.login?.dim ?? 0.45) : (lib.dim ?? t.background?.dim ?? 0.6);
@@ -120,7 +138,7 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   startEffect(t.effect || 'none');
   emit('look', look);
 }
-export const logoUrl = () => state.look?.theme?.logo?.image || '/assets/logo.png';
+export const logoUrl = () => themeNow()?.logo?.image || '/assets/logo.png';
 export const libraryLook = (id) => state.look?.libraries?.[id] || {};
 
 export function avatarStyle(p) {

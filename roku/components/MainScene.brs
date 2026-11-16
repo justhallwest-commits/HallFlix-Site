@@ -615,7 +615,7 @@ sub onVideoIndex()
     if m.screen <> "player" then return
     i = m.video.contentIndex
     isMain = i = m.mainIndex
-    m.badge.visible = not isMain
+    m.badge.visible = m.queue[i] <> invalid and m.queue[i].entry.kind = "preroll"
     m.video.enableTrickPlay = isMain
     if isMain and not m.resumed then
         m.resumed = true

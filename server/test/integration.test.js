@@ -1,3 +1,8 @@
+import { spawn } from 'node:child_process';
+const ffprobeJson = (buf) => new Promise((resolve, reject) => {
+  const c = spawn('ffprobe', ['-v', 'error', '-show_streams', '-of', 'json', '-i', 'pipe:0']);
+  let out = ''; c.stdout.on('data', (d) => { out += d; }); c.on('close', () => resolve(out)); c.on('error', reject); c.stdin.end(buf);
+});
 // End-to-end: scan real files, then play them through every path and check what comes out with ffprobe.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -312,6 +317,128 @@ test('files that disappear are removed; a missing folder does not wipe a library
   assert.deepEqual(ov.libraries.map((l) => [l.kind, l.titles, l.episodes]), [['movies', 3, 0], ['shows', 1, 3], ['prerolls', 2, 0]]);
   assert.match(ov.scan.errors.join(' '), /Folder not found/);
   fs.renameSync(path.join(media, 'Shows-offline'), path.join(media, 'Shows'));
+});
+
+test('moods, Surprise Me, timeline, collections and the Home layout', async () => {
+  const find = async (q) => (await hf.api('GET', `/api/search?q=${encodeURIComponent(q)}`)).items[0];
+  const [night, signal, deep, harbor] = [await find('night drive'), await find('signal'), await find('deep field'), await find('harbor')];
+  let home = await hf.api('GET', '/api/home');
+  assert.ok(home.moods.some((m) => m.id === 'intense') && home.moods.some((m) => m.id === 'true'));
+  assert.equal(home.layout.tilesAt, 0);
+  const intense = await hf.api('GET', '/api/mood/intense');
+  assert.ok(intense.rows[0].items.some((i) => i.title === 'Night Drive') && !intense.rows[0].items.some((i) => i.title === 'Deep Field'));
+  assert.equal((await hf.api('GET', '/api/mood/nope')).$status, 404);
+
+  const any = await hf.api('GET', '/api/surprise');
+  assert.ok(any.items.length >= 4 && any.items[0].poster);
+  assert.ok((await hf.api('GET', '/api/surprise?kind=show')).items.every((i) => i.kind === 'show'));
+  assert.deepEqual((await hf.api('GET', '/api/surprise?mood=true&kind=movie')).items.map((i) => i.title), ['Deep Field']);
+
+  const tl = await hf.api('GET', '/api/timeline');
+  assert.ok(tl.decades.some((d) => d.decade === 2010 && d.count >= 2) && tl.decades.some((d) => d.decade === 2020));
+  const tens = await hf.api('GET', '/api/timeline/2010');
+  assert.ok(tens.items.every((i) => i.year >= 2010 && i.year <= 2019) && tens.items.some((i) => i.title === 'Night Drive'));
+
+  // A collection keeps its viewing order, and only an admin can make one.
+  const c = await hf.api('POST', '/api/studio/collections', { name: 'Late Shift', description: 'After dark.', items: [signal.id, night.id, 999999] });
+  assert.deepEqual((await hf.api('GET', `/api/collections/${c.id}`)).items.map((i) => i.title), ['The Long Signal', 'Night Drive']);
+  await hf.api('POST', '/api/studio/collections', { id: c.id, name: 'Late Shift', items: [night.id, signal.id, deep.id] });
+  assert.deepEqual((await hf.api('GET', `/api/collections/${c.id}`)).items.map((i) => i.title), ['Night Drive', 'The Long Signal', 'Deep Field']);
+  home = await hf.api('GET', '/api/home');
+  assert.deepEqual(home.collections.map((x) => [x.name, x.count]), [['Late Shift', 3]]);
+  assert.ok(home.collections[0].backdrop && home.layout.collectionsAt >= 0);
+
+  // Home layout: order, hidden sections, a pinned spotlight and an announcement.
+  await hf.api('PUT', '/api/studio/home', { order: ['top', 'recent', 'libraries'], hidden: ['genres', 'collections'], spotlight: [harbor.id, deep.id], announcement: { text: 'New this week', link: '#/timeline' } });
+  home = await hf.api('GET', '/api/home');
+  assert.deepEqual(home.spotlight.slice(0, 2).map((x) => x.title), ['Harbor Lights', 'Deep Field']);
+  assert.ok(!home.rows.some((r) => r.id.startsWith('genre-')) && !home.collections.length);
+  assert.equal(home.layout.tilesAt, home.rows.findIndex((r) => r.id.startsWith('recent-')) + 2);
+  assert.deepEqual(home.announcement, { text: 'New this week', link: '#/timeline' });
+  await hf.api('PUT', '/api/studio/home', {});
+  assert.equal((await hf.api('GET', '/api/home')).layout.tilesAt, 0);
+  await hf.api('DELETE', `/api/studio/collections/${c.id}`);
+});
+
+test('skip marks, scrub previews, the ident, evening look, year in review and watch parties', async () => {
+  const find = async (q) => (await hf.api('GET', `/api/search?q=${encodeURIComponent(q)}`)).items[0];
+  const show = await hf.api('GET', `/api/items/${(await find('harbor')).id}`);
+  const [e1, e2] = show.seasons[0].episodes;
+  let r = await hf.api('POST', `/api/studio/items/${e1.id}/marks`, { introStart: 1, introEnd: 4.26, season: true });
+  assert.deepEqual([r.marks, r.season], [{ introStart: 1, introEnd: 4.3 }, 1]);
+  const play = async (id, extra = {}) => (await hf.api('POST', '/api/play', { itemId: id, caps: { containers: ['mp4', 'mkv'], video: ['h264'], audio: ['aac'] }, ...extra })).queue;
+  assert.deepEqual((await play(e2.id)).at(-1).marks, { introStart: 1, introEnd: 4.3 }, 'copied to the rest of the season');
+  r = await hf.api('POST', `/api/studio/items/${e1.id}/marks`, { introStart: null, introEnd: null });
+  assert.deepEqual(r.marks, {});
+
+  // Previews are made in the background the first time they are asked for.
+  const signal = await find('signal');
+  let th = await hf.api('GET', `/api/thumbs/${signal.id}`);
+  assert.equal(th.ready, false);
+  for (let i = 0; i < 60 && !th.ready; i++) { await new Promise((ok) => setTimeout(ok, 250)); th = await hf.api('GET', `/api/thumbs/${signal.id}`); }
+  assert.ok(th.ready && th.count >= 5 && th.cols === 10);
+  const sheet = await fetch(hf.base + th.url, { headers: { Cookie: hf.getCookie() } });
+  assert.equal(sheet.headers.get('content-type'), 'image/jpeg');
+  const meta = JSON.parse(await ffprobeJson(Buffer.from(await sheet.arrayBuffer())));
+  assert.deepEqual([meta.streams[0].width, meta.streams[0].height], [th.cols * th.w, th.rows * th.h]);
+
+  // An uploaded ident plays last before the feature, and not when resuming or auto-playing the next episode.
+  const up = await hf.api('POST', '/api/studio/upload?name=ident.mp4', fs.readFileSync(path.join(media, 'Prerolls', 'hallflix-ident.mp4')));
+  const theme = (await hf.api('GET', '/api/studio/look')).theme;
+  await hf.api('PUT', '/api/studio/theme', { theme: { ...theme, ident: { enabled: true, video: up.url }, night: { enabled: true, from: '00:00', to: '23:59', theme: { colors: { accent: '#e8b84a' } } } } });
+  let q = await play(signal.id);
+  assert.deepEqual(q.slice(-2).map((x) => [x.kind, x.mode]), [['ident', 'direct'], ['main', q.at(-1).mode]]);
+  assert.equal(q.at(-2).url, up.url);
+  assert.ok(!(await play(signal.id, { prerolls: false })).some((x) => x.kind === 'ident'));
+  assert.ok(!(await play(signal.id, { start: 90 })).some((x) => x.kind === 'ident'));
+
+  // The evening look rides along for each device to apply by its own clock; a season switches it off.
+  let b = await hf.api('GET', '/api/boot');
+  assert.deepEqual([b.look.night.from, b.look.night.theme.colors.accent, b.look.theme.colors.accent, b.look.night.theme.colors.bg], ['00:00', '#e8b84a', theme.colors.accent, '#0a0814']);
+  await hf.api('PUT', '/api/studio/theme', { theme });
+  b = await hf.api('GET', '/api/boot');
+  assert.equal(b.look.night, null);
+  assert.equal(b.look.theme.ident.enabled, true);
+
+  // Year in review counts what this profile finished.
+  await hf.api('POST', '/api/progress', { itemId: signal.id, position: 10, duration: 10, ended: true });
+  await hf.api('POST', '/api/progress', { itemId: e1.id, position: 5, duration: 5, ended: true });
+  const w = await hf.api('GET', '/api/wrapped');
+  assert.ok(w.movies >= 1 && w.episodes >= 1 && w.genres.some((g) => g.name === 'Thriller') && w.shows[0].title === 'Harbor Lights');
+  assert.equal(w.months.reduce((a, n) => a + n, 0) >= 2, true);
+  assert.equal((await hf.api('GET', '/api/wrapped?year=1999')).movies, 0);
+
+  // A watch party relays play, pause and seek to everyone else in the room.
+  const { code } = await hf.api('POST', '/api/party', { itemId: signal.id });
+  assert.match(code, /^[0-9A-F]{6}$/);
+  assert.equal((await hf.api('GET', `/api/party/${code.toLowerCase()}`)).itemId, signal.id);
+  const listen = async () => {
+    const res = await fetch(`${hf.base}/api/party/${code}/events`, { headers: { Cookie: hf.getCookie() } });
+    const reader = res.body.getReader(), seen = [];
+    let buf = '';
+    const next = async (type) => {
+      for (;;) {
+        const i = seen.findIndex((m) => m.type === type);
+        if (i >= 0) return seen.splice(i, 1)[0];
+        const { value, done } = await reader.read();
+        if (done) throw new Error('stream closed');
+        buf += Buffer.from(value).toString();
+        for (let k; (k = buf.indexOf('\n\n')) >= 0; buf = buf.slice(k + 2)) { const line = buf.slice(0, k); if (line.startsWith('data: ')) seen.push(JSON.parse(line.slice(6))); }
+      }
+    };
+    return { next, close: () => reader.cancel() };
+  };
+  const a = await listen(), helloA = await a.next('hello');
+  const g = await listen(), helloG = await g.next('hello');
+  assert.deepEqual([helloA.people.length, helloG.people.length], [1, 2]);
+  assert.equal((await a.next('people')).people.length, 2);
+  await hf.api('POST', `/api/party/${code}/send`, { type: 'play', you: helloA.you, position: 42 });
+  assert.deepEqual(await g.next('play'), { type: 'play', position: 42, by: (await hf.api('GET', '/api/boot')).profile.name });
+  await hf.api('POST', `/api/party/${code}/send`, { type: 'react', you: helloG.you, emoji: '👏' });
+  assert.equal((await a.next('react')).emoji, '👏');
+  assert.equal((await hf.api('POST', `/api/party/${code}/send`, { type: 'shout' })).$status, 400);
+  a.close(); g.close();
+  assert.equal((await hf.api('GET', '/api/party/ZZZZZZ')).$status, 404);
 });
 
 test('admins remove titles from HallFlix, delete files from the NAS, and bring titles back', async () => {

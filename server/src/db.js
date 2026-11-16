@@ -59,6 +59,14 @@ const MIGRATIONS = [
   `create table hidden (
      id serial primary key, library_id int references libraries on delete cascade, path text not null unique,
      title text not null, kind text not null, hidden_at timestamptz not null default now());`,
+  // 3: intro/credits marks per title, and hand-made collections.
+  `alter table items add column marks jsonb not null default '{}';
+   create table collections (
+     id serial primary key, name text not null, description text, backdrop text, logo text,
+     position int not null default 0, created_at timestamptz not null default now());
+   create table collection_items (
+     collection_id int not null references collections on delete cascade, item_id bigint not null references items on delete cascade,
+     position int not null default 0, primary key (collection_id, item_id));`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {
