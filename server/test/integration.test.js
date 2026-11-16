@@ -2,6 +2,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { boot, makeMedia, media, root, zip, ffprobe, tinyJpeg } from './helpers.js';
 
@@ -44,6 +45,14 @@ test('libraries scan into movies, shows, episodes and clips', async () => {
   assert.equal((await hf.api('POST', '/api/studio/libraries', { name: 'X', kind: 'movies', path: '/etc' })).$status, 400);
   const fsList = await hf.api('GET', '/api/studio/fs');
   assert.deepEqual(fsList.entries.map((e) => e.name), ['Movies', 'Prerolls', 'Shows']);
+  // A linked folder (how some NAS shares appear) and a folder name with a space both show up.
+  fs.mkdirSync(path.join(os.tmpdir(), 'hf-linked/Film Hall'), { recursive: true });
+  fs.symlinkSync(path.join(os.tmpdir(), 'hf-linked/Film Hall'), path.join(media, 'Film Hall'));
+  assert.deepEqual((await hf.api('GET', '/api/studio/fs')).entries.map((e) => [e.name, e.dir]), [['Film Hall', true], ['Movies', true], ['Prerolls', true], ['Shows', true]]);
+  const inside = await hf.api('GET', `/api/studio/fs?path=${encodeURIComponent(path.join(media, 'Film Hall'))}`);
+  assert.equal(inside.note, 'This folder is empty.');
+  fs.unlinkSync(path.join(media, 'Film Hall'));
+  assert.ok((await hf.api('GET', `/api/studio/fs?path=${encodeURIComponent(path.join(media, 'Movies'))}`)).entries.length);
   for (const [name, kind] of [['Movies', 'movies'], ['Shows', 'shows'], ['Prerolls', 'prerolls']]) {
     lib[kind] = await hf.api('POST', '/api/studio/libraries', { name, kind, path: path.join(media, name) });
     assert.ok(lib[kind].id);

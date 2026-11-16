@@ -113,12 +113,13 @@ function browse({ files } = {}) {
     $('[data-x]', $('#modal')).addEventListener('click', () => resolve(null));
     const open = async (p) => {
       let r;
-      try { r = await api('GET', `/api/studio/fs?path=${encodeURIComponent(p || '')}${files ? `&files=${files}` : ''}`); } catch (e) { return fail(e); }
+      try { r = await api('GET', `/api/studio/fs?path=${encodeURIComponent(p || '')}${files ? `&files=${files}` : ''}`); }
+      catch (e) { $('[data-here]', d.el).textContent = p || ''; $('.browser', d.el).innerHTML = String(html`<button disabled style="white-space:normal;color:var(--bad)">${e.message}</button>`); return; }
       here = r.path;
       $('[data-here]', d.el).textContent = r.path;
       $('.browser', d.el).innerHTML = String(html`${r.parent ? html`<button data-go="${r.parent}">↑ Up one level</button>` : ''}
         ${r.entries.map((x) => html`<button data-${x.dir ? 'go' : 'file'}="${x.path}">${x.dir ? '📁' : '🖼️'} ${x.name}</button>`)}
-        ${!r.entries.length ? html`<button disabled class="muted">Nothing here</button>` : ''}`);
+        ${!r.entries.length ? html`<button disabled class="muted" style="white-space:normal">${r.note || 'Nothing here'}</button>` : ''}`);
     };
     d.el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-go],[data-file]');

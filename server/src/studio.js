@@ -38,14 +38,34 @@ export function routes(r) {
   // ----- libraries
   r.get('/api/studio/fs', async ({ query }) => {
     const dir = insideMedia(query.path);
+    const root = path.resolve(cfg.mediaRoot);
     let entries;
-    try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { throw new HttpError(404, 'Folder not found'); }
+    try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch (e) {
+      if (e.code === 'EACCES' || e.code === 'EPERM') throw new HttpError(403, `HallFlix is not allowed to read ${dir}. Check the shared folder's permissions on the NAS.`);
+      throw new HttpError(404, dir === root ? `Nothing is mounted at ${root}. Check the media line in the Docker compose file.` : 'Folder not found');
+    }
+    // Some NAS file systems and shared-folder links do not say whether an entry is a folder, so ask the disk.
+    const typed = await Promise.all(entries.map(async (e) => {
+      let isDir = e.isDirectory(), isFile = e.isFile();
+      if (!isDir && !isFile) { try { const st = await fs.promises.stat(path.join(dir, e.name)); isDir = st.isDirectory(); isFile = st.isFile(); } catch { /* broken link */ } }
+      return { name: e.name, isDir, isFile };
+    }));
     const want = query.files; // 'images' | 'videos' | undefined
-    const keep = (e) => e.isDirectory() ? !e.name.startsWith('.') && !e.name.startsWith('@') && !e.name.startsWith('#')
-      : want === 'images' ? IMAGE_EXT.has(path.extname(e.name).slice(1).toLowerCase()) || /\.(mp4|webm)$/i.test(e.name) : want === 'videos' ? isVideo(e.name) : false;
+    const hidden = (n) => n.startsWith('.') || n.startsWith('@') || n.startsWith('#');
+    const keep = (e) => e.isDir ? !hidden(e.name)
+      : !e.isFile ? false : want === 'images' ? IMAGE_EXT.has(path.extname(e.name).slice(1).toLowerCase()) || /\.(mp4|webm)$/i.test(e.name) : want === 'videos' ? isVideo(e.name) : false;
+    const shown = typed.filter(keep);
+    const files = typed.filter((e) => e.isFile && !hidden(e.name)).length;
+    let note = '';
+    if (!shown.length) {
+      if (!typed.length && dir === root) note = `HallFlix sees nothing at all in ${root}. The media line in the Docker compose file is not pointing at your share (or the share is empty). Fix the left side of that line and redeploy.`;
+      else if (!typed.length) note = 'This folder is empty.';
+      else if (files && !want) note = `No sub-folders here, only ${files} file${files > 1 ? 's' : ''}. If these are your movies, this is the folder to use.`;
+      else note = 'Nothing usable here.';
+    }
     return {
-      path: dir, root: path.resolve(cfg.mediaRoot), parent: dir === path.resolve(cfg.mediaRoot) ? null : path.dirname(dir),
-      entries: entries.filter(keep).map((e) => ({ name: e.name, dir: e.isDirectory(), path: path.join(dir, e.name) }))
+      path: dir, root, parent: dir === root ? null : path.dirname(dir), note,
+      entries: shown.map((e) => ({ name: e.name, dir: e.isDir, path: path.join(dir, e.name) }))
         .sort((a, b) => b.dir - a.dir || a.name.localeCompare(b.name, undefined, { numeric: true })),
     };
   }, admin);
