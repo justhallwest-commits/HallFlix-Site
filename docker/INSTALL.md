@@ -41,6 +41,8 @@ In the Docker app, open the `hallflix` project and press **Redeploy** (pull the 
 
 ## If something goes wrong
 
+- **Deploy fails with "denied" or "unauthorized" while downloading the image:** the image is still private on GitHub. Open the repo on GitHub, click **Packages → hallflix-site → Package settings**, and under **Danger Zone** change the visibility to **Public**. Then deploy again.
+
 - **Page does not open:** in the Docker app, check all three containers are running, and open the `hallflix` container's log.
 - **"Folder not found" when adding a library:** the media path in the compose file does not match your share. Fix it and redeploy.
 - **Deploy fails mentioning `/dev/dri`:** delete the two `devices:` lines from the compose file and redeploy (software conversion only).
