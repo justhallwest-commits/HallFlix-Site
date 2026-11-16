@@ -1,0 +1,13 @@
+{
+  "name": "hallflix-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/main.js server",
+    "transcoder": "node src/main.js transcoder",
+    "test": "node --test --test-concurrency=1 test/*.test.js"
+  },
+  "dependencies": { "pg": "^8.13.1" }
+}
