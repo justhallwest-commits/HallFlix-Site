@@ -45,8 +45,25 @@ export function tinyJpeg() {
 }
 
 /** A stand-in for TMDb that answers the same paths with the same shapes. */
-export function fakeTmdb() {
+const hash = (str) => { let h = 7; for (const c of str) h = (h * 31 + c.charCodeAt(0)) % 100000; return h; };
+const GENRES = ['Action', 'Comedy', 'Drama', 'Science Fiction', 'Thriller', 'Animation', 'Horror', 'Adventure', 'Romance', 'Mystery'];
+/** Dev only: a picture per artwork path, so the app looks like a real library in screenshots. */
+function artFor(name) {
+  const dir = path.join(root, 'art'); fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, name.replace(/[^\w.-]/g, '_'));
+  if (!fs.existsSync(file)) {
+    const h = hash(name), wide = /back|still|hl-\d/.test(name), logo = /logo/.test(name);
+    const col = (n) => ((h * (n + 3) * 2654435761) >>> 0).toString(16).padStart(8, '0').slice(0, 6);
+    const size = logo ? '500x160' : wide ? '1280x720' : /ada|photo/.test(name) ? '185x185' : '500x750';
+    ff(['-f', 'lavfi', '-i', `gradients=s=${size}:c0=0x${col(1)}:c1=0x${col(2)}:c2=0x${col(3)}:n=3:x0=0:y0=0:x1=${size.split('x')[0]}:y1=${size.split('x')[1]}:seed=${h}`, '-frames:v', '1', '-q:v', '4', file.replace(/\.png$/, '.jpg')]);
+    if (file.endsWith('.png')) fs.renameSync(file.replace(/\.png$/, '.jpg'), file);
+  }
+  return fs.readFileSync(file);
+}
+
+export function fakeTmdb({ generic = false, art = false } = {}) {
   const calls = [];
+  const made = {};
   const movies = {
     101: { id: 101, title: 'Night Drive', release_date: '2019-03-08', overview: 'A courier takes one last job.', tagline: 'Keep driving.', runtime: 98, vote_average: 7.4,
       genres: [{ name: 'Thriller' }, { name: 'Crime' }], production_companies: [{ name: 'Lantern Pictures' }], poster_path: '/nd-poster.jpg', backdrop_path: '/nd-back.jpg',
@@ -62,17 +79,26 @@ export function fakeTmdb() {
     const url = new URL(req.url, 'http://x');
     calls.push(url.pathname + url.search);
     const send = (obj, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
-    if (url.pathname.startsWith('/img/')) { res.writeHead(200, { 'Content-Type': 'image/jpeg' }); return res.end(tinyJpeg()); }
+    if (url.pathname.startsWith('/img/')) { res.writeHead(200, { 'Content-Type': 'image/jpeg' }); return res.end(art ? artFor(path.basename(url.pathname)) : tinyJpeg()); }
     if (url.searchParams.get('api_key') !== 'test-key' && req.headers.authorization !== 'Bearer eyJtest') return send({ status_message: 'Invalid API key' }, 401);
     const p = url.pathname;
     if (p === '/3/configuration') return send({ images: {} });
     if (p === '/3/search/movie') {
       const qy = url.searchParams.get('query').toLowerCase();
       const hit = Object.values(movies).filter((m) => m.title.toLowerCase() === qy);
+      if (generic && !hit.length) {
+        const id = 1000 + hash(qy), t = url.searchParams.get('query'), y = url.searchParams.get('year') || 2015 + (id % 10);
+        made[id] = { id, title: t, release_date: `${y}-05-0${1 + (id % 9)}`, overview: `${t} is a story about what happens when everything changes at once, and the people who find each other in the middle of it.`,
+          tagline: id % 3 ? 'Nothing stays hidden.' : '', runtime: 85 + (id % 60), vote_average: 5.5 + (id % 40) / 10, genres: [GENRES[id % 10], GENRES[(id >> 3) % 10]].filter((g, i, a) => a.indexOf(g) === i).map((name) => ({ name })),
+          production_companies: [{ name: 'Lantern Pictures' }], poster_path: `/p${id}-poster.jpg`, backdrop_path: `/p${id}-back.jpg`,
+          credits: { cast: ['Ada Reyes', 'Tom Okafor', 'Mina Sato', 'Lev Aronov', 'Priya Nair', 'Sam Whitlock'].map((name, i) => ({ name, character: ['Mara', 'Dex', 'Yuki', 'Anton', 'Dr. Rao', 'Finch'][i], profile_path: `/photo${(id + i) % 7}.jpg` })) },
+          images: { logos: [] }, release_dates: { results: [{ iso_3166_1: 'US', release_dates: [{ certification: ['PG', 'PG-13', 'R'][id % 3] }] }] }, videos: { results: [{ site: 'YouTube', type: 'Trailer', key: 'dQw4w9WgXcQ', official: true }] } };
+        return send({ results: [{ id, title: t, release_date: made[id].release_date }] });
+      }
       return send({ results: [{ id: 999, title: `${qy} returns`, release_date: '1999-01-01' }, ...hit.map((m) => ({ id: m.id, title: m.title, release_date: m.release_date }))] });
     }
     let m = /^\/3\/movie\/(\d+)$/.exec(p);
-    if (m) return movies[m[1]] ? send(movies[m[1]]) : send({}, 404);
+    if (m) return movies[m[1]] || made[m[1]] ? send(movies[m[1]] || made[m[1]]) : send({}, 404);
     if (p === '/3/search/tv') return send({ results: url.searchParams.get('query') === 'Harbor Lights' ? [{ id: 55, name: 'Harbor Lights', first_air_date: '2018-09-01' }] : [] });
     if (p === '/3/tv/55') return send({ id: 55, name: 'Harbor Lights', first_air_date: '2018-09-01', overview: 'A town by the sea.', vote_average: 8.4, genres: [{ name: 'Drama' }],
       networks: [{ name: 'Northlight' }], poster_path: '/hl-poster.jpg', backdrop_path: '/hl-back.jpg', content_ratings: { results: [{ iso_3166_1: 'US', rating: 'TV-14' }] },
@@ -85,13 +111,14 @@ export function fakeTmdb() {
 }
 
 /** Boot a whole HallFlix (server + transcoder) against a clean database. */
-export async function boot() {
+export async function boot(tmdbOpts) {
   if (!process.env.DATABASE_URL) throw new Error('Set DATABASE_URL to a test database');
-  const tm = await fakeTmdb();
+  const tm = await fakeTmdb(tmdbOpts);
   Object.assign(process.env, {
     DATA_DIR: path.join(root, 'data'), MEDIA_ROOT: media, TRANSCODE_DIR: path.join(root, 'transcode'),
     TMDB_BASE: `${tm.url}/3`, TMDB_IMG: `${tm.url}/img`, HALLFLIX_HW: 'off', PORT: '0', TRANSCODER_PORT: '0',
   });
+  const port = +(tmdbOpts?.port || 0);
   const { cfg } = await import('../src/config.js');
   const dbm = await import('../src/db.js');
   await dbm.q('drop schema public cascade; create schema public;');
@@ -99,7 +126,7 @@ export async function boot() {
   const tc = await startTranscoder(0);
   cfg.transcoderUrl = `http://127.0.0.1:${tc.server.address().port}`;
   const { startServer } = await import('../src/server.js');
-  const app = await startServer(0);
+  const app = await startServer(port);
   const base = `http://127.0.0.1:${app.server.address().port}`;
   const scan = await import('../src/scan.js');
   let cookie = '';
