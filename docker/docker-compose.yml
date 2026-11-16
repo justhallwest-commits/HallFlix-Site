@@ -1,0 +1,44 @@
+# HallFlix on a UGREEN NAS. Paste this into Docker > Project > Create.
+# Change only the lines marked  <-- CHANGE.
+name: hallflix
+
+services:
+  hallflix:
+    image: ghcr.io/justhallwest-commits/hallflix-site:latest
+    command: server
+    restart: unless-stopped
+    depends_on: [db, transcoder]
+    ports:
+      - "8780:8780"                                   # HallFlix opens at http://<NAS address>:8780
+    environment:
+      DATABASE_URL: postgres://hallflix:hallflix@db:5432/hallflix
+      TRANSCODER_URL: http://transcoder:8781
+    volumes:
+      - /volume1/docker/hallflix/data:/data            # HallFlix's own files: artwork cache, uploads, plugins
+      - /volume1/Media:/media:ro                       # <-- CHANGE the left side to your media share (read-only)
+
+  transcoder:
+    image: ghcr.io/justhallwest-commits/hallflix-site:latest
+    command: transcoder
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8781/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+    volumes:
+      - /volume1/Media:/media:ro                       # <-- CHANGE to the same media share as above
+      - transcode:/transcode
+    devices:
+      - /dev/dri:/dev/dri                              # the NAS graphics chip, for fast video conversion
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hallflix
+      POSTGRES_PASSWORD: hallflix                      # only reachable by the two containers above, never from your network
+      POSTGRES_DB: hallflix
+    volumes:
+      - /volume1/docker/hallflix/db:/var/lib/postgresql/data   # the HallFlix database: profiles, history, looks
+
+volumes:
+  transcode:

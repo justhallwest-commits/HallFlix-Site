@@ -1,0 +1,3 @@
+/* Loaded on every page while the plugin is on. Use the theme's variables so it follows whatever look is active. */
+.card:hover, .card:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+.nav .links a.on { letter-spacing: 0.06em; }

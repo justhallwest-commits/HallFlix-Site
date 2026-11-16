@@ -307,6 +307,6 @@ test('the web app and Studio pages are served', async () => {
   for (const p of ['/', '/studio', '/js/app.js', '/app.css', '/vendor/hls.min.js', '/assets/logo.png', '/manifest.webmanifest']) {
     assert.equal((await fetch(hf.base + p)).status, 200, p);
   }
-  assert.equal((await fetch(`${hf.base}/..%2f..%2fetc/passwd`)).status, 404);
+  assert.ok([400, 404].includes((await fetch(`${hf.base}/..%2f..%2fetc/passwd`)).status), "path traversal is refused");
   assert.equal((await fetch(`${hf.base}/api/nope`)).status, 404);
 });

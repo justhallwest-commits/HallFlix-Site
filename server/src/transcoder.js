@@ -158,8 +158,9 @@ async function detect() {
 }
 
 export async function startTranscoder(port = cfg.transcoderPort) {
-  fs.rmSync(cfg.transcodeDir, { recursive: true, force: true });
+  // Empty the folder rather than removing it: in Docker it is a mounted volume and cannot be deleted.
   fs.mkdirSync(cfg.transcodeDir, { recursive: true });
+  for (const name of fs.readdirSync(cfg.transcodeDir)) fs.rmSync(path.join(cfg.transcodeDir, name), { recursive: true, force: true });
   await detect();
   const timer = setInterval(housekeeping, 1000);
   const server = http.createServer(async (req, res) => {

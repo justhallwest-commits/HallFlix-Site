@@ -1,0 +1,41 @@
+name: Build and test
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: hallflix, POSTGRES_PASSWORD: hallflix, POSTGRES_DB: hallflix_test }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U hallflix" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm install
+        working-directory: server
+      - run: npm test
+        working-directory: server
+        env: { DATABASE_URL: "postgres://hallflix:hallflix@127.0.0.1:5432/hallflix_test" }
+
+  image:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/justhallwest-commits/hallflix-site:latest
+            ghcr.io/justhallwest-commits/hallflix-site:${{ github.sha }}
