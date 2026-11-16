@@ -17,6 +17,7 @@ services:
     volumes:
       - /volume1/docker/hallflix/data:/data            # HallFlix's own files: artwork cache, uploads, plugins
       - /volume1/Media:/media:ro                       # <-- CHANGE: your media share, then keep  :/media:ro  exactly
+                                                       #     (to let admins delete files from HallFlix, drop the :ro on this line only)
 
   transcoder:
     image: ghcr.io/justhallwest-commits/hallflix-site:latest

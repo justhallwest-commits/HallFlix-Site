@@ -94,6 +94,8 @@ test('home, title pages and search', async () => {
   const home = await hf.api('GET', '/api/home');
   assert.ok(home.spotlight.length >= 3 && home.spotlight.every((s) => s.backdrop));
   assert.deepEqual(home.rows.map((r) => r.id).slice(0, 2), [`recent-${lib.movies.id}`, `recent-${lib.shows.id}`]);
+  assert.deepEqual(home.libraries.map((l) => [l.name, l.kind, l.count]), [['Movies', 'movies', 4], ['Shows', 'shows', 1]]);
+  assert.ok(home.libraries[0].backdrop && home.libraries[0].posters.length === 3 && home.libraries[0].fresh === 4);
   const d = await hf.api('GET', `/api/items/${items['Night Drive'].id}`);
   assert.equal(d.tagline, 'Keep driving.'); assert.equal(d.people[0].name, 'Ada Reyes'); assert.equal(d.media.quality, 'SD');
   assert.deepEqual(d.similar.map((s) => s.title), ['The Long Signal']);
@@ -310,6 +312,64 @@ test('files that disappear are removed; a missing folder does not wipe a library
   assert.deepEqual(ov.libraries.map((l) => [l.kind, l.titles, l.episodes]), [['movies', 3, 0], ['shows', 1, 3], ['prerolls', 2, 0]]);
   assert.match(ov.scan.errors.join(' '), /Folder not found/);
   fs.renameSync(path.join(media, 'Shows-offline'), path.join(media, 'Shows'));
+});
+
+test('admins remove titles from HallFlix, delete files from the NAS, and bring titles back', async () => {
+  await hf.api('POST', '/api/studio/scan', {}); await hf.scan.idle();
+  const find = async (q) => (await hf.api('GET', `/api/search?q=${encodeURIComponent(q)}`)).items[0];
+  const movieDir = path.join(media, 'Movies');
+
+  // A movie in its own folder is removed folder and all; a loose file takes only its own subtitles with it.
+  const night = await find('night drive');
+  let p = await hf.api('GET', `/api/studio/items/${night.id}/remove`);
+  assert.deepEqual(p.targets, [{ path: path.join(movieDir, 'Night Drive (2019)'), folder: true }]);
+  assert.equal(p.files, 2); assert.equal(p.canDelete, true);
+  const signal = await find('signal');
+  p = await hf.api('GET', `/api/studio/items/${signal.id}/remove`);
+  assert.deepEqual(p.targets.map((t) => [path.basename(t.path), t.folder]),
+    [['The.Long.Signal.2021.1080p.BluRay.x264-GRP.mkv', false], ['The.Long.Signal.2021.1080p.BluRay.x264-GRP.es.srt', false]]);
+
+  // Remove from HallFlix: gone from the app, still on disk, and a rescan does not bring it back.
+  assert.equal((await hf.api('POST', `/api/studio/items/${night.id}/hide`, {})).title, 'Night Drive');
+  assert.equal((await hf.api('GET', `/api/items/${night.id}`)).$status, 404);
+  await hf.api('POST', '/api/studio/scan', {}); await hf.scan.idle();
+  assert.equal(await find('night drive'), undefined);
+  assert.ok(fs.existsSync(path.join(movieDir, 'Night Drive (2019)', 'Night Drive (2019).mp4')));
+  let hidden = await hf.api('GET', '/api/studio/hidden');
+  assert.deepEqual(hidden.map((h) => [h.title, h.library]), [['Night Drive', 'Movies']]);
+  await hf.api('DELETE', `/api/studio/hidden/${hidden[0].id}`); await hf.scan.idle();
+  assert.equal((await find('night drive')).title, 'Night Drive');
+
+  // A season can be removed and brought back on its own.
+  const harbor = await find('harbor');
+  let show = await hf.api('GET', `/api/items/${harbor.id}`);
+  const s1 = show.seasons.find((s) => s.number === 1 || /1$/.test(s.title));
+  await hf.api('POST', `/api/studio/items/${s1.id}/hide`, {});
+  await hf.api('POST', '/api/studio/scan', {}); await hf.scan.idle();
+  show = await hf.api('GET', `/api/items/${harbor.id}`);
+  assert.deepEqual(show.seasons.map((s) => s.episodes.length), [1]);
+  hidden = await hf.api('GET', '/api/studio/hidden');
+  assert.equal(hidden.length, 2);
+  await hf.api('DELETE', `/api/studio/hidden/${hidden[0].id}`); await hf.scan.idle();
+  assert.equal((await hf.api('GET', '/api/studio/hidden')).length, 0, 'bringing back a season restores all its episodes');
+  show = await hf.api('GET', `/api/items/${harbor.id}`);
+  assert.deepEqual(show.seasons.map((s) => s.episodes.length), [2, 1]);
+
+  // Delete from the NAS: the files go, and so does the title. An emptied show disappears with its last episode.
+  const ep = show.seasons[1].episodes[0];
+  const epFile = path.join(media, 'Shows', 'Harbor Lights (2018)', 'Season 02', 'Harbor.Lights.S02E01.720p.WEB.mkv');
+  assert.ok(fs.existsSync(epFile));
+  await hf.api('POST', `/api/studio/items/${ep.id}/delete`, {});
+  assert.ok(!fs.existsSync(epFile));
+  assert.deepEqual((await hf.api('GET', `/api/items/${harbor.id}`)).seasons.map((s) => s.episodes.length), [2]);
+  const r = await hf.api('POST', `/api/studio/items/${signal.id}/delete`, {});
+  assert.equal(r.files, 2);
+  assert.ok(!fs.readdirSync(movieDir).some((f) => f.startsWith('The.Long.Signal')));
+  assert.equal(await find('signal'), undefined);
+  assert.ok(fs.existsSync(path.join(movieDir, 'Deep Field (2020) [tmdbid-777]')), 'other movies are untouched');
+
+  // Nothing outside a library can be targeted, and viewers cannot use any of this.
+  assert.equal((await hf.api('GET', '/api/studio/items/999999/remove')).$status, 404);
 });
 
 test('the web app and Studio pages are served', async () => {

@@ -55,6 +55,10 @@ const MIGRATIONS = [
    create table preroll_rules (
      id serial primary key, name text not null, enabled boolean not null default true, position int not null default 0,
      clips jsonb not null default '{"mode":"all"}', match jsonb not null default '{}', count int not null default 1);`,
+  // 2: titles an admin removed from HallFlix but kept on the NAS. The scanner skips these paths (and anything under them).
+  `create table hidden (
+     id serial primary key, library_id int references libraries on delete cascade, path text not null unique,
+     title text not null, kind text not null, hidden_at timestamptz not null default now());`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {

@@ -50,6 +50,12 @@ async function walk(dir, out = []) {
   return out;
 }
 
+/** Paths an admin hid. A hidden folder hides everything inside it. */
+async function hiddenFor(lib) {
+  const set = new Set((await q('select path from hidden where library_id=$1', [lib.id])).map((r) => r.path));
+  return (p) => { if (!set.size) return false; for (let x = p; ; x = path.dirname(x)) { if (set.has(x)) return true; if (x === path.dirname(x) || x === lib.path) return false; } };
+}
+
 async function pool(list, n, fn) {
   let i = 0;
   await Promise.all(Array.from({ length: Math.min(n, list.length) }, async () => {
@@ -103,11 +109,13 @@ async function applyMeta(id, meta, extra = {}) {
 }
 
 async function scanMovies(lib) {
-  const files = await walk(lib.path);
+  const isHidden = await hiddenFor(lib);
+  const all = await walk(lib.path);
+  const files = all.filter((f) => !isHidden(f.path));
   const existing = new Map((await q(`select id, path, size, mtime, matched from items where library_id=$1 and kind='movie'`, [lib.id])).map((r) => [r.path, r]));
   const present = new Set(files.map((f) => f.path));
   const gone = [...existing.values()].filter((r) => !present.has(r.path)).map((r) => r.id);
-  if (gone.length && (files.length || !(await rootMissing(lib.path)))) await q('delete from items where id = any($1)', [gone]);
+  if (gone.length && (all.length || !(await rootMissing(lib.path)))) await q('delete from items where id = any($1)', [gone]);
   const hasKey = !!(await tmdb.tmdbKey());
   const todo = files.filter((f) => { const e = existing.get(f.path); return !e || e.size !== f.size || e.mtime !== f.mtime || (hasKey && !e.matched); });
   Object.assign(status, { phase: 'Adding movies', total: todo.length, done: 0 });
@@ -146,10 +154,12 @@ async function scanShows(lib) {
   const hasKey = !!(await tmdb.tmdbKey());
   const existingShows = new Map((await q(`select id, path, matched, tmdb_id from items where library_id=$1 and kind='show'`, [lib.id])).map((r) => [r.path, r]));
   const seenShows = new Set();
+  const isHidden = await hiddenFor(lib);
   Object.assign(status, { phase: 'Adding shows', total: dirs.length, done: 0 });
   for (const d of dirs) {
     const showPath = path.join(lib.path, d.name);
-    try { await scanShow(lib, showPath, d.name, existingShows.get(showPath), hasKey, seenShows); }
+    if (isHidden(showPath)) { status.done++; continue; }
+    try { await scanShow(lib, showPath, d.name, existingShows.get(showPath), hasKey, seenShows, isHidden); }
     catch (e) { if (status.errors.length < 50) status.errors.push(`${d.name}: ${e.message}`); }
     status.done++;
   }
@@ -157,8 +167,8 @@ async function scanShows(lib) {
   if (goneShows.length) await q('delete from items where id = any($1)', [goneShows]);
 }
 
-async function scanShow(lib, showPath, dirName, existing, hasKey, seenShows) {
-  const files = (await walk(showPath)).map((f) => ({ ...f, ep: names.parseEpisode(f.path) })).filter((f) => f.ep);
+async function scanShow(lib, showPath, dirName, existing, hasKey, seenShows, isHidden = () => false) {
+  const files = (await walk(showPath)).filter((f) => !isHidden(f.path)).map((f) => ({ ...f, ep: names.parseEpisode(f.path) })).filter((f) => f.ep);
   if (!files.length) return;
   seenShows.add(showPath);
   const parsed = names.parseTitleYear(dirName);

@@ -35,6 +35,21 @@ HallFlix still plays everything, but converting 4K files will be slow. Most file
 In Cloudflare Zero Trust, change the tunnel's public hostname for `hallflix.net` from Jellyfin's port to `http://<NAS address>:8780`.
 To go back, change it back. Nothing else needs undoing.
 
+## Deleting files from HallFlix (optional)
+
+Admins can always **remove** a title from HallFlix (the trash button on its page). The files stay on the NAS, and
+**Studio → Libraries → Removed titles** brings it back.
+
+To also **delete the files from the NAS** from inside HallFlix, give the site container write access to your media:
+
+1. In the Docker app, edit the `hallflix` project.
+2. In the `hallflix:` section only, change `- /volume1/Media:/media:ro` to `- /volume1/Media:/media` (drop the `:ro`).
+   Leave the `transcoder:` line as it is.
+3. Save and redeploy. The title page's trash button now offers **Delete from the NAS**, which lists every file and folder before
+   anything is deleted.
+
+Deleted files do not go to the UGREEN recycle bin. If you want a safety net, keep the `:ro` and use **Remove from HallFlix** instead.
+
 ## Updating
 
 In the Docker app, open the `hallflix` project and press **Redeploy** (pull the newest image). Your database and settings are kept.

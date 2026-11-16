@@ -101,6 +101,7 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   body.className = body.className.replace(/\btex-\S+/g, '').trim();
   if (t.texture && t.texture !== 'none') body.classList.add(`tex-${t.texture}`);
   body.classList.toggle('wide-cards', t.cardShape === 'wide');
+  body.classList.toggle('ui-hud', (t.interface || 'futuristic') === 'futuristic');
   const signedOut = !state.profile;
   const bg = signedOut ? (t.login?.image || t.background?.image) : (lib.background || t.background?.image);
   const dim = signedOut ? (t.login?.dim ?? 0.45) : (lib.dim ?? t.background?.dim ?? 0.6);

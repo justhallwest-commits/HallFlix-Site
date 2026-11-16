@@ -36,6 +36,23 @@ const rowHtml = (r) => html`<section class="row ${r.shape === 'wide' ? 'keep' : 
   <div class="scroller">${r.items.map((it) => cardHtml(it, { wide: r.shape === 'wide' }))}</div>
   <button class="arrow r" aria-label="Scroll right" tabindex="-1">›</button></section>`;
 
+const isVid = (u) => /\.(mp4|webm|m4v|mov)(\?|$)/i.test(u || '');
+function tilesHtml(list) {
+  if (!list?.length) return '';
+  return html`<section class="libs" data-count="${list.length}">${list.map((l) => {
+    const lk = libraryLook(l.id);
+    const bg = lk.background && !isVid(lk.background) ? lk.background : l.backdrop;
+    const style = [bg ? `--tile-bg:url("${String(bg).replace(/"/g, '%22')}")` : '', lk.accent ? `--tile-accent:${lk.accent}` : ''].filter(Boolean).join(';');
+    const noun = l.kind === 'movies' ? (l.count === 1 ? 'movie' : 'movies') : l.count === 1 ? 'show' : 'shows';
+    return html`<a class="lib-tile" href="#/library/${l.id}" style="${style}" aria-label="${l.name}, ${l.count} ${noun}">
+      <span class="tile-art"></span>
+      ${l.posters.length ? html`<span class="tile-stack">${l.posters.map((p, i) => html`<img src="${p}" alt="" loading="lazy" style="--i:${i}">`)}</span>` : ''}
+      <span class="tile-text">${lk.logo ? html`<img class="tile-logo" src="${lk.logo}" alt="">` : html`<b class="tile-name">${l.name}</b>`}
+        <span class="tile-count">${l.count} ${noun}${l.fresh ? html`<em>${l.fresh} new</em>` : ''}</span></span>
+      <span class="tile-sweep"></span></a>`;
+  })}</section>`;
+}
+
 function heroHtml(list) {
   if (!list.length) return '';
   return html`<section class="hero" data-count="${list.length}"><div class="bg"></div><div class="bg"></div><div class="content"></div>
@@ -157,12 +174,12 @@ async function home() {
     try { const items = typeof x.load === 'function' ? await x.load() : x.items; if (items?.length) rows.splice(Math.min(rows.length, x.position ?? rows.length), 0, { id: x.id, title: x.title, items, shape: x.shape }); }
     catch (e) { console.error('[plugin row]', x.id, e); }
   }
-  if (!rows.length && !data.spotlight.length) {
+  if (!rows.length && !data.spotlight.length && !data.libraries?.length) {
     view().innerHTML = String(html`<div class="page"><div class="empty"><h2>Your library is empty</h2>
       <p>${state.profile.admin ? raw('Add your movie and show folders in the Studio and they will appear here as soon as the first scan finishes.<br><br><a class="btn primary" href="/studio#libraries">Open the Studio</a>') : 'Nothing has been added yet. Check back soon.'}</p></div></div>`);
     return;
   }
-  view().innerHTML = String(html`${heroHtml(data.spotlight)}<div class="${data.spotlight.length ? 'rows' : 'page'}">${rows.map(rowHtml)}</div>`);
+  view().innerHTML = String(html`${heroHtml(data.spotlight)}<div class="${data.spotlight.length ? 'rows' : 'page'}">${tilesHtml(data.libraries)}${rows.map(rowHtml)}</div>`);
   startHero(data.spotlight);
   for (const r of $$('.row')) syncArrows(r);
 }
@@ -241,6 +258,7 @@ export async function title(id) {
         <button class="btn round ${d.inList ? 'on' : ''}" data-list aria-label="My List" title="My List">${d.inList ? icons.check : icons.plus}</button>
         <button class="btn round" data-seen aria-label="Mark as watched" title="Mark as watched or unwatched">${icons.eye}</button>
         ${d.trailer ? html`<a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=${d.trailer}">${icons.trailer} Trailer</a>` : ''}
+        ${state.profile.admin ? html`<span class="manage"><button class="btn round" data-manage aria-label="Remove or delete" title="Remove or delete" aria-haspopup="menu">${raw(TRASH)}</button></span>` : ''}
       </div></div></div>
     <div class="body"><div class="cols"><div>
         ${metaLine(d, [d.kind === 'show' ? `${d.seasons.length} season${d.seasons.length === 1 ? '' : 's'}` : '', d.media?.quality, d.media?.hdr ? 'HDR' : ''].filter(Boolean))}
@@ -256,14 +274,32 @@ export async function title(id) {
   const eps = (s) => {
     $('.episodes', o).innerHTML = String(html`${s.episodes.map((e) => {
       const pct = e.progress && !e.progress.watched && e.progress.duration ? (e.progress.position / e.progress.duration) * 100 : 0;
-      return html`<a class="episode ${e.id === (d.focus || d.playId) ? 'focus' : ''}" href="#/watch/${e.id}"><div class="n">${e.number}</div>
+      return html`<div class="ep-wrap">${state.profile.admin ? html`<button class="ep-manage" data-remove="${e.id}" aria-label="Remove or delete episode ${e.number}" title="Remove or delete this episode">${raw(TRASH)}</button>` : ''}<a class="episode ${e.id === (d.focus || d.playId) ? 'focus' : ''}" href="#/watch/${e.id}"><div class="n">${e.number}</div>
         <div class="still">${e.still ? html`<img loading="lazy" src="${e.still}" alt="">` : ''}${pct ? html`<div class="bar"><i style="width:${pct}%"></i></div>` : ''}${e.progress?.watched ? html`<div class="seen">✓</div>` : ''}</div>
-        <div><div class="t"><span>${e.title}</span><small>${fmtRuntime(e.runtime)}</small></div><p>${e.overview || ''}</p></div></a>`; })}`);
+        <div><div class="t"><span>${e.title}</span><small>${fmtRuntime(e.runtime)}</small></div><p>${e.overview || ''}</p></div></a></div>`; })}`);
   };
   if (season) eps(season);
   o.onchange = (e) => { if (e.target.matches('[data-season]')) eps(d.seasons.find((s) => s.id === +e.target.value)); };
+  const after = (removedId) => {
+    markStale();
+    if (removedId === d.id) { if (/^#\/title\//.test(location.hash)) history.back(); else closeTitle(); }
+    else title(id);
+  };
   o.onclick = async (e) => {
     if (e.target === o || e.target.closest('[data-x]')) { if (history.length > 1) history.back(); else location.hash = '#/'; return; }
+    const mg = e.target.closest('[data-manage]');
+    if (mg) {
+      const wrap = mg.parentElement, open = $('.mmenu', wrap);
+      if (open) { open.remove(); return; }
+      const season = d.seasons && d.seasons.length > 1 ? d.seasons.find((s) => s.id === +($('[data-season]', o)?.value)) : null;
+      wrap.insertAdjacentHTML('beforeend', String(html`<div class="mmenu" role="menu">
+        <button role="menuitem" data-remove="${d.id}">${d.kind === 'show' ? 'This whole show' : 'This movie'}</button>
+        ${season ? html`<button role="menuitem" data-remove="${season.id}">${season.title} only</button>` : ''}</div>`));
+      $('.mmenu button', wrap).focus();
+      return;
+    }
+    const rm = e.target.closest('[data-remove]');
+    if (rm) { e.preventDefault(); $('.mmenu', o)?.remove(); removeDialog(+rm.dataset.remove, after); return; }
     const list = e.target.closest('[data-list]');
     if (list) {
       d.inList = !d.inList; list.classList.toggle('on', d.inList); list.innerHTML = d.inList ? icons.check : icons.plus;
@@ -278,6 +314,55 @@ export async function title(id) {
   };
   o.scrollTop = 0;
   ($('.episode.focus', o) && d.focus ? $('.episode.focus', o) : $('.btn.primary', o))?.focus({ preventScroll: !d.focus });
+}
+
+// ---------- removing titles (admins) ----------
+const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
+const gb = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${Math.round(n / 1e6)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
+
+/** Ask how to remove a title: forget it in HallFlix (files stay) or delete the files from the NAS. */
+async function removeDialog(itemId, done) {
+  let p;
+  try { p = await api('GET', `/api/studio/items/${itemId}/remove`); } catch (e) { toast(e.message); return; }
+  const back = document.activeElement;
+  const box = document.createElement('div');
+  box.className = 'confirm';
+  const what = { movie: 'movie', show: 'show', season: 'season', episode: 'episode' }[p.kind];
+  const show = (step) => {
+    box.innerHTML = String(step === 'delete' ? html`<div class="panel danger" role="alertdialog" aria-modal="true" aria-labelledby="cf-h">
+        <h2 id="cf-h">Delete ${p.title} from the NAS?</h2>
+        <p>This permanently deletes ${p.files} file${p.files === 1 ? '' : 's'} (${gb(p.size)}). HallFlix cannot bring ${p.files === 1 ? 'it' : 'them'} back.</p>
+        <ul class="paths">${p.targets.slice(0, 6).map((t) => html`<li>${t.folder ? 'Folder ' : ''}${t.path}</li>`)}${p.targets.length > 6 ? html`<li>and ${p.targets.length - 6} more</li>` : ''}</ul>
+        <div class="actions"><button class="btn" data-back>Go back</button><button class="btn danger" data-go="delete">Delete ${p.files} file${p.files === 1 ? '' : 's'}</button></div></div>`
+      : html`<div class="panel" role="dialog" aria-modal="true" aria-labelledby="cf-h">
+        <h2 id="cf-h">Remove ${p.title}?</h2>
+        <div class="choices">
+          <button class="choice" data-go="hide"><b>Remove from HallFlix</b><span>The ${what} disappears for everyone. Its files stay on the NAS, and you can bring it back from Studio → Libraries.</span></button>
+          <button class="choice ${p.canDelete ? '' : 'off'}" ${p.canDelete ? raw('data-step="delete"') : raw('aria-disabled="true"')}><b>Delete from the NAS</b>
+            <span>${p.canDelete ? `Deletes ${p.files} file${p.files === 1 ? '' : 's'} (${gb(p.size)}) for good.` : 'Not available: HallFlix has read-only access to your media folder. The install guide explains how to allow deleting.'}</span></button>
+        </div>
+        <div class="actions"><button class="btn" data-x>Cancel</button></div></div>`);
+    $('[data-go],[data-back]', box)?.focus();
+  };
+  const close = () => { box.remove(); back?.focus?.(); };
+  box.onclick = async (e) => {
+    if (e.target === box || e.target.closest('[data-x]')) return close();
+    if (e.target.closest('[data-back]')) return show('choose');
+    if (e.target.closest('[data-step]')) return show('delete');
+    const go = e.target.closest('[data-go]');
+    if (!go) return;
+    for (const b of $$('button', box)) b.disabled = true;
+    go.textContent = go.dataset.go === 'delete' ? 'Deleting…' : 'Removing…';
+    try {
+      const r = await api('POST', `/api/studio/items/${itemId}/${go.dataset.go}`, {});
+      toast(go.dataset.go === 'delete' ? `Deleted ${r.title} from the NAS` : `Removed ${r.title} from HallFlix`);
+      box.remove();
+      done(itemId);
+    } catch (err) { toast(err.message); show('choose'); }
+  };
+  box.onkeydown = (e) => { if (e.key === 'Escape' || e.key === 'Backspace' && e.target.tagName !== 'INPUT') { e.stopPropagation(); close(); } };
+  document.body.append(box);
+  show('choose');
 }
 
 // ---------- sign-in and first run ----------

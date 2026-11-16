@@ -14,6 +14,8 @@ const SEL = `i.*, s.title as show_title, s.poster as show_poster, s.backdrop as 
 const FROM = `from items i left join items s on s.id = i.show_id
   left join progress p on p.item_id = i.id and p.profile_id = $1`;
 
+const hash = (str) => { let h = 0; for (const c of String(str)) h = (h * 31 + c.charCodeAt(0)) | 0; return h; };
+
 export function card(r) {
   const ep = r.kind === 'episode';
   return {
@@ -92,7 +94,21 @@ export function routes(r) {
     const spotlight = await q(
       `select ${SEL} ${FROM} where i.kind in ('movie','show') and i.backdrop is not null
        order by (i.added_at > now() - interval '45 days') desc, md5(i.id::text || $2) limit 6`, [pid, day]);
-    return { spotlight: spotlight.map((x) => ({ ...card(x), backdrop: img(x.backdrop, 'w1280'), tagline: x.tagline })), rows };
+    // Library tiles: each library's own background if it has one in its look, otherwise art from a recent title.
+    const tiles = [];
+    for (const l of libs) {
+      const kind = l.kind === 'movies' ? 'movie' : 'show';
+      const stats = await q1(`select count(*)::int as n, count(*) filter (where added_at > now() - interval '14 days')::int as fresh from items where library_id=$1 and kind=$2`, [l.id, kind]);
+      if (!stats.n) continue;
+      const art = await q(`select backdrop, poster from items where library_id=$1 and kind=$2 and (backdrop is not null or poster is not null) order by added_at desc, id desc limit 12`, [l.id, kind]);
+      const pick = art.filter((a) => a.backdrop);
+      tiles.push({
+        id: l.id, name: l.name, kind: l.kind, count: stats.n, fresh: stats.fresh,
+        backdrop: pick.length ? img(pick[Math.abs(hash(day + l.id)) % pick.length].backdrop, 'w1280') : null,
+        posters: art.filter((a) => a.poster).slice(0, 3).map((a) => img(a.poster, 'w342')),
+      });
+    }
+    return { spotlight: spotlight.map((x) => ({ ...card(x), backdrop: img(x.backdrop, 'w1280'), tagline: x.tagline })), libraries: tiles, rows };
   });
 
   r.get('/api/library/:id', async ({ profile, params, query }) => {

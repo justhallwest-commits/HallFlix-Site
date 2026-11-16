@@ -178,7 +178,8 @@ pages.overview = async (main) => {
 pages.libraries = async (main) => {
   const KIND = { movies: 'Movies', shows: 'Shows', prerolls: 'Pre-roll clips' };
   const draw = async () => {
-    const o = await api('GET', '/api/studio/overview');
+    const [o, hidden] = await Promise.all([api('GET', '/api/studio/overview'), api('GET', '/api/studio/hidden')]);
+    const removed = [...new Map(hidden.map((h) => [`${h.library}|${h.title}`, h])).values()]; // a hidden season lists once, not per episode
     main.innerHTML = String(html`${head('Libraries', `Point HallFlix at folders inside ${o.mediaRoot}. Your files are only ever read, never changed.`, html`<button class="btn primary" data-add>Add a library</button>`)}
       <div class="card">${o.libraries.length ? o.libraries.map((l, i) => html`<div class="row" data-id="${l.id}">
         <div class="grow"><b>${l.name} <span class="pill">${KIND[l.kind]}</span> ${o.scan.running && o.scan.library === l.id ? html`<span class="pill live">Scanning</span>` : ''}</b>
@@ -187,6 +188,8 @@ pages.libraries = async (main) => {
           ${l.kind !== 'prerolls' ? html`<button class="btn sm" data-fresh title="Look every title up again">Refresh details</button>` : ''}
           <button class="btn sm" data-edit>Edit</button><button class="btn sm danger" data-del>Remove</button></div></div>`)
     : html`<p class="muted">No libraries yet. Add your Movies and Shows folders, plus a folder of pre-roll clips if you have one.</p>`}</div>
+      ${removed.length ? html`<div class="card"><h2>Removed titles</h2><p class="muted small" style="margin-bottom:6px">Removed from HallFlix with their files left on the NAS. Bring one back and the next scan adds it again.</p>
+        ${removed.map((h) => html`<div class="row" data-hidden="${h.id}"><div class="grow"><b>${h.title}</b><span>${h.library || 'Removed library'} · removed ${new Date(h.hidden_at).toLocaleDateString()}</span></div><button class="btn sm" data-restore>Bring back</button></div>`)}</div>` : ''}
       <p class="muted small">Tip: inside a pre-roll folder, sub-folder names become tags. Clips in <code>halloween/</code> get the tag “halloween”, which pre-roll rules can use.</p>`);
     const libOf = (e) => o.libraries.find((l) => l.id === +e.target.closest('[data-id]').dataset.id);
     const form = (l) => {
@@ -208,6 +211,8 @@ pages.libraries = async (main) => {
     };
     $('[data-add]', main).onclick = () => form(null);
     main.onclick = async (e) => {
+      const rs = e.target.closest('[data-restore]');
+      if (rs) { try { const r = await api('DELETE', `/api/studio/hidden/${rs.closest('[data-hidden]').dataset.hidden}`); toast(`Bringing back ${r.title}. It appears after the scan.`); draw(); } catch (err) { fail(err); } return; }
       const b = e.target.closest('button'); if (!b || !e.target.closest('[data-id]')) return;
       const l = libOf(e);
       try {
@@ -269,8 +274,8 @@ pages.look = async (main) => {
     : html`<div class="card"><h2>Start from a preset</h2><div class="presets">${L.presets.map((p) => html`<button class="preset ${theme.preset === p.id ? 'on' : ''}" data-preset="${p.id}" title="${p.description}">${swatch(p.theme, L.defaults)}<b>${p.name}</b></button>`)}</div></div>
         <div data-form="theme">
         <div class="card"><h2>Colours</h2>${color(theme, 'colors.bg', 'Background')}${color(theme, 'colors.surface', 'Panels')}${color(theme, 'colors.text', 'Text')}${color(theme, 'colors.muted', 'Quiet text')}${color(theme, 'colors.accent', 'Accent')}${color(theme, 'colors.accent2', 'Second accent')}</div>
-        <div class="card"><h2>Type and shape</h2>${select(theme, 'fonts.display', 'Title font', L.options.fonts)}${select(theme, 'fonts.body', 'Reading font', L.options.fonts)}
-          ${range(theme, 'radius', 'Card corners', 0, 28, 1)}${range(theme, 'glow', 'Neon glow', 0, 1, 0.05)}${select(theme, 'cardShape', 'Card shape', L.options.cardShapes)}${range(theme, 'heroHeight', 'Banner height', 40, 100, 5)}</div>
+        <div class="card"><h2>Type and shape</h2>${select(theme, 'interface', 'Interface style', L.options.interfaces)}${select(theme, 'fonts.display', 'Title font', L.options.fonts)}${select(theme, 'fonts.body', 'Reading font', L.options.fonts)}
+          ${range(theme, 'radius', theme.interface === 'classic' ? 'Card corners' : 'Corner cut', 0, 28, 1)}${range(theme, 'glow', 'Neon glow', 0, 1, 0.05)}${select(theme, 'cardShape', 'Card shape', L.options.cardShapes)}${range(theme, 'heroHeight', 'Banner height', 40, 100, 5)}</div>
         <div class="card"><h2>Texture and effects</h2>${select(theme, 'texture', 'Texture', L.options.textures)}${select(theme, 'effect', 'Moving effect', L.options.effects)}</div>
         <div class="card"><h2>Backgrounds</h2>${image(theme, 'background.image', 'Home background picture or video')}${range(theme, 'background.dim', 'Darken', 0, 0.95, 0.05)}${range(theme, 'background.blur', 'Blur', 0, 30, 1)}
           ${image(theme, 'login.image', 'Sign-in screen background')}${range(theme, 'login.dim', 'Darken sign-in', 0, 0.95, 0.05)}</div>

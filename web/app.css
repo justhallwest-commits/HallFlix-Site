@@ -272,3 +272,132 @@ body.tv .nav .links a { font-size: 19px; }
 body.tv .row h2 { font-size: 26px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
 @media (max-width: 640px) { .hero .dots { display: none; } .nav .links a { font-size: 14px; } }
+
+/* ---------- Library tiles on Home ---------- */
+.libs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: clamp(10px, 1.4vw, 20px); padding: 0 var(--pad); margin-bottom: clamp(26px, 4vw, 48px); }
+.libs[data-count="1"] { grid-template-columns: minmax(0, 720px); }
+.lib-tile { --tile-accent: var(--accent); position: relative; display: block; aspect-ratio: 16 / 7; min-height: 150px; border-radius: var(--radius); overflow: hidden; isolation: isolate;
+  background: linear-gradient(135deg, rgba(var(--accent2-rgb), 0.45), rgba(var(--accent-rgb), 0.25)); box-shadow: inset 0 0 0 1px rgba(var(--text-rgb), 0.12); transition: transform 0.25s cubic-bezier(.2,.8,.2,1), box-shadow 0.25s; }
+.lib-tile .tile-art { position: absolute; inset: 0; z-index: -1; background: var(--tile-bg, none) center 30% / cover no-repeat; transition: transform 0.6s cubic-bezier(.2,.8,.2,1); }
+.lib-tile .tile-art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(var(--bg-rgb), 0.94) 0%, rgba(var(--bg-rgb), 0.7) 42%, rgba(var(--bg-rgb), 0.15) 100%); }
+.lib-tile .tile-text { position: absolute; left: clamp(16px, 2.2vw, 30px); bottom: clamp(14px, 2vw, 26px); right: 42%; display: grid; gap: 6px; }
+.lib-tile .tile-name { font-family: var(--font-display); font-size: clamp(24px, 2.8vw, 42px); line-height: 1; letter-spacing: 0.02em; text-shadow: 0 0 calc(20px * var(--glow)) rgba(var(--accent-rgb), calc(0.55 * var(--glow))); overflow-wrap: anywhere; }
+.lib-tile .tile-logo { max-height: clamp(48px, 7vw, 90px); max-width: 100%; object-fit: contain; object-position: left bottom; }
+.lib-tile .tile-count { color: var(--muted); font-size: 14px; font-weight: 500; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.lib-tile .tile-count em { font-style: normal; color: var(--tile-accent); font-weight: 600; }
+.lib-tile .tile-stack { position: absolute; right: clamp(14px, 2.4vw, 34px); top: 50%; height: 76%; aspect-ratio: 1.15; transform: translateY(-50%); perspective: 700px; pointer-events: none; }
+.lib-tile .tile-stack img { position: absolute; top: 0; height: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: calc(var(--radius) * 0.6); right: calc(var(--i) * 22%);
+  transform: rotateY(-22deg) translateZ(calc(var(--i) * -40px)); transform-origin: right center; box-shadow: -10px 14px 30px rgba(0,0,0,0.6); opacity: calc(1 - var(--i) * 0.22); transition: transform 0.45s cubic-bezier(.2,.8,.2,1); z-index: calc(3 - var(--i)); }
+.lib-tile:hover, .lib-tile:focus-visible { transform: translateY(-3px); box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.8), 0 18px 50px rgba(0,0,0,0.55), var(--glow-shadow); outline: none; }
+.lib-tile:hover .tile-art, .lib-tile:focus-visible .tile-art { transform: scale(1.05); }
+.lib-tile:hover .tile-stack img, .lib-tile:focus-visible .tile-stack img { transform: rotateY(-8deg) translateZ(calc(var(--i) * -24px)) translateX(calc(var(--i) * -16%)); }
+.lib-tile .tile-sweep { display: none; }
+@media (max-width: 560px) { .lib-tile { aspect-ratio: 16 / 8; } .lib-tile .tile-text { right: 38%; } }
+
+/* ---------- Remove / delete (admins) ---------- */
+.manage { position: relative; }
+.mmenu { position: absolute; left: 0; top: calc(100% + 8px); z-index: 5; min-width: 210px; background: var(--surface); border: 1px solid rgba(var(--text-rgb), 0.14); border-radius: 12px; padding: 6px; box-shadow: 0 18px 50px rgba(0,0,0,0.6); }
+.mmenu button { display: block; width: 100%; text-align: left; padding: 10px 12px; border: 0; background: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.mmenu button:hover, .mmenu button:focus-visible { background: rgba(var(--accent-rgb), 0.16); }
+.ep-wrap { position: relative; }
+.ep-manage { position: absolute; z-index: 2; right: 8px; top: 8px; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(var(--text-rgb), 0.2); background: rgba(var(--bg-rgb), 0.85); display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity 0.15s; color: var(--muted); }
+.ep-manage svg, .manage svg { width: 18px; height: 18px; }
+.ep-wrap:hover .ep-manage, .ep-manage:focus-visible { opacity: 1; }
+.ep-manage:hover { color: #ff6b81; border-color: #ff6b81; }
+@media (hover: none) { .ep-manage { opacity: 0.8; } }
+.confirm { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 18px; background: rgba(0,0,0,0.6); animation: fade 0.2s; }
+.confirm .panel { width: min(540px, 100%); background: var(--surface); border: 1px solid rgba(var(--text-rgb), 0.14); border-radius: calc(var(--radius) + 4px); padding: clamp(18px, 3vw, 28px); box-shadow: 0 30px 90px rgba(0,0,0,0.7); animation: pop 0.25s cubic-bezier(.2,.8,.2,1); }
+.confirm .panel.danger { border-color: rgba(255, 107, 129, 0.55); }
+.confirm h2 { font-size: clamp(19px, 2.2vw, 24px); margin-bottom: 14px; line-height: 1.25; }
+.confirm p { color: var(--muted); line-height: 1.55; margin: 0 0 12px; }
+.confirm .paths { margin: 0 0 18px; padding: 10px 12px 10px 28px; background: rgba(var(--bg-rgb), 0.7); border-radius: 8px; font-size: 12.5px; color: var(--muted); max-height: 160px; overflow-y: auto; word-break: break-all; line-height: 1.5; }
+.confirm .choices { display: grid; gap: 10px; margin-bottom: 16px; }
+.confirm .choice { text-align: left; display: grid; gap: 4px; padding: 14px 16px; border-radius: var(--radius); border: 1px solid rgba(var(--text-rgb), 0.16); background: rgba(var(--bg-rgb), 0.55); cursor: pointer; }
+.confirm .choice b { font-size: 15.5px; } .confirm .choice span { color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.confirm .choice:hover, .confirm .choice:focus-visible { border-color: var(--accent); }
+.confirm .choice[data-step]:hover, .confirm .choice[data-step]:focus-visible { border-color: #ff6b81; }
+.confirm .choice.off { opacity: 0.55; cursor: default; }
+.confirm .actions { justify-content: flex-end; }
+.btn.danger { background: #e2394f; border-color: #e2394f; color: #fff; }
+.btn.danger:hover { filter: brightness(1.1); }
+
+/* ---------- Futuristic interface ----------
+   One shape language: corners cut at 45°, glass panels, and corner brackets for focus (clear on a TV from across the room).
+   The cut follows the Studio's corner setting. Everything here is transform/opacity/clip, so it costs nothing during playback. */
+body.ui-hud { --cut: max(6px, calc(var(--radius) * 1.3)); --edge: rgba(var(--accent-rgb), 0.38); }
+body.ui-hud .chamfer, body.ui-hud .card .art, body.ui-hud .lib-tile, body.ui-hud .btn:not(.round), body.ui-hud .chip, body.ui-hud .episode .still, body.ui-hud .confirm .panel, body.ui-hud .confirm .choice, body.ui-hud .mmenu, body.ui-hud .menu, body.ui-hud .toast {
+  border-radius: 0; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+body.ui-hud .btn:not(.round), body.ui-hud .chip { --cut: 9px; }
+body.ui-hud .card { border-radius: 0; background: none; }
+body.ui-hud .card .label { border-radius: 0; }
+/* Focus and hover: four light corners around the card instead of a ring. */
+body.ui-hud .card::after, body.ui-hud .lib-tile::after { content: ''; position: absolute; inset: -5px; pointer-events: none; opacity: 0; transition: opacity 0.18s, inset 0.18s;
+  --b: 2px; --l: 18px; --c: var(--accent);
+  background:
+    linear-gradient(var(--c), var(--c)) top left / var(--l) var(--b), linear-gradient(var(--c), var(--c)) top left / var(--b) var(--l),
+    linear-gradient(var(--c), var(--c)) top right / var(--l) var(--b), linear-gradient(var(--c), var(--c)) top right / var(--b) var(--l),
+    linear-gradient(var(--c), var(--c)) bottom left / var(--l) var(--b), linear-gradient(var(--c), var(--c)) bottom left / var(--b) var(--l),
+    linear-gradient(var(--c), var(--c)) bottom right / var(--l) var(--b), linear-gradient(var(--c), var(--c)) bottom right / var(--b) var(--l);
+  background-repeat: no-repeat; filter: drop-shadow(0 0 calc(6px * var(--glow)) rgba(var(--accent-rgb), 0.9)); }
+body.ui-hud .card:hover, body.ui-hud .card:focus-visible { transform: scale(1.06); box-shadow: none; }
+body.ui-hud .card:hover::after, body.ui-hud .card:focus-visible::after { opacity: 1; inset: -7px; }
+body.ui-hud .card:hover .art, body.ui-hud .card:focus-visible .art { filter: drop-shadow(0 0 0 transparent) brightness(1.06); }
+
+/* Glass top bar floating inside the margins, with a thin light line under the open page. */
+body.ui-hud .nav.solid { background: rgba(var(--bg-rgb), 0.72); box-shadow: inset 0 -1px 0 var(--edge); }
+body.ui-hud .nav .links a { border-bottom: 0; position: relative; }
+body.ui-hud .nav .links a.on::after { content: ''; position: absolute; left: 4px; right: 4px; bottom: 2px; height: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); box-shadow: var(--glow-shadow); }
+body.ui-hud .avatar { clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); border-radius: 0; }
+
+/* Spotlight: a grid floor recedes under the rows, and one band of light reads across the title each time it changes. */
+body.ui-hud .hero::after { content: ''; position: absolute; left: -10%; right: -10%; bottom: 0; height: 46%; z-index: 1; pointer-events: none;
+  background: linear-gradient(rgba(var(--accent-rgb), 0.22) 1px, transparent 1px) 0 0 / 100% 38px, linear-gradient(90deg, rgba(var(--accent-rgb), 0.22) 1px, transparent 1px) 0 0 / 60px 100%;
+  transform: perspective(380px) rotateX(58deg); transform-origin: bottom; opacity: calc(0.25 + 0.5 * var(--glow));
+  -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 85%); mask-image: linear-gradient(to top, #000 0%, transparent 85%); }
+body.ui-hud .hero .content { padding-left: 18px; border-left: 2px solid var(--edge); }
+body.ui-hud .hero .content.swap h1, body.ui-hud .hero .content.swap .logo-art { -webkit-mask-image: linear-gradient(100deg, #000 40%, rgba(0,0,0,0.25) 50%, #000 60%); mask-image: linear-gradient(100deg, #000 40%, rgba(0,0,0,0.25) 50%, #000 60%);
+  -webkit-mask-size: 300% 100%; mask-size: 300% 100%; animation: read 1.3s 0.15s cubic-bezier(.4,0,.2,1) both; }
+@keyframes read { from { -webkit-mask-position: 100% 0; mask-position: 100% 0; } to { -webkit-mask-position: 0 0; mask-position: 0 0; } }
+body.ui-hud .hero .dots { gap: 4px; }
+body.ui-hud .hero .dots button { border-radius: 0; height: 3px; width: 30px; transform: skewX(-30deg); }
+body.ui-hud .hero .dots button.on { width: 48px; }
+
+/* Library tiles become lit portals: an accent edge traced around the cut frame, and a pass of light on focus. */
+body.ui-hud .lib-tile { box-shadow: none; background: rgba(var(--accent-rgb), 0.12); }
+body.ui-hud .lib-tile::before { content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none; padding: 1px;
+  background: linear-gradient(120deg, var(--tile-accent), rgba(var(--accent2-rgb), 0.6) 40%, rgba(var(--text-rgb), 0.08) 70%, var(--tile-accent));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  clip-path: inherit; opacity: 0.55; transition: opacity 0.25s; }
+body.ui-hud .lib-tile::after { inset: 0; --l: 26px; --b: 3px; --c: var(--tile-accent); z-index: 3; }
+body.ui-hud .lib-tile:hover, body.ui-hud .lib-tile:focus-visible { box-shadow: none; transform: translateY(-3px); }
+body.ui-hud .lib-tile:hover::before, body.ui-hud .lib-tile:focus-visible::before { opacity: 1; }
+body.ui-hud .lib-tile:focus-visible::after { opacity: 1; }
+body.ui-hud .lib-tile .tile-name { font-family: 'Audiowide', var(--font-display); font-weight: 400; letter-spacing: 0.04em; }
+body.ui-hud .lib-tile .tile-count em { padding: 1px 8px; background: rgba(var(--accent-rgb), 0.16); color: var(--tile-accent); clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%); }
+body.ui-hud .lib-tile .tile-stack img { border-radius: 0; clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+body.ui-hud .lib-tile .tile-sweep { display: block; position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(var(--accent-rgb), 0.22) 48%, rgba(255,255,255,0.18) 50%, transparent 62%); background-size: 250% 100%; background-position: 120% 0; }
+body.ui-hud .lib-tile:hover .tile-sweep, body.ui-hud .lib-tile:focus-visible .tile-sweep { animation: sweep 0.9s cubic-bezier(.4,0,.2,1) forwards; }
+@keyframes sweep { 0% { opacity: 1; background-position: 120% 0; } 100% { opacity: 1; background-position: -30% 0; } }
+
+/* Title page, rows and the rest follow the same shapes. */
+body.ui-hud .sheet { border-radius: 0; clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 28px 100%, 0 calc(100% - 28px)); }
+body.ui-hud .sheet .top::before { content: ''; position: absolute; inset: auto 0 0 0; height: 1px; z-index: 2; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.6; }
+body.ui-hud .row h2::before { content: ''; width: 3px; height: 0.95em; background: var(--accent); align-self: center; box-shadow: var(--glow-shadow); transform: skewX(-14deg); }
+body.ui-hud .episode { border-radius: 0; }
+body.ui-hud .episode:hover, body.ui-hud .episode:focus-visible, body.ui-hud .episode.focus { background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.16), transparent 80%); box-shadow: inset 2px 0 0 var(--accent); }
+body.ui-hud .meta .tag { border-radius: 0; }
+body.ui-hud .art .seen, body.ui-hud .still .seen { border-radius: 0; clip-path: polygon(30% 0, 100% 0, 100% 70%, 70% 100%, 0 100%, 0 30%); }
+body.ui-hud .form input { border-radius: 0; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); }
+body.ui-hud .who button .avatar { border-radius: 0; clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px); }
+body.ui-hud .who button:hover .avatar, body.ui-hud .who button:focus-visible .avatar { box-shadow: none; filter: drop-shadow(0 0 12px rgba(var(--accent-rgb), 0.8)); }
+body.ui-hud #player .scrub .track, body.ui-hud #player .scrub .pos, body.ui-hud #player .scrub .buf { border-radius: 0; }
+body.ui-hud #player .scrub .knob { border-radius: 0; transform: scale(0) rotate(45deg); }
+body.ui-hud #player .scrub:hover .knob, body.ui-hud #player .scrub.drag .knob, body.ui-hud #player .scrub:focus-visible .knob { transform: scale(1) rotate(45deg); }
+body.ui-hud #player .pmenu, body.ui-hud #player .upnext { border-radius: 0; clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px); }
+body.ui-hud #player .pre .badge { border-radius: 0; clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+
+/* TVs and sticks: keep the shapes, drop the costly parts (blur and masks), keep focus brackets bold. */
+body.tv.ui-hud .nav.solid, body.tv .btn, body.tv #overlay { backdrop-filter: none; }
+body.tv.ui-hud .hero .content.swap h1, body.tv.ui-hud .hero .content.swap .logo-art { animation: none; -webkit-mask-image: none; mask-image: none; }
+body.tv.ui-hud .card::after { --b: 3px; --l: 22px; }

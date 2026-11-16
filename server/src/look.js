@@ -3,6 +3,7 @@ import { q, getSetting } from './db.js';
 
 export const DEFAULT_THEME = {
   preset: 'neon-marquee',
+  interface: 'futuristic', // futuristic | classic: the shape language of every screen (apps read this too)
   siteName: 'HallFlix',
   colors: { bg: '#0a0814', surface: '#16122b', text: '#f4f2ff', muted: '#a8a3c7', accent: '#35d0d0', accent2: '#b344d6' },
   fonts: { display: 'Outfit', body: 'Inter' },
@@ -54,6 +55,7 @@ export const OPTIONS = {
   textures: ['none', 'grain', 'scanlines', 'grid', 'vignette'],
   effects: ['none', 'snow', 'embers', 'hearts', 'leaves', 'confetti', 'stars', 'bats'],
   cardShapes: ['poster', 'wide'],
+  interfaces: ['futuristic', 'classic'],
 };
 
 export function merge(base, patch) {
