@@ -50,6 +50,50 @@ To also **delete the files from the NAS** from inside HallFlix, give the site co
 
 Deleted files do not go to the UGREEN recycle bin. If you want a safety net, keep the `:ro` and use **Remove from HallFlix** instead.
 
+## The apps
+
+Every update to the repo builds the apps again. The newest builds are always at these links (use your NAS address):
+
+| Device | Link |
+| --- | --- |
+| Fire TV, Android TV, Android phones | `http://<NAS address>:8780/get/android` |
+| Roku | `http://<NAS address>:8780/get/roku` |
+
+The apps ask for the server address the first time they open: enter `http://<NAS address>:8780` (or your
+`https://` address if you set one up in Cloudflare). They use the same profiles, look, seasons and pre-rolls as the website.
+
+### Fire TV
+
+1. **Settings → My Fire TV → About**: click the device name seven times to turn on Developer Options, if it is not on already.
+2. **Settings → My Fire TV → Developer Options → Install unknown apps**: turn it on for **Downloader**.
+3. Open **Downloader**, type `http://<NAS address>:8780/get/android` and press **Go**. Press **Install** when asked.
+4. HallFlix appears in **Your Apps & Channels**. Hold the select button on it and choose **Move** to put it on the home row.
+
+### Samsung or other Android phone
+
+1. Open `http://<NAS address>:8780/get/android` in the phone's browser and download the file.
+2. Open the download. If asked, allow the browser to **install unknown apps**, then press **Install**.
+   If Play Protect warns about an unknown developer, press **More details → Install anyway**.
+
+### Roku
+
+Roku only installs channels like this through its Developer Mode, one channel at a time.
+
+1. With the Roku remote, press **Home ×3, Up ×2, Right, Left, Right, Left, Right**. Choose **Enable installer and restart**,
+   accept, and set a password. Note the address the screen shows (for example `http://192.168.1.50`).
+2. On a computer, download `http://<NAS address>:8780/get/roku`.
+3. On the same computer, open the Roku's address, sign in as `rokudev` with that password, choose **Upload**, pick
+   `hallflix-roku.zip` and press **Install with zip**. HallFlix opens straight away and stays in your channel list.
+
+To update an app, repeat the download (Fire TV and phones install over the old version; Roku replaces it the same way).
+
+### Keeping updates installable
+
+Android only installs an update over the old app when both are signed with the same key. Add two repository secrets on
+GitHub (**Settings → Secrets and variables → Actions → New repository secret**): `HALLFLIX_KEYSTORE_B64` and
+`HALLFLIX_KEYSTORE_PASSWORD`. Builds made before the secrets existed use a temporary key: uninstall that build once
+before installing a signed one. Keep a copy of the key file somewhere safe; without it, future updates need an uninstall.
+
 ## Updating
 
 In the Docker app, open the `hallflix` project and press **Redeploy** (pull the newest image). Your database and settings are kept.
