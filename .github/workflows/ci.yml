@@ -39,3 +39,49 @@ jobs:
           tags: |
             ghcr.io/justhallwest-commits/hallflix-site:latest
             ghcr.io/justhallwest-commits/hallflix-site:${{ github.sha }}
+
+  apps:
+    # The Android APK (Fire TV, Android TV, phones) and the Roku channel, published to the "apps" release.
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.7" }
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.HALLFLIX_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.HALLFLIX_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/hallflix.p12"
+            echo "HALLFLIX_KEYSTORE=$RUNNER_TEMP/hallflix.p12" >> "$GITHUB_ENV"
+            echo "HALLFLIX_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "SIGNED_WITH=HallFlix key" >> "$GITHUB_ENV"
+          else
+            echo "::warning::HALLFLIX_KEYSTORE_B64 is not set, so this APK is signed with a temporary key and will not install over other builds."
+            echo "SIGNED_WITH=temporary key" >> "$GITHUB_ENV"
+          fi
+      - name: Build the APK
+        env: { BUILD_NUMBER: "${{ github.run_number }}" }
+        run: gradle -p android assembleRelease --no-daemon --stacktrace
+      - name: Package the Roku channel
+        run: |
+          sed -i "s/^build_version=.*/build_version=${{ github.run_number }}/" roku/manifest
+          npx --yes brighterscript@0.65 --rootDir roku --createPackage false
+          (cd roku && zip -qr ../hallflix-roku.zip manifest source components images)
+      - name: Publish to the apps release
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk hallflix.apk
+          notes="HallFlix apps, build ${{ github.run_number }} (${GITHUB_SHA::7}), APK signed with the $SIGNED_WITH.
+
+          - hallflix.apk: Fire TV, Android TV and Android phones. On a Fire TV, type your server's /get/android link into Downloader.
+          - hallflix-roku.zip: upload it to your Roku's Developer Settings page (see docker/INSTALL.md)."
+          gh release view apps >/dev/null 2>&1 || gh release create apps --title "HallFlix apps" --notes "$notes" --latest=false
+          gh release edit apps --notes "$notes" --title "HallFlix apps (build ${{ github.run_number }})"
+          gh release upload apps hallflix.apk hallflix-roku.zip --clobber

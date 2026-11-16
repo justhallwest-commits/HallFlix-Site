@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One tile in a row: a poster, a wide still, or a library tile with its name over the art. -->
+<component name="CardItem" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContent" />
+        <field id="width" type="float" onChange="onSize" />
+        <field id="height" type="float" onChange="onSize" />
+        <field id="focusPercent" type="float" onChange="onFocus" />
+        <field id="rowHasFocus" type="boolean" onChange="onFocus" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/CardItem.brs" />
+    <children>
+        <Rectangle id="bg" color="0x1C1836FF" />
+        <Label id="fallback" horizAlign="center" vertAlign="center" wrap="true" color="0xF4F2FFFF" font="font:SmallBoldSystemFont" />
+        <Poster id="art" loadDisplayMode="scaleToZoom" />
+        <Rectangle id="shade" color="0x0A0814FF" opacity="0" />
+        <Rectangle id="edge" color="0x35D0D0FF" height="4" visible="false" />
+        <Label id="name" color="0xFFFFFFFF" font="font:LargeBoldSystemFont" visible="false" />
+        <Label id="sub" color="0xD8D4F0FF" font="font:SmallSystemFont" visible="false" />
+        <Rectangle id="bar" color="0xFFFFFF55" height="6" visible="false" />
+        <Rectangle id="barFill" color="0x35D0D0FF" height="6" visible="false" />
+    </children>
+</component>

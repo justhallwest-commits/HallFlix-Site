@@ -17,6 +17,8 @@ window.HallFlix = {
 };
 
 let baseHash = null;
+// The Android app's player closed: refresh Continue Watching and progress bars.
+addEventListener('hallflix-native-closed', () => { views.markStale(); baseHash = null; route(); });
 async function route() {
   const hash = location.hash || '#/';
   const [path, qs = ''] = hash.slice(1).split('?');
@@ -24,7 +26,10 @@ async function route() {
   if (parts[0] === 'watch' && +parts[1]) {
     views.closeTitle();
     views.markStale();
-    await openPlayer(+parts[1], { start: /(^|&)t=0/.test(qs) ? 0 : undefined });
+    const start = /(^|&)t=0/.test(qs) ? 0 : undefined;
+    // Inside the HallFlix Android app, video plays in the app's own player.
+    if (window.HallFlixNative) { window.HallFlixNative.play(JSON.stringify({ itemId: +parts[1], start: start ?? null })); history.back(); return; }
+    await openPlayer(+parts[1], { start });
     return;
   }
   if (playerOpen()) closePlayer();

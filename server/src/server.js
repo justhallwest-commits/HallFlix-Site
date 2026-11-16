@@ -78,6 +78,15 @@ manage.routes(r);
 // TMDb artwork, fetched once and then served from the NAS.
 const SIZES = new Set(['w185', 'w300', 'w342', 'w500', 'w780', 'w1280', 'original']);
 const fetching = new Map();
+// Short links for installing the apps: type <server>/get/android into Downloader on a Fire TV.
+const APPS = 'https://github.com/justhallwest-commits/HallFlix-Site/releases/download/apps';
+r.get('/get/:app', async ({ res, params }) => {
+  const file = { android: 'hallflix.apk', apk: 'hallflix.apk', roku: 'hallflix-roku.zip' }[params.app];
+  if (!file) throw new HttpError(404, 'Not found');
+  res.writeHead(302, { Location: `${APPS}/${file}`, 'Cache-Control': 'no-store' });
+  res.end();
+}, open);
+
 r.get('/img/t/:size/:file', async ({ req, res, params }) => {
   if (!SIZES.has(params.size) || !/^[\w-]+\.(jpg|png|svg|webp)$/.test(params.file)) throw new HttpError(404, 'Not found');
   const dir = path.join(cfg.dataDir, 'cache', 'tmdb', params.size);

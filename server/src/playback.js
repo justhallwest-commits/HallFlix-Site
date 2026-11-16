@@ -111,7 +111,7 @@ async function entryFor(item, caps, opt, kind) {
   const d = decide({ container: item.container, streams: item.streams }, caps, opt);
   const t = await tracks(item);
   return {
-    kind, itemId: item.id, title: item.title, duration: item.runtime_s || 0,
+    kind, itemId: item.id, title: item.title, duration: item.runtime_s || 0, container: item.container,
     mode: d.mode, reason: d.reason, audioIndex: d.audioIndex,
     url: d.mode === 'direct' ? `/api/file/${item.id}` : null,
     audio: t.audio, subs: kind === 'main' ? t.subs : [],

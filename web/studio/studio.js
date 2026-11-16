@@ -514,6 +514,9 @@ pages.settings = async (main) => {
     <div class="card"><h2>TMDb key</h2><p class="muted">HallFlix uses TMDb for posters, backdrops, cast and descriptions. The key is stored only in your HallFlix database.</p>
       <div class="f" style="margin-top:12px"><span>Key or read token</span><span class="imgrow"><input type="password" data-key value="${s.tmdbKey}" autocomplete="off" placeholder="Paste your TMDb API key"><button class="btn primary" data-savekey>Save and test</button></span></div>
       <p class="small" data-keymsg>${s.hasTmdb ? raw('<span class="pill ok">Connected</span>') : raw('<span class="pill bad">No key yet</span>')}</p></div>
+    <div class="card"><h2>Apps</h2><p class="muted">The HallFlix apps use this server, its look and its pre-rolls. New builds appear here after every update.</p>
+      <div class="row"><div class="grow"><b>Fire TV, Android TV and Android phones</b><span>On a Fire TV, type <code>${location.origin}/get/android</code> into the Downloader app. On a phone, open that address in the browser.</span></div><a class="btn sm" href="/get/android">Download APK</a></div>
+      <div class="row"><div class="grow"><b>Roku</b><span>Download the channel on a computer, then upload it on your Roku's Developer Settings page. The install guide has the steps.</span></div><a class="btn sm" href="/get/roku">Download channel</a></div></div>
     <div class="card"><h2>Sign-in screen</h2>${check(s, 'showProfilesOnLogin', 'Show the “Who’s watching?” profile picker (off asks for a name instead)')}</div>`);
   $('[data-key]', main).onfocus = (e) => { if (e.target.value.includes('…')) e.target.value = ''; };
   $('[data-savekey]', main).onclick = async () => {

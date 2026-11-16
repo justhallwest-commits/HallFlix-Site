@@ -3,3 +3,11 @@ node_modules/
 .DS_Store
 /data/
 /transcode/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.p12
+*.jks
+hallflix.apk
+hallflix-roku.zip

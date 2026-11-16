@@ -131,6 +131,7 @@ async function onClick(e) {
   if (!t.closest('.menu')) $('.menu')?.remove();
   const act = t.closest('[data-do]')?.dataset.do;
   if (act === 'signout' || act === 'switch') { await api('POST', '/api/logout'); location.hash = '#/'; location.reload(); }
+  if (act === 'server') window.HallFlixNative?.changeServer();
   if (act === 'password') {
     $('.menu')?.remove();
     const current = prompt('Current password'); if (current == null) return;
@@ -144,7 +145,7 @@ function toggleMenu() {
   const p = state.profile;
   $('.nav').insertAdjacentHTML('beforeend', String(html`<div class="menu"><div class="who">Signed in as <b>${p.name}</b></div>
     <button data-do="switch">Switch profile</button>${p.admin ? html`<a href="/studio">Open the Studio</a>` : ''}
-    <button data-do="password">Change password</button><button data-do="signout">Sign out</button></div>`));
+    <button data-do="password">Change password</button>${window.HallFlixNative ? html`<button data-do="server">Change server</button>` : ''}<button data-do="signout">Sign out</button></div>`));
   $('.menu button').focus();
 }
 

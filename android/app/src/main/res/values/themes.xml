@@ -1,0 +1,20 @@
+<resources>
+    <color name="hf_bg">#0A0814</color>
+    <color name="hf_cyan">#35D0D0</color>
+    <color name="hf_violet">#B344D6</color>
+    <color name="hf_text">#F4F2FF</color>
+    <color name="hf_muted">#A8A3C7</color>
+    <style name="HallFlix" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/hf_bg</item>
+        <item name="android:colorPrimary">@color/hf_bg</item>
+        <item name="android:colorPrimaryDark">@color/hf_bg</item>
+        <item name="android:colorAccent">@color/hf_cyan</item>
+        <item name="android:statusBarColor">@color/hf_bg</item>
+        <item name="android:navigationBarColor">@color/hf_bg</item>
+        <item name="android:textColor">@color/hf_text</item>
+    </style>
+    <style name="HallFlix.Player" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorAccent">@color/hf_cyan</item>
+    </style>
+</resources>

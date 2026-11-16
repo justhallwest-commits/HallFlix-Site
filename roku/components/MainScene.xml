@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="MainScene" extends="Scene">
+    <interface>
+        <field id="exitApp" type="boolean" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
+    <children>
+        <Rectangle id="bg" width="1920" height="1080" color="0x0A0814FF" />
+        <Poster id="backdrop" width="1920" height="1080" loadDisplayMode="scaleToZoom" opacity="0.4" />
+        <Rectangle id="dim" width="1920" height="1080" color="0x0A0814FF" opacity="0.35" />
+        <Poster id="logo" translation="[96,44]" height="72" width="160" loadDisplayMode="scaleToFit" />
+
+        <!-- Home: what is selected, then rows -->
+        <Group id="home" visible="false">
+            <Label id="hTitle" translation="[96,160]" width="1100" color="0xF4F2FFFF" font="font:LargeBoldSystemFont" />
+            <Label id="hMeta" translation="[96,230]" width="1100" color="0x35D0D0FF" font="font:SmallSystemFont" />
+            <Label id="hText" translation="[96,276]" width="1000" height="130" wrap="true" maxLines="3" color="0xD8D4F0FF" font="font:SmallSystemFont" />
+            <RowList id="rows" translation="[96,430]" itemComponentName="CardItem" numRows="2" itemSize="[1824,300]"
+                rowItemSpacing="[[24,0]]" itemSpacing="[0,56]" showRowLabel="[true]" rowLabelOffset="[[0,14]]"
+                rowLabelColor="0xF4F2FFFF" rowLabelFont="font:MediumBoldSystemFont" focusBitmapBlendColor="0x35D0D0FF"
+                vertFocusAnimationStyle="fixedFocus" rowFocusAnimationStyle="floatingFocus" drawFocusFeedback="true" />
+        </Group>
+
+        <!-- A library: every title as a poster grid -->
+        <Group id="library" visible="false">
+            <Label id="lTitle" translation="[96,150]" color="0xF4F2FFFF" font="font:LargeBoldSystemFont" />
+            <PosterGrid id="grid" translation="[96,250]" basePosterSize="[200,300]" itemSpacing="[24,64]" numColumns="8" numRows="2"
+                posterDisplayMode="scaleToZoom" caption1NumLines="1" focusBitmapBlendColor="0x35D0D0FF" />
+        </Group>
+
+        <!-- A movie or show -->
+        <Group id="details" visible="false">
+            <Label id="dTitle" translation="[96,160]" width="1200" wrap="true" maxLines="2" color="0xF4F2FFFF" font="font:LargeBoldSystemFont" />
+            <Label id="dMeta" translation="[96,290]" width="1200" color="0x35D0D0FF" font="font:SmallSystemFont" />
+            <Label id="dText" translation="[96,336]" width="980" height="170" wrap="true" maxLines="4" color="0xD8D4F0FF" font="font:SmallSystemFont" />
+            <ButtonGroup id="buttons" translation="[96,540]" layoutDirection="vert" itemSpacings="[16]" minWidth="360" />
+            <Label id="seasonsLabel" translation="[560,540]" text="Seasons" color="0xA8A3C7FF" font="font:SmallBoldSystemFont" visible="false" />
+            <LabelList id="seasons" translation="[560,590]" itemSize="[300,56]" numRows="7" color="0xD8D4F0FF" focusedColor="0x0A0814FF" focusBitmapBlendColor="0x35D0D0FF" visible="false" />
+            <Label id="episodesLabel" translation="[900,540]" text="Episodes" color="0xA8A3C7FF" font="font:SmallBoldSystemFont" visible="false" />
+            <LabelList id="episodes" translation="[900,590]" itemSize="[920,56]" numRows="7" color="0xD8D4F0FF" focusedColor="0x0A0814FF" focusBitmapBlendColor="0x35D0D0FF" visible="false" />
+        </Group>
+
+        <!-- Who's watching? -->
+        <Group id="profiles" visible="false">
+            <Label translation="[0,330]" width="1920" horizAlign="center" text="Who's watching?" color="0xF4F2FFFF" font="font:LargeBoldSystemFont" />
+            <LabelList id="profileList" translation="[660,450]" itemSize="[600,72]" numRows="6" textHorizAlign="center" color="0xD8D4F0FF" focusedColor="0x0A0814FF" focusBitmapBlendColor="0x35D0D0FF" />
+        </Group>
+
+        <Label id="status" translation="[360,460]" width="1200" wrap="true" horizAlign="center" color="0xA8A3C7FF" font="font:MediumSystemFont" visible="false" />
+        <BusySpinner id="spinner" translation="[912,600]" visible="false" />
+
+        <Video id="video" width="1920" height="1080" visible="false" enableUI="true" />
+        <Rectangle id="badge" translation="[64,56]" width="180" height="44" color="0xB344D6FF" visible="false">
+            <Label width="180" height="44" horizAlign="center" vertAlign="center" text="Coming up" color="0xFFFFFFFF" font="font:SmallBoldSystemFont" />
+        </Rectangle>
+        <Timer id="ping" repeat="true" duration="30" />
+    </children>
+</component>

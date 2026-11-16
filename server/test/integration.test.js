@@ -372,6 +372,14 @@ test('admins remove titles from HallFlix, delete files from the NAS, and bring t
   assert.equal((await hf.api('GET', '/api/studio/items/999999/remove')).$status, 404);
 });
 
+test('app download links point at the latest builds', async () => {
+  const r = await fetch(`${hf.base}/get/android`, { redirect: 'manual' });
+  assert.equal(r.status, 302);
+  assert.match(r.headers.get('location'), /releases\/download\/apps\/hallflix\.apk$/);
+  assert.match((await fetch(`${hf.base}/get/roku`, { redirect: 'manual' })).headers.get('location'), /hallflix-roku\.zip$/);
+  assert.equal((await fetch(`${hf.base}/get/windows`, { redirect: 'manual' })).status, 404);
+});
+
 test('the web app and Studio pages are served', async () => {
   for (const p of ['/', '/studio', '/js/app.js', '/app.css', '/vendor/hls.min.js', '/assets/logo.png', '/manifest.webmanifest']) {
     assert.equal((await fetch(hf.base + p)).status, 200, p);
