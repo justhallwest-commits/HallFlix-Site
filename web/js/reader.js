@@ -1,6 +1,7 @@
 // The reader: comics and PDFs page by page (one page or two side by side, left-to-right or manga order),
 // EPUBs as flowing text laid out in pages, with the reader's own size, typeface and colours.
 import { $, $$, api, html, raw, icons, toast } from './core.js';
+import { comicReader } from './comic.js';
 
 let R = null;
 const pref = (k, d) => { try { return localStorage.getItem(`hf_read_${k}`) ?? d; } catch { return d; } };
@@ -14,11 +15,15 @@ export function closeReader() {
   if (!R) return;
   const r = R; R = null;
   r.save(true);
+  try { r.destroy?.(); } catch { /* already gone */ }
   removeEventListener('keydown', r.onKey, true);
   removeEventListener('resize', r.onResize);
   clearTimeout(r.hideTimer); clearTimeout(r.saveTimer);
-  const el = $('#reader');
-  el.hidden = true; el.innerHTML = ''; el.className = ''; el.removeAttribute('style');
+  const old = $('#reader');
+  // A fresh element, so nothing the last book attached to it lingers.
+  const el = old.cloneNode(false);
+  old.replaceWith(el);
+  el.hidden = true; el.innerHTML = ''; el.className = ''; el.removeAttribute('style'); el.removeAttribute('data-mode'); el.removeAttribute('data-fit');
   if ($('#overlay').childElementCount === 0 && $('#player').hidden) document.body.classList.remove('locked');
 }
 
@@ -55,7 +60,7 @@ async function marksPanel(r) {
   try { list = await api('GET', `/api/bookmarks/${r.d.id}`); } catch { /* shown empty */ }
   if (R !== r) return;
   const p = $('.rd-panel', r.el);
-  p.dataset.body = 'marks';
+  p.dataset.body = 'marks'; p.classList.remove('wide');
   p.innerHTML = String(html`<h4>Bookmarks</h4><button data-act="addmark" class="rd-add">${raw(RIBBON)} Bookmark this page</button>
     <div class="rd-toc">${list.length ? list.map((b) => html`<div class="rd-mark"><button data-act="gomark" data-pos="${b.position}">${b.label || 'Bookmark'}</button><button data-act="delmark" data-id="${b.id}" aria-label="Remove bookmark">${icons.x}</button></div>`)
     : html`<p class="rd-none">No bookmarks in this one yet.</p>`}</div>`);
@@ -72,6 +77,7 @@ function panel(r, body) {
   if (!p.hidden && p.dataset.body === body?.toString().slice(0, 40)) { p.hidden = true; return; }
   if (!body) { p.hidden = true; return; }
   p.innerHTML = String(body); p.hidden = false; p.dataset.body = body.toString().slice(0, 40);
+  p.classList.toggle('wide', String(body).includes('data-wide'));
   $('button.on, button', p)?.focus();
 }
 function common(r) {
@@ -103,12 +109,13 @@ function common(r) {
     const a = e.target.closest('[data-act]');
     if (a) { e.stopPropagation(); r.act(a.dataset.act, a); showUi(r, true); return; }
     if (e.target.closest('.rd-panel, .rd-top, .rd-bottom, .rd-end')) return;
+    if (r.tap) { r.tap(e); return; }
     const x = e.clientX / innerWidth;
     if (x < 0.28) r.turn(-1); else if (x > 0.72) r.turn(1); else showUi(r);
   });
   $('.rd-range', r.el).addEventListener('input', (e) => r.jump(+e.target.value));
   let sx = null;
-  r.el.addEventListener('touchstart', (e) => { sx = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
+  r.el.addEventListener('touchstart', (e) => { sx = e.touches.length === 1 && !r.ownGestures ? e.touches[0].clientX : null; }, { passive: true });
   r.el.addEventListener('touchend', (e) => { if (sx == null || r.zoomed?.()) return; const dx = e.changedTouches[0].clientX - sx; if (Math.abs(dx) > 50) r.turn(dx < 0 ? 1 : -1); sx = null; });
   r.onKey = (e) => {
     if (R !== r) return;
@@ -122,6 +129,7 @@ function common(r) {
       if (k === 'ArrowDown' && e.target.closest?.('.rd-top')) { e.preventDefault(); e.stopImmediatePropagation(); r.el.focus(); showUi(r, false); }
       return; // the open menu, the bar or the end card uses normal focus
     }
+    if (r.key?.(e)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
     const fwd = r.rtl ? 'ArrowLeft' : 'ArrowRight', back = r.rtl ? 'ArrowRight' : 'ArrowLeft';
     let used = true;
     if (k === fwd || k === 'PageDown' || (k === ' ' && !e.shiftKey) || k === 'MediaFastForward') r.turn(1);
@@ -143,7 +151,7 @@ function common(r) {
 function endCard(r) {
   const end = $('.rd-end', r.el), n = r.d.next;
   end.hidden = false;
-  end.innerHTML = String(html`<div><p>You finished ${r.d.title}.</p>${n ? html`<a class="btn primary" href="#/read/${n.id}" data-replace>${icons.play} Read ${n.title}</a>` : ''}
+  end.innerHTML = String(html`<div>${n ? html`<img class="rd-next-cover" src="/api/cover/${n.id}" alt="" onerror="this.remove()">` : ''}<p>You finished ${r.d.title}.</p>${n ? html`<a class="btn primary" href="#/read/${n.id}" data-replace>${icons.play} Read ${n.title}</a>` : ''}
     <button class="btn" data-act="close">Back to ${r.d.series?.title || 'the library'}</button></div>`);
   $('.btn', end).focus();
   $('[data-replace]', end)?.addEventListener('click', (e) => { e.preventDefault(); history.replaceState(null, '', `#/read/${n.id}`); openReader(n.id); });
@@ -151,72 +159,7 @@ function endCard(r) {
 
 // ---------- comics and PDFs ----------
 function pages(el, d) {
-  frame(el, d, html`<button class="rd-btn" data-act="settings" aria-label="Reading options">${icons.gear}</button>`);
-  const r = R = { el, d, rtl: pref(`rtl_${d.series?.id || d.id}`, d.rtl ? '1' : '0') === '1', fit: pref('fit', 'screen'), spreadPref: pref('spread', 'auto'), page: 1 };
-  const total = d.pages;
-  const url = (n) => `/api/read/${d.id}/page/${n}`;
-  const stage = $('.rd-stage', el);
-  const range = $('.rd-range', el);
-  range.max = String(total);
-  el.classList.add('mode-pages');
-  const spread = () => r.spreadPref === 'two' || (r.spreadPref === 'auto' && innerWidth > innerHeight * 1.15 && r.fit === 'screen');
-  // Two pages side by side keep the cover on its own, like a printed comic.
-  const shown = (p) => (spread() && p > 1 && p < total ? [p % 2 === 0 ? p : p - 1, (p % 2 === 0 ? p : p - 1) + 1].filter((x) => x <= total) : [p]);
-  r.count = () => total;
-  r.where = () => ({ position: Math.max(...shown(r.page)), duration: total });
-  r.zoomed = () => r.fit === 'width' && stage.scrollHeight > stage.clientHeight + 4;
-  const draw = () => {
-    const list = shown(r.page);
-    el.classList.toggle('fit-width', r.fit === 'width');
-    el.classList.toggle('two', list.length === 2);
-    stage.classList.toggle('rtl', r.rtl);
-    stage.innerHTML = String(html`${list.map((n) => html`<img class="rd-page" src="${url(n)}" alt="Page ${n}" draggable="false">`)}`);
-    stage.scrollTop = 0;
-    range.value = String(r.page); range.style.setProperty('--p', `${((r.page - 1) / Math.max(1, total - 1)) * 100}%`);
-    range.classList.toggle('rtl', r.rtl);
-    $('.rd-where', el).textContent = list.length === 2 ? `Pages ${list[0]}–${list[1]} of ${total}` : `Page ${list[0]} of ${total}`;
-    for (let k = 1; k <= 3; k++) { const n = Math.max(...list) + k; if (n <= total) new Image().src = url(n); }
-    el.classList.remove('loading');
-    r.save();
-  };
-  r.turn = (dir) => {
-    const list = shown(r.page);
-    const to = dir > 0 ? Math.max(...list) + 1 : Math.min(...list) - 1;
-    if (to > total) { r.save(true); endCard(r); return; }
-    if (to < 1) return;
-    $('.rd-end', el).hidden = true;
-    r.page = dir < 0 && spread() && to > 1 ? (to % 2 === 0 ? to : to - 1) : to;
-    draw();
-    if (!calm()) { const fwd = (dir > 0) !== r.rtl; stage.classList.remove('turn-f', 'turn-b'); void stage.offsetWidth; stage.classList.add(fwd ? 'turn-f' : 'turn-b'); }
-  };
-  r.goTo = (pos) => r.jump(Math.floor(pos));
-  r.jump = (n) => { r.page = Math.max(1, Math.min(total, n)); $('.rd-end', el).hidden = true; draw(); };
-  r.scroll = (dir) => {
-    if (r.fit !== 'width') return null;
-    const max = stage.scrollHeight - stage.clientHeight;
-    if ((dir > 0 && stage.scrollTop >= max - 2) || (dir < 0 && stage.scrollTop <= 2)) { r.turn(dir); if (dir < 0) stage.scrollTop = stage.scrollHeight; return true; }
-    stage.scrollBy({ top: dir * stage.clientHeight * 0.8, behavior: 'smooth' });
-    return true;
-  };
-  r.act = (a, btn) => {
-    if (a === 'close') { history.back(); return; }
-    if (a === 'settings') {
-      panel(r, html`<h4>Page fit</h4><div class="seg"><button data-act="fit" data-v="screen" class="${r.fit === 'screen' ? 'on' : ''}">Whole page</button><button data-act="fit" data-v="width" class="${r.fit === 'width' ? 'on' : ''}">Fit width</button></div>
-        <h4>Pages</h4><div class="seg"><button data-act="spread" data-v="auto" class="${r.spreadPref === 'auto' ? 'on' : ''}">Automatic</button><button data-act="spread" data-v="one" class="${r.spreadPref === 'one' ? 'on' : ''}">One</button><button data-act="spread" data-v="two" class="${r.spreadPref === 'two' ? 'on' : ''}">Two</button></div>
-        <h4>Reading direction</h4><div class="seg"><button data-act="dir" data-v="0" class="${r.rtl ? '' : 'on'}">Left to right</button><button data-act="dir" data-v="1" class="${r.rtl ? 'on' : ''}">Right to left (manga)</button></div>${warmHtml(r)}`);
-      return;
-    }
-    if (a === 'fit') { r.fit = btn.dataset.v; setPref('fit', r.fit); }
-    if (a === 'spread') { r.spreadPref = btn.dataset.v; setPref('spread', r.spreadPref); }
-    if (a === 'dir') { r.rtl = btn.dataset.v === '1'; setPref(`rtl_${d.series?.id || d.id}`, btn.dataset.v); }
-    if (['fit', 'spread', 'dir'].includes(a)) { draw(); for (const b of $$(`[data-act=${a}]`, el)) b.classList.toggle('on', b === btn); }
-  };
-  r.onResize = () => draw();
-  addEventListener('resize', r.onResize);
-  common(r);
-  const p = d.progress;
-  r.page = p && !p.finished && p.position >= 1 ? Math.min(total, Math.floor(p.position)) : 1;
-  draw();
+  comicReader(el, d, { frame, common, panel, showUi, endCard, pref, setPref, calm, warmHtml, claim: (r) => { R = r; }, current: () => R, open: openReader });
 }
 
 // ---------- EPUB ----------

@@ -18,5 +18,6 @@ export const cfg = {
   ffmpeg: env.FFMPEG || 'ffmpeg',
   ffprobe: env.FFPROBE || 'ffprobe',
   hw: env.HALLFLIX_HW || 'auto', // auto | off
+  comicCacheGB: +(env.COMIC_CACHE_GB || 4), // room for unpacked CBR/CB7 comics; the ones read longest ago are cleared first
   version: '0.1.0',
 };

@@ -36,6 +36,7 @@ export function card(r) {
     show: ep ? { id: r.show_id, title: r.show_title, season: r.season_no, episode: r.episode_no } : undefined,
     progress: r.position_s != null ? { position: r.position_s, duration: r.duration_s || r.runtime_s || 0, watched: !!r.watched } : undefined,
     author: r.author || undefined, pages: r.pages ?? undefined, number: r.extra?.number ?? undefined, count: r.child_count ?? undefined,
+    read: r.read_count ?? undefined, reading: r.reading_count ?? undefined, publisher: r.kind === 'series' || r.kind === 'comic' ? r.studios?.[0] || undefined : undefined,
     track: r.kind === 'track' ? r.episode_no : undefined, disc: r.kind === 'track' ? r.season_no : undefined,
   };
 }
@@ -173,14 +174,31 @@ export function routes(r) {
     const args = [profile.id, lib.id, kind];
     let where = 'i.library_id = $2 and i.kind = $3';
     if (query.genre) { args.push(query.genre); where += ` and $${args.length} = any(i.genres)`; }
+    // Comics: how much of each series this profile has read, and filters by read status and publisher.
+    let extraSel = '';
+    if (kind === 'series') {
+      const pid = Number(profile.id);
+      const readN = `(select count(*)::int from items c join progress pp on pp.item_id = c.id and pp.profile_id = ${pid} and pp.watched where c.parent_id = i.id)`;
+      const readingN = `(select count(*)::int from items c join progress pp on pp.item_id = c.id and pp.profile_id = ${pid} and not pp.watched and pp.position_s > 0 where c.parent_id = i.id)`;
+      const totalN = `(select count(*)::int from items c where c.parent_id = i.id)`;
+      extraSel = `, ${readN} as read_count, ${readingN} as reading_count`;
+      if (query.status === 'unread') where += ` and ${readN} = 0 and ${readingN} = 0`;
+      if (query.status === 'reading') where += ` and (${readingN} > 0 or (${readN} > 0 and ${readN} < ${totalN}))`;
+      if (query.status === 'read') where += ` and ${readN} >= ${totalN} and ${totalN} > 0`;
+      if (query.publisher) { args.push(query.publisher); where += ` and $${args.length} = any(i.studios)`; }
+      sorts.updated = `(select max(c.added_at) from items c where c.parent_id = i.id) desc nulls last, i.sort_title`;
+      sorts.read = `(select max(pp.updated_at) from items c join progress pp on pp.item_id = c.id and pp.profile_id = ${pid} where c.parent_id = i.id) desc nulls last, i.sort_title`;
+      order = sorts[query.sort] || sorts.title;
+    }
     if (hidden?.size) { args.push([...hidden.keys()]); where += ` and not (i.id = any($${args.length}::bigint[]))`; } // pages and counts stay right
     const total = (await q1(`select count(*)::int as n from items i where ${where.replace(/\$(\d)/g, (_, n) => `$${n - 1}`)}`, args.slice(1))).n;
     const limit = Math.min(+query.limit || 60, kind === 'track' ? 500 : 200), offset = +query.offset || 0;
-    const items = await q(`select ${SEL}, ${COUNT}, al.title as album_title, al.poster as album_poster ${FROM} left join items al on al.id = i.parent_id and i.kind = 'track'
+    const items = await q(`select ${SEL}, ${COUNT}${extraSel}, al.title as album_title, al.poster as album_poster ${FROM} left join items al on al.id = i.parent_id and i.kind = 'track'
       where ${where} order by ${order}, i.id limit ${limit} offset ${offset}`, args);
     const genres = await q(`select g, count(*)::int as n from items i, unnest(i.genres) g where i.library_id=$1 and i.kind=$2 group by g having count(*) > 0 order by g`, [lib.id, kind === 'track' || kind === 'artist' ? 'album' : kind]);
+    const publishers = kind === 'series' ? (await q(`select p, count(*)::int as n from items i, unnest(i.studios) p where i.library_id=$1 and i.kind='series' group by p order by n desc, p`, [lib.id])).map((x) => x.p) : undefined;
     return {
-      library: lib, view, total, genres: kind === 'artist' ? [] : genres.map((g) => g.g),
+      library: lib, view, total, genres: kind === 'artist' ? [] : genres.map((g) => g.g), publishers,
       items: items.map((x) => (x.kind === 'track' ? { ...card(x), album: x.album_title, albumId: x.parent_id, poster: img(x.album_poster, 'w342'), codec: x.extra?.codec, container: x.container } : card(x))),
     };
   });
@@ -228,6 +246,56 @@ export function routes(r) {
     return out;
   });
 
+  // The front page of a comics library: what you're reading, the next issue of series you've started, new issues,
+  // and a row per publisher.
+  r.get('/api/comics/:id', async ({ profile, params }) => {
+    const lib = await q1('select id, name, kind from libraries where id=$1', [params.id]);
+    if (!lib || lib.kind !== 'comics') throw new HttpError(404, 'Library not found');
+    const pid = profile.id;
+    const issue = (x) => ({ ...card(x), poster: img(x.poster, 'w342'), seriesTitle: x.series_title, seriesId: x.parent_id, publisher: x.series_publisher || undefined });
+    const ISSUE = `select ${SEL}, ser.title as series_title, ser.studios[1] as series_publisher ${FROM} join items ser on ser.id = i.parent_id`;
+    const reading = await q(`${ISSUE} where i.library_id = $2 and i.kind = 'comic' and p.position_s > 0 and not p.watched order by p.updated_at desc limit 16`, [pid, lib.id]);
+    const upNext = await q(
+      `with last as (
+         select distinct on (c.parent_id) c.parent_id, coalesce((c.extra->>'number')::float, -1) as num, c.sort_title, p.updated_at
+         from progress p join items c on c.id = p.item_id
+         where p.profile_id = $1 and p.watched and c.kind = 'comic' and c.library_id = $2
+         order by c.parent_id, p.updated_at desc)
+       select n.*, ser.title as series_title, ser.studios[1] as series_publisher, s.title as show_title, s.poster as show_poster, s.backdrop as show_backdrop, s.logo as show_logo,
+         s.rating as show_rating, s.genres as show_genres, null::real as position_s, null::real as duration_s, null::boolean as watched
+       from last l
+       join lateral (select * from items e where e.parent_id = l.parent_id and e.kind = 'comic'
+         and (coalesce((e.extra->>'number')::float, -1), e.sort_title) > (l.num, l.sort_title)
+         order by (e.extra->>'number')::float nulls last, e.sort_title limit 1) n on true
+       join items ser on ser.id = n.parent_id
+       left join items s on s.id = n.show_id
+       left join progress p on p.item_id = n.id and p.profile_id = $1
+       where p.item_id is null
+       order by l.updated_at desc limit 16`, [pid, lib.id]);
+    const recent = await q(`${ISSUE} where i.library_id = $2 and i.kind = 'comic' order by i.added_at desc, (i.extra->>'number')::float desc nulls last limit 24`, [pid, lib.id]);
+    const counts = await q1(
+      `select count(*) filter (where kind='series')::int as series, count(*) filter (where kind='comic')::int as issues,
+         (select count(*)::int from progress p join items c on c.id = p.item_id where p.profile_id = $2 and p.watched and c.library_id = $1 and c.kind = 'comic') as read
+       from items where library_id = $1`, [lib.id, pid]);
+    const pubs = await q(`select p, count(*)::int as n from items i, unnest(i.studios) p where i.library_id=$1 and i.kind='series' group by p having count(*) >= 2 order by n desc, p limit 4`, [lib.id]);
+    const readN = `(select count(*)::int from items c join progress pp on pp.item_id = c.id and pp.profile_id = $1 and pp.watched where c.parent_id = i.id) as read_count`;
+    const readingN = `(select count(*)::int from items c join progress pp on pp.item_id = c.id and pp.profile_id = $1 and not pp.watched and pp.position_s > 0 where c.parent_id = i.id) as reading_count`;
+    const publishers = [];
+    for (const { p } of pubs) {
+      const items = await q(`select ${SEL}, ${COUNT}, ${readN}, ${readingN} ${FROM} where i.library_id = $2 and i.kind = 'series' and $3 = any(i.studios) order by i.sort_title limit 24`, [pid, lib.id, p]);
+      publishers.push({ name: p, items: items.map(card) });
+    }
+    const fresh = await q(`select ${SEL}, ${COUNT}, ${readN}, ${readingN} ${FROM} where i.library_id = $2 and i.kind = 'series' order by i.added_at desc limit 24`, [pid, lib.id]);
+    // Something to start when nothing is under way: the newest series nobody here has opened.
+    const start = !reading.length ? await q1(`select ${SEL}, ${COUNT} ${FROM} where i.library_id = $2 and i.kind = 'series'
+        and not exists (select 1 from items c join progress pp on pp.item_id = c.id and pp.profile_id = $1 where c.parent_id = i.id)
+        order by i.added_at desc limit 1`, [pid, lib.id]) : null;
+    return {
+      library: lib, totals: counts, continue: reading.map(issue), upNext: upNext.map(issue), recent: recent.map(issue),
+      newSeries: fresh.map(card), publishers, start: start ? { ...card(start), poster: img(start.poster, 'w500') } : null,
+    };
+  });
+
   r.get('/api/search', async ({ profile, query }) => {
     const term = String(query.q || '').trim();
     if (!term) return { items: [] };
@@ -267,8 +335,16 @@ export function routes(r) {
     return { ok: true, watched };
   });
 
-  r.post('/api/watched', async ({ profile, req }) => {
-    const { itemId, watched } = await readJson(req);
+  r.post('/api/watched', async ({ profile, req, hidden }) => {
+    const { itemId, itemIds, watched } = await readJson(req);
+    if (Array.isArray(itemIds)) { // several issues at once, like "mark read up to here"
+      const ids = itemIds.map(Number).filter((x) => x > 0 && !hidden?.has(x)).slice(0, 2000);
+      if (watched) {
+        await q(`insert into progress (profile_id, item_id, position_s, watched, updated_at) select $1, i.id, 0, true, now() from items i where i.id = any($2::bigint[]) and i.kind in ('comic','book','episode','movie')
+                 on conflict (profile_id, item_id) do update set position_s=0, watched=true, updated_at=now()`, [profile.id, ids]);
+      } else await q('delete from progress where profile_id=$1 and item_id = any($2)', [profile.id, ids]);
+      return { ok: true };
+    }
     const it = await q1('select id, kind from items where id=$1', [itemId]);
     if (!it) throw new HttpError(404, 'Not found');
     const ids = it.kind === 'show' ? (await q(`select id from items where show_id=$1 and kind='episode'`, [it.id])).map((x) => x.id)

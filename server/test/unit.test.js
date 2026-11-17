@@ -135,3 +135,16 @@ test('looks: seasons switch on by date and only override what they set', () => {
   assert.equal(look.resolve({ theme, libraries, seasons, date: new Date(2026, 6, 4), forceSeason: 7 }).season, 'Halloween');
   for (const p of look.PRESETS) assert.ok(look.merge(look.DEFAULT_THEME, p.theme).colors.accent);
 });
+
+test('archives: image sizes from the first bytes, literal names for bsdtar', async () => {
+  const { imageSize, literal } = await import('../src/archive.js');
+  const png = Buffer.alloc(32); png.write('\x89PNG\r\n\x1a\n', 0, 'latin1'); png.writeUInt32BE(13, 8); png.write('IHDR', 12); png.writeUInt32BE(640, 16); png.writeUInt32BE(480, 20);
+  assert.deepEqual(imageSize(png), [640, 480]);
+  const gif = Buffer.from('GIF89a\x20\x03\x58\x02' + '\0'.repeat(20), 'latin1');
+  assert.deepEqual(imageSize(gif), [800, 600]);
+  // A JPEG with an APP0 block before its frame header.
+  const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, ...Array(14).fill(0), 0xff, 0xc0, 0x00, 0x11, 0x08, 0x05, 0xdc, 0x03, 0xe8, 0x03, ...Array(12).fill(0)]);
+  assert.deepEqual(imageSize(jpg), [1000, 1500]);
+  assert.equal(imageSize(Buffer.from('hello there, not an image at all')), null);
+  assert.equal(literal('Page [01]*?.jpg'), 'Page \\[01\\]\\*\\?.jpg');
+});

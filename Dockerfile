@@ -1,11 +1,13 @@
 # HallFlix: one image, run as either the site ("server") or the video converter ("transcoder").
 FROM node:22-bookworm-slim
 
-# ffmpeg for playback, poppler for PDF pages, libarchive (bsdtar) for CBR/CB7 comics, plus Intel graphics drivers so the UGREEN's chip can do the video conversion.
+# ffmpeg for playback, poppler for PDF pages, libarchive (bsdtar) for CBR/CB7 comics with unrar and 7-Zip as fallbacks, plus Intel graphics drivers so the UGREEN's chip can do the video conversion.
 RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources \
  && apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg ca-certificates poppler-utils libarchive-tools \
  && (apt-get install -y --no-install-recommends intel-media-va-driver-non-free || echo "Intel driver not available on this platform; software conversion only") \
+ && (apt-get install -y --no-install-recommends unrar || echo "unrar not available; CBR files are read with libarchive only") \
+ && (apt-get install -y --no-install-recommends 7zip || echo "7-Zip not available") \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -28,6 +28,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { boot, makeMedia, media, root, zip, ffprobe, tinyJpeg } from './helpers.js';
+import { imageSize } from '../src/archive.js';
 
 const browser = { containers: ['mp4', 'webm'], video: ['h264', 'vp9'], audio: ['aac', 'mp3', 'opus'] };
 const hevcTv = { containers: ['mp4', 'mkv', 'webm'], video: ['h264', 'hevc'], video10: ['hevc'], audio: ['aac', 'mp3', 'ac3', 'eac3'], hlsHevc: true, audioSwitch: true };
@@ -616,6 +617,12 @@ test('books, comics and music: scanning, reading and listening', async () => {
   fs.writeFileSync(path.join(tarDir, '001.jpg'), img('yellow')); fs.writeFileSync(path.join(tarDir, '002.jpg'), img('purple'));
   execFileSync('tar', ['-cf', mk('Comics', 'Hellboy', 'Hellboy v02.cbt'), '-C', tarDir, '001.jpg', '002.jpg']);
   fs.writeFileSync(mk('Comics', 'Hellboy', 'Hellboy v01.pdf'), makePdf(4));
+  // A "CBR" that is really 7-Zip (as many are), with bracketed page names (bsdtar reads those as patterns) and a
+  // double-page spread; and a "CBR" that is really a zip.
+  const rarDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hf-cbr-'));
+  fs.writeFileSync(path.join(rarDir, 'GK [01].jpg'), img('orange')); fs.writeFileSync(path.join(rarDir, 'GK [02]*.jpg'), img('teal', '1200x600')); fs.writeFileSync(path.join(rarDir, 'GK [03].jpg'), img('pink'));
+  execFileSync('bsdtar', ['--format', '7zip', '-cf', mk('Comics', 'Gutter Kings', 'Gutter Kings 001.cbr'), '-C', rarDir, 'GK [01].jpg', 'GK [02]*.jpg', 'GK [03].jpg']);
+  fs.writeFileSync(mk('Comics', 'Moonrise #8.cbr'), zip({ 'p1.jpg': img('white'), 'p2.jpg': img('gray') }));
   // Music: tagged MP3s with embedded art, a FLAC album with a folder cover across two discs, and an untagged file.
   const tone = (out, meta, extra = []) => execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=f=440:d=3', ...extra, ...Object.entries(meta).flatMap(([k, v]) => ['-metadata', `${k}=${v}`]), out]);
   const art = path.join(os.tmpdir(), 'hf-art.jpg'); fs.writeFileSync(art, img('teal', '300x300'));
@@ -666,7 +673,7 @@ test('books, comics and music: scanning, reading and listening', async () => {
 
   // ----- comics -----
   l = await hf.api('GET', `/api/library/${libs.comics.id}`);
-  assert.deepEqual(l.items.map((x) => [x.title, x.count]), [['Hellboy', 2], ['Moonrise', 1], ['Saga', 2]]);
+  assert.deepEqual(l.items.map((x) => [x.title, x.count]), [['Gutter Kings', 1], ['Hellboy', 2], ['Moonrise', 2], ['Saga', 2]]);
   const saga = l.items.find((x) => x.title === 'Saga');
   d = await hf.api('GET', `/api/items/${saga.id}`);
   assert.deepEqual(d.issues.map((x) => [x.title, x.number, x.pages, x.author]), [['Chapter 1', 1, 3, 'Brian K. Vaughan'], ['Chapter 2', 2, 3, 'Brian K. Vaughan']]);
@@ -682,6 +689,37 @@ test('books, comics and music: scanning, reading and listening', async () => {
   assert.deepEqual([tarPage.status, tarPage.headers.get('content-type')], [200, 'image/jpeg']);
   await hf.api('POST', '/api/progress', { itemId: d.issues[0].id, position: 3, duration: 3 });
   assert.equal((await hf.api('GET', `/api/items/${saga.id}`)).next, d.issues[1].id, 'a finished issue moves Read on to the next');
+  const get = (u) => fetch(hf.base + u, { headers: { Cookie: hf.getCookie() } });
+
+  // The 7-Zip "CBR": pages come out of the page cache in order, bracketed names and all; sizes are known up front;
+  // smaller copies are made on request; and the cover comes out too.
+  const gk = (await hf.api('GET', `/api/items/${l.items.find((x) => x.title === 'Gutter Kings').id}`)).issues[0];
+  assert.equal(gk.pages, 3);
+  assert.deepEqual((await hf.api('GET', `/api/read/${gk.id}/pages`)).sizes, [[600, 900], [1200, 600], [600, 900]]);
+  for (const n of [3, 1, 2]) { const res = await get(`/api/read/${gk.id}/page/${n}`); assert.deepEqual([res.status, res.headers.get('content-type')], [200, 'image/jpeg'], `page ${n}`); }
+  const small = Buffer.from(await (await get(`/api/read/${gk.id}/page/2?w=480`)).arrayBuffer());
+  assert.deepEqual(imageSize(small), [480, 240], 'a smaller copy for a phone');
+  const thumb = Buffer.from(await (await get(`/api/read/${gk.id}/page/1?w=1440`)).arrayBuffer());
+  assert.deepEqual(imageSize(thumb), [600, 900], 'never made bigger than the original');
+  assert.equal((await get(`/api/cover/${gk.id}`)).status, 200);
+  const moon = (await hf.api('GET', `/api/items/${l.items.find((x) => x.title === 'Moonrise').id}`)).issues;
+  assert.deepEqual(moon.map((x) => [x.number, x.pages]), [[7, 2], [8, 2]]);
+  assert.equal((await get(`/api/read/${moon[1].id}/page/2`)).status, 200, 'a zip called .cbr reads like a CBZ');
+
+  // The comics front page: Up next is the issue after the one just finished; read status filters the series.
+  const front = await hf.api('GET', `/api/comics/${libs.comics.id}`);
+  assert.deepEqual([front.totals.series, front.totals.issues, front.totals.read], [4, 7, 1]);
+  assert.deepEqual(front.upNext.map((x) => [x.seriesTitle, x.number]), [['Saga', 2]]);
+  assert.equal(front.recent.length, 7);
+  const status = async (st) => (await hf.api('GET', `/api/library/${libs.comics.id}?status=${st}`)).items.map((x) => x.title);
+  assert.deepEqual(await status('reading'), ['Saga']);
+  assert.deepEqual(await status('unread'), ['Gutter Kings', 'Hellboy', 'Moonrise']);
+  assert.deepEqual((await hf.api('GET', `/api/library/${libs.comics.id}`)).items.find((x) => x.title === 'Saga').read, 1);
+  // Mark read up to here: several issues at once.
+  await hf.api('POST', '/api/watched', { itemIds: hb.issues.map((x) => x.id), watched: true });
+  assert.deepEqual(await status('read'), ['Hellboy']);
+  await hf.api('POST', '/api/watched', { itemIds: [hb.issues[1].id], watched: false });
+  assert.deepEqual(await status('reading'), ['Hellboy', 'Saga']);
 
   // ----- music -----
   l = await hf.api('GET', `/api/library/${libs.music.id}`);
@@ -754,4 +792,44 @@ test('the web app and Studio pages are served', async () => {
   }
   assert.ok([400, 404].includes((await fetch(`${hf.base}/..%2f..%2fetc/passwd`)).status), "path traversal is refused");
   assert.equal((await fetch(`${hf.base}/api/nope`)).status, 404);
+});
+
+test('profiles: pictures, editing your own, and the admin tools', async () => {
+  const admin = hf.getCookie();
+  const me = (await hf.api('GET', '/api/boot')).profile;
+  const kid = await hf.api('POST', '/api/studio/profiles', { name: 'Pic Kid', password: '2468' });
+  const picFile = path.join(root, 'face.png');
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=orange:s=300x200', '-frames:v', '1', picFile]);
+  const pic = fs.readFileSync(picFile);
+  const up = (id, body, cookie = hf.getCookie()) => fetch(`${hf.base}/api/profiles/${id}/avatar`, { method: 'POST', headers: { Cookie: cookie }, body });
+  // An admin can set anyone's picture; it is kept as a 512 × 512 JPEG.
+  const res = await up(kid.id, pic);
+  const p = await res.json();
+  assert.equal(res.status, 200);
+  assert.match(p.avatar, /^\/uploads\/avatars\/.+\.jpg$/);
+  assert.deepEqual(imageSize(Buffer.from(await (await fetch(hf.base + p.avatar)).arrayBuffer())), [512, 512]);
+  assert.equal((await up(kid.id, Buffer.from('not a picture at all, just words'))).status, 400);
+  assert.equal((await hf.api('GET', '/api/boot')).profile.avatar, me.avatar, 'only that profile changed');
+  // Signed in as the kid: their own picture, name and colour, but nobody else's, and no Studio.
+  // (A session made directly: an earlier test has already tripped the sign-in limiter for this address.)
+  const { q: sql } = await import('../src/db.js');
+  const token = `kid-${Date.now()}`;
+  await sql('insert into sessions (token, profile_id, device) values ($1, $2, $3)', [token, kid.id, 'test']);
+  const kidCookie = `hf_token=${token}`;
+  hf.setCookie(kidCookie);
+  assert.equal((await up(me.id, pic, kidCookie)).status, 403);
+  assert.deepEqual(await hf.api('PUT', '/api/profiles/me', { name: 'Pic Kid 2', color: '#ff4d7e' }).then((x) => [x.name, x.color]), ['Pic Kid 2', '#ff4d7e']);
+  assert.equal((await hf.api('PUT', '/api/profiles/me', { name: me.name })).$status, 400, 'names stay unique');
+  assert.equal((await hf.api('DELETE', `/api/profiles/${kid.id}/avatar`)).avatar, null);
+  assert.equal(fs.existsSync(path.join(hf.cfg.dataDir, 'uploads', 'avatars', path.basename(p.avatar))), false, 'the old picture is cleaned up');
+  assert.equal((await hf.api('GET', '/api/studio/profiles')).$status, 403);
+  // Back as the admin: when each profile was active and on how many devices; sign the kid out everywhere; clear history.
+  hf.setCookie(admin);
+  const row = (await hf.api('GET', '/api/studio/profiles')).find((x) => x.id === kid.id);
+  assert.deepEqual([row.name, row.color, row.devices, row.admin], ['Pic Kid 2', '#ff4d7e', 1, false]);
+  await hf.api('POST', `/api/studio/profiles/${kid.id}/signout`);
+  assert.equal((await fetch(`${hf.base}/api/home`, { headers: { Cookie: kidCookie } })).status, 401);
+  assert.equal((await hf.api('POST', `/api/studio/profiles/${kid.id}/clear`)).ok, true);
+  assert.equal((await hf.api('GET', '/api/home')).$status, 200, 'the admin stays signed in');
+  await hf.api('DELETE', `/api/studio/profiles/${kid.id}`);
 });

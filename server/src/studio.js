@@ -161,7 +161,7 @@ export function routes(r) {
   }, admin);
 
   // ----- profiles
-  r.get('/api/studio/profiles', async () => (await q('select * from profiles order by id')).map(publicProfile), admin);
+  // (The list of profiles, with activity, lives in profiles.js.)
   r.post('/api/studio/profiles', async ({ req, profile }) => {
     const b = await readJson(req);
     const name = String(b.name || '').trim();

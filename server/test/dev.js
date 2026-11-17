@@ -50,6 +50,30 @@ books.forEach(([author, title, year, genre], i) => {
     ...Object.fromEntries(Array.from({ length: 8 }, (_, p) => [`page${String(p + 1).padStart(2, '0')}.jpg`, pic(si * 10 + k * 3 + p, '1000x1500')])),
   }, { deflate: false }));
 });
+// A CBR (really 7z, as many are) with bracketed page names, panel layouts and a double-page spread; and a webtoon with very tall pages.
+const panelPage = (seed, layout) => {
+  const f = path.join(os.tmpdir(), `hfdev-panels-${seed}-${layout}.jpg`);
+  if (!fs.existsSync(f)) {
+    const hues = ['0x35d0d0', '0xb344d6', '0xff7a3d', '0x2a6df4', '0xe8b84a', '0x1ce783'];
+    const boxes = layout === 0 ? [[40, 40, 920, 430], [40, 500, 445, 480], [515, 500, 445, 480], [40, 1050, 920, 410]]
+      : [[40, 40, 445, 700], [515, 40, 445, 700], [40, 810, 600, 650], [710, 810, 250, 650]];
+    const draw = boxes.map(([x, y, w, h], k) => `drawbox=x=${x}:y=${y}:w=${w}:h=${h}:color=${hues[(seed + k) % hues.length]}@1:t=fill,drawbox=x=${x}:y=${y}:w=${w}:h=${h}:color=black:t=6`).join(',');
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=white:s=1000x1500', '-vf', draw, '-frames:v', '1', f]);
+  }
+  return fs.readFileSync(f);
+};
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hfdev-cbr-'));
+  fs.writeFileSync(path.join(dir, 'Gutter Kings [00] cover.jpg'), pic(31, '1000x1500'));
+  for (let p = 1; p <= 6; p++) fs.writeFileSync(path.join(dir, `Gutter Kings [${String(p).padStart(2, '0')}].jpg`), p === 4 ? pic(40, '2000x1500') : panelPage(p, p % 2));
+  fs.writeFileSync(path.join(dir, 'ComicInfo.xml'), '<ComicInfo><Series>Gutter Kings</Series><Number>1</Number><Title>The Long Panel</Title><Writer>Ana Ruiz</Writer><Publisher>Hall Press</Publisher><Year>2024</Year><Summary>Four friends draw a comic that starts drawing them back.</Summary><Genre>Adventure</Genre></ComicInfo>');
+  fs.mkdirSync(path.join(media, 'Comics', 'Gutter Kings'), { recursive: true });
+  execFileSync('bsdtar', ['--format', '7zip', '-cf', path.join(media, 'Comics', 'Gutter Kings', 'Gutter Kings 001 (2024).cbr'), '-C', dir, ...fs.readdirSync(dir)]);
+  for (let k = 1; k <= 3; k++) fs.writeFileSync(mk('Comics', 'Tower of Lanterns', `Tower of Lanterns Ep. ${k}.cbz`), zip({
+    'ComicInfo.xml': `<ComicInfo><Series>Tower of Lanterns</Series><Number>${k}</Number><Title>Episode ${k}</Title><Writer>Min Seo</Writer><Publisher>Lantern Webtoons</Publisher><Year>2025</Year><Genre>Fantasy</Genre></ComicInfo>`,
+    ...Object.fromEntries(Array.from({ length: 5 }, (_, p) => [`${String(p + 1).padStart(3, '0')}.jpg`, pic(k * 7 + p, '800x2600')])),
+  }, { deflate: false }));
+}
 const albums = [['Nova Lines', 'Night Drive', 2020, 'Synthwave', ['Neon Rain', 'Afterglow', 'Overpass', 'Taillights', 'Last Exit']], ['Quartet Nine', 'Strings at Dusk', 1999, 'Classical', ['Allegro', 'Largo', 'Minuet']], ['The Harbor Club', 'Low Tide Radio', 2016, 'Indie', ['Static', 'Lighthouse', 'Paper Boats', 'Signal']]];
 albums.forEach(([artist, album, year, genre, songs], ai) => {
   const art = path.join(os.tmpdir(), `hfdev-art-${ai}.jpg`); fs.writeFileSync(art, pic(ai + 20, '600x600'));
