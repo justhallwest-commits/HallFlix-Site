@@ -67,6 +67,9 @@ const MIGRATIONS = [
    create table collection_items (
      collection_id int not null references collections on delete cascade, item_id bigint not null references items on delete cascade,
      position int not null default 0, primary key (collection_id, item_id));`,
+  // 4: books, comics and music.
+  `alter table items add column author text, add column pages int, add column extra jsonb not null default '{}';
+   create index items_author on items (library_id, kind, author);`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {

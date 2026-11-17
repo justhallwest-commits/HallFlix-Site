@@ -23,6 +23,8 @@ In **Files**, inside your `docker` shared folder, create `hallflix`, and inside 
    Do the same for **Shows**, and for a folder of **Pre-roll clips** if you have one.
 4. The first scan starts by itself. Posters appear as titles are matched.
 
+Books (EPUB, PDF, Calibre folders), comics (CBZ, CBR, CB7, PDF; one folder per series) and music (sorted by its tags) are added the same way: pick the matching type.
+
 Folder naming that matches best: `Movies/Title (Year)/Title (Year).mkv` and `Shows/Show Name (Year)/Season 01/Show S01E01.mkv`.
 
 ## 4. Check the graphics chip

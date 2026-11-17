@@ -1,0 +1,136 @@
+// Pages for books, comics and music: title pages for a book, a comic series, an album and an artist, and the
+// music library (albums, artists, songs).
+import { $, $$, api, html, raw, icons, state, fmtRuntime, fmtTime, toast } from './core.js';
+import { cardHtml } from './views.js';
+import * as music from './music.js';
+
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const bg = (u) => (u ? `background-image:url("${String(u).replace(/"/g, '%22')}")` : '');
+const pct = (p) => (p && p.duration ? Math.round(Math.min(1, p.position / p.duration) * 100) : 0);
+
+export async function playAlbum(id, { shuffle = false, from = 0 } = {}) {
+  try { const d = await api('GET', `/api/items/${id}`); music.play(d.tracks, from, { shuffle }); } catch (e) { toast(e.message); }
+}
+
+const trackList = (tracks, { showAlbum = false, discs = 1 } = {}) => html`<ol class="tracks">${tracks.map((t, i) => html`
+  ${discs > 1 && (i === 0 || tracks[i - 1].disc !== t.disc) ? html`<li class="disc">Disc ${t.disc}</li>` : ''}
+  <li><button data-track="${i}"><span class="tn">${showAlbum ? i + 1 : t.track || i + 1}</span>
+    ${showAlbum && t.poster ? html`<img src="${t.poster}" alt="" loading="lazy">` : ''}
+    <span class="tt"><b>${t.title}</b>${showAlbum || (t.author && t.author !== tracks.artist) ? html`<small>${[t.author, showAlbum ? t.album : ''].filter(Boolean).join(' · ')}</small>` : ''}</span>
+    <span class="td">${fmtTime(t.runtime)}</span></button></li>`)}</ol>`;
+
+/** The title page for a book, comic series, album or artist, drawn into the overlay. */
+export function sheet(o, d, id) {
+  const close = html`<button class="btn round close" data-x aria-label="Close">${icons.x}</button>`;
+  const listBtn = html`<button class="btn round ${d.inList ? 'on' : ''}" data-list aria-label="My List" title="My List">${d.inList ? icons.check : icons.plus}</button>`;
+  const facts = (rows) => html`<div class="facts">${rows.filter(([, v]) => v).map(([k, v]) => html`<div><b>${k}:</b> ${v}</div>`)}</div>`;
+  let body = '';
+  if (d.kind === 'book') {
+    const p = d.progress, reading = p && !p.watched && p.position > 0;
+    body = html`<div class="m-head book">${close}<div class="m-bg" style="${bg(d.poster)}"></div>
+      <div class="m-cover book">${d.poster ? html`<img src="${d.poster}" alt="">` : html`<span>${d.title}</span>`}</div>
+      <div class="m-info"><p class="m-kind">${d.format === 'pdf' ? 'PDF' : 'Book'}</p><h1>${d.title}</h1>${d.author ? html`<p class="m-by">by ${d.author}</p>` : ''}
+        <div class="meta">${d.year ? html`<span>${d.year}</span>` : ''}${d.pages ? html`<span>${d.format === 'pdf' ? plural(d.pages, 'page') : plural(d.pages, 'chapter')}</span>` : ''}${d.genres.slice(0, 3).map((g) => html`<span>${g}</span>`)}</div>
+        <div class="actions"><a class="btn primary" href="#/read/${d.id}">${icons.book} ${reading ? `Continue · ${pct(p)}%` : p?.watched ? 'Read again' : 'Read'}</a>${listBtn}
+          <button class="btn round" data-seen aria-label="Mark as read" title="Mark as read or unread">${icons.eye}</button></div></div></div>
+      <div class="body">${d.overview ? html`<p class="overview">${d.overview}</p>` : ''}${facts([['Author', d.author], ['Published', d.year], ['Publisher', d.publisher], ['Format', d.format?.toUpperCase()]])}
+        ${d.more?.length ? html`<h3>More by ${d.author}</h3><div class="similar">${d.more.map((x) => cardHtml(x))}</div>` : ''}</div>`;
+  } else if (d.kind === 'series') {
+    const next = d.issues.find((x) => x.id === d.next);
+    body = html`<div class="m-head book">${close}<div class="m-bg" style="${bg(d.poster)}"></div>
+      <div class="m-cover book">${d.poster ? html`<img src="${d.poster}" alt="">` : html`<span>${d.title}</span>`}</div>
+      <div class="m-info"><p class="m-kind">Comic series</p><h1>${d.title}</h1>${d.author ? html`<p class="m-by">by ${d.author}</p>` : ''}
+        <div class="meta"><span>${plural(d.issues.length, 'issue')}</span>${d.year ? html`<span>${d.year}</span>` : ''}${d.genres.slice(0, 3).map((g) => html`<span>${g}</span>`)}</div>
+        <div class="actions">${next ? html`<a class="btn primary" href="#/read/${next.id}">${icons.book} ${d.resuming ? 'Continue' : 'Read'} ${next.number != null ? `#${next.number}` : next.title}</a>` : ''}${listBtn}
+          <button class="btn round" data-seen aria-label="Mark all as read" title="Mark all as read or unread">${icons.eye}</button></div></div></div>
+      <div class="body">${d.overview ? html`<p class="overview">${d.overview}</p>` : ''}${facts([['Writer', d.author], ['Publisher', d.publisher]])}
+        <h3>Issues</h3><div class="grid issues">${d.issues.map((x) => html`<a class="card book k-comic ${x.id === d.focus ? 'focus' : ''}" href="#/read/${x.id}" data-id="${x.id}">
+          <div class="art"><div class="fallback">${x.title}</div><img loading="lazy" src="${x.poster}" alt="" onload="this.classList.add('in')" onerror="this.remove()">
+          <div class="label">${x.number != null ? `#${x.number}` : x.title}<small>${x.number != null && x.title !== `${d.title} #${x.number}` ? x.title : plural(x.pages || 0, 'page')}</small></div>
+          ${x.progress && !x.progress.watched && pct(x.progress) ? html`<div class="bar"><i style="width:${pct(x.progress)}%"></i></div>` : ''}${x.progress?.watched ? html`<div class="seen">✓</div>` : ''}</div></a>`)}</div></div>`;
+  } else if (d.kind === 'album') {
+    const total = d.tracks.reduce((a, t) => a + (t.runtime || 0), 0);
+    body = html`<div class="m-head">${close}<div class="m-bg" style="${bg(d.poster)}"></div>
+      <div class="m-cover square">${d.poster ? html`<img src="${d.poster}" alt="">` : html`<span>♪</span>`}</div>
+      <div class="m-info"><p class="m-kind">Album</p><h1>${d.title}</h1><p class="m-by"><a href="#/title/${d.artistId}">${d.author}</a></p>
+        <div class="meta">${d.year ? html`<span>${d.year}</span>` : ''}<span>${plural(d.tracks.length, 'song')}</span><span>${fmtRuntime(total)}</span>${d.genres.slice(0, 2).map((g) => html`<span>${g}</span>`)}</div>
+        <div class="actions"><button class="btn primary" data-playall>${icons.play} Play</button><button class="btn" data-shuffle>${icons.shuffle} Shuffle</button>${listBtn}</div></div></div>
+      <div class="body">${trackList(Object.assign(d.tracks, { artist: d.author }), { discs: d.discs })}
+        ${d.more?.length ? html`<h3>More by ${d.author}</h3><div class="similar squares">${d.more.map((x) => cardHtml(x))}</div>` : ''}</div>`;
+  } else if (d.kind === 'artist') {
+    body = html`<div class="m-head">${close}<div class="m-bg" style="${bg(d.poster)}"></div>
+      <div class="m-cover round">${d.poster ? html`<img src="${d.poster}" alt="">` : html`<span>${d.title[0]}</span>`}</div>
+      <div class="m-info"><p class="m-kind">Artist</p><h1>${d.title}</h1>
+        <div class="meta"><span>${plural(d.albums.length, 'album')}</span><span>${plural(d.tracks.length, 'song')}</span></div>
+        <div class="actions"><button class="btn primary" data-playall>${icons.play} Play</button><button class="btn" data-shuffle>${icons.shuffle} Shuffle</button></div></div></div>
+      <div class="body"><h3>Albums</h3><div class="similar squares">${d.albums.map((x) => cardHtml(x))}</div>
+        <h3>Songs</h3>${trackList(d.tracks.slice(0, 50), { showAlbum: true })}</div>`;
+  }
+  o.innerHTML = String(html`<article class="sheet m-sheet k-${d.kind}" data-id="${d.id}">${body}</article>`);
+  document.body.classList.add('locked');
+  o.onchange = null;
+  o.onclick = async (e) => {
+    if (e.target === o || e.target.closest('[data-x]')) { if (history.length > 1) history.back(); else location.hash = '#/'; return; }
+    const tr = e.target.closest('[data-track]');
+    if (tr) { music.play(d.tracks, +tr.dataset.track); return; }
+    if (e.target.closest('[data-playall]')) { music.play(d.tracks, 0, { shuffle: false }); return; }
+    if (e.target.closest('[data-shuffle]')) { music.play(d.tracks, 0, { shuffle: true }); return; }
+    const pa = e.target.closest('[data-playalbum]');
+    if (pa) { e.preventDefault(); e.stopPropagation(); playAlbum(+pa.dataset.playalbum); return; }
+    const list = e.target.closest('[data-list]');
+    if (list) {
+      d.inList = !d.inList; list.classList.toggle('on', d.inList); list.innerHTML = String(d.inList ? icons.check : icons.plus);
+      await api('POST', '/api/mylist', { itemId: d.id, on: d.inList }).catch((err) => toast(err.message));
+      toast(d.inList ? 'Added to My List' : 'Removed from My List');
+      return;
+    }
+    if (e.target.closest('[data-seen]')) {
+      const all = d.kind === 'book' ? !!d.progress?.watched : d.issues.every((x) => x.progress?.watched);
+      await api('POST', '/api/watched', { itemId: d.id, watched: !all }).catch((err) => toast(err.message));
+      toast(all ? 'Marked as unread' : 'Marked as read');
+      const fresh = await api('GET', `/api/items/${id}`); sheet(o, fresh, id);
+    }
+  };
+  o.scrollTop = 0;
+  ($('.issues .focus', o) || $('.btn.primary', o))?.focus({ preventScroll: true });
+}
+
+// ---------- the music library ----------
+export async function musicLibrary(view, lib, lk, base) {
+  base.view ||= 'albums';
+  if (!['title', 'artist', 'year', 'added'].includes(base.sort)) base.sort = 'artist';
+  view.innerHTML = String(html`<div class="page music-lib"><div class="lib-head">
+      ${lk.logo ? html`<img class="lib-logo" src="${lk.logo}" alt="${lib.name}">` : html`<h1>${lib.name}</h1>`}<span class="count"></span>
+      <div class="tabs-row">${[['albums', 'Albums'], ['artists', 'Artists'], ['songs', 'Songs']].map(([v, n]) => html`<button class="chip ${base.view === v ? 'on' : ''}" data-view="${v}">${n}</button>`)}</div>
+      <select data-msort aria-label="Sort" ${base.view === 'albums' ? '' : raw('hidden')}>${[['artist', 'Artist'], ['title', 'A to Z'], ['year', 'Newest first'], ['added', 'Recently added']].map(([v, n]) => html`<option value="${v}" ${base.sort === v ? raw('selected') : ''}>${n}</option>`)}</select>
+    </div><div class="chips"></div><div class="mbody"></div></div>`);
+  const draw = async () => {
+    const v = base.view, box = $('.mbody', view);
+    const q = v === 'albums' ? `&sort=${base.sort}&genre=${encodeURIComponent(base.genre || '')}` : v === 'artists' ? '&sort=title' : '';
+    const d = await api('GET', `/api/library/${lib.id}?view=${v}&limit=${v === 'songs' ? 500 : 200}${q}`);
+    if (!box.isConnected) return;
+    $('.count', view).textContent = v === 'albums' ? plural(d.total, 'album') : v === 'artists' ? plural(d.total, 'artist') : plural(d.total, 'song');
+    $('.chips', view).innerHTML = v === 'albums' && d.genres.length ? String(html`<button class="chip ${base.genre ? '' : 'on'}" data-mgenre="">All</button>${d.genres.map((g) => html`<button class="chip ${base.genre === g ? 'on' : ''}" data-mgenre="${g}">${g}</button>`)}`) : '';
+    $('[data-msort]', view).hidden = v !== 'albums';
+    if (!d.total) { box.innerHTML = '<div class="empty"><p>No music here yet. If you just added this library, the first scan may still be running.</p></div>'; return; }
+    if (v === 'songs') {
+      box.tracks = d.items;
+      box.innerHTML = String(html`<div class="actions song-actions"><button class="btn primary" data-allsongs>${icons.play} Play all</button><button class="btn" data-allshuffle>${icons.shuffle} Shuffle all</button>
+        ${d.total > d.items.length ? html`<span class="muted">Showing the first ${d.items.length}</span>` : ''}</div>${trackList(d.items, { showAlbum: true })}`);
+    } else box.innerHTML = String(html`<div class="grid squares">${d.items.map((x) => cardHtml(x))}</div>`);
+  };
+  view.querySelector('.music-lib').addEventListener('click', (e) => {
+    const t = e.target;
+    const tab = t.closest('[data-view]');
+    if (tab) { base.view = tab.dataset.view; base.genre = ''; for (const b of $$('[data-view]', view)) b.classList.toggle('on', b === tab); draw(); return; }
+    const g = t.closest('[data-mgenre]');
+    if (g) { base.genre = g.dataset.mgenre; draw(); return; }
+    const box = $('.mbody', view);
+    const tr = t.closest('[data-track]');
+    if (tr && box.tracks) { music.play(box.tracks, +tr.dataset.track); return; }
+    if (t.closest('[data-allsongs]')) music.play(box.tracks, 0, { shuffle: false });
+    if (t.closest('[data-allshuffle]')) music.play(box.tracks, 0, { shuffle: true });
+  });
+  $('[data-msort]', view).onchange = (e) => { base.sort = e.target.value; draw(); };
+  await draw();
+}

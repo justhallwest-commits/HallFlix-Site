@@ -14,7 +14,7 @@ import { IMAGE_EXT, isVideo } from './names.js';
 import { img } from './catalog.js';
 
 const admin = { admin: true };
-const KINDS = ['movies', 'shows', 'prerolls'];
+const KINDS = ['movies', 'shows', 'books', 'comics', 'music', 'prerolls'];
 
 function insideMedia(p) {
   const full = path.resolve(String(p || cfg.mediaRoot));
@@ -26,8 +26,8 @@ function insideMedia(p) {
 export function routes(r) {
   r.get('/api/studio/overview', async () => {
     const counts = await q(`select l.id, l.name, l.kind, l.path, l.position, l.look,
-        (select count(*)::int from items i where i.library_id = l.id and i.kind in ('movie','show','clip')) as titles,
-        (select count(*)::int from items i where i.library_id = l.id and i.kind = 'episode') as episodes,
+        (select count(*)::int from items i where i.library_id = l.id and i.kind in ('movie','show','clip','book','series','album')) as titles,
+        (select count(*)::int from items i where i.library_id = l.id and i.kind in ('episode','comic','track')) as episodes,
         (select count(*)::int from items i where i.library_id = l.id and i.kind in ('movie','show') and not i.matched) as unmatched
       from libraries l order by l.position, l.id`);
     let transcoder = { ok: false };

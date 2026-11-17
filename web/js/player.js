@@ -385,6 +385,7 @@ function mediaSession(p, entry) {
 
 export async function openPlayer(itemId, opts = {}) {
   closePlayer({ silent: true });
+  dispatchEvent(new Event('hallflix-video'));
   const root = $('#player');
   root.hidden = false; root.className = 'show waiting';
   document.body.classList.add('locked');
@@ -432,8 +433,8 @@ export async function openPlayer(itemId, opts = {}) {
     v.addEventListener('timeupdate', () => { if (mine()) { if (v.currentTime > 0.3) p.started = true; updateBar(p); } });
     v.addEventListener('waiting', () => mine() && root.classList.add('waiting'));
     for (const ev of ['playing', 'canplay', 'seeked']) v.addEventListener(ev, () => mine() && root.classList.remove('waiting'));
-    v.addEventListener('play', () => { if (mine()) { root.classList.remove('paused'); $('.ico-play', root).innerHTML = icons.pause; showControls(p); if (p.party?.ready) partySend(p, 'play'); } });
-    v.addEventListener('pause', () => { if (mine() && !v.ended) { root.classList.add('paused'); $('.ico-play', root).innerHTML = icons.play; report(p); if (p.party?.ready && !v.seeking) partySend(p, 'pause'); } });
+    v.addEventListener('play', () => { if (mine()) { root.classList.remove('paused'); const ip = $('.ico-play', root); if (ip) ip.innerHTML = icons.pause; showControls(p); if (p.party?.ready) partySend(p, 'play'); } });
+    v.addEventListener('pause', () => { if (mine() && !v.ended) { root.classList.add('paused'); const ip = $('.ico-play', root); if (ip) ip.innerHTML = icons.play; report(p); if (p.party?.ready && !v.seeking) partySend(p, 'pause'); } });
     v.addEventListener('ended', () => mine() && advance(p));
     v.addEventListener('error', () => {
       if (!mine() || !v.error || !v.getAttribute('src')) return;

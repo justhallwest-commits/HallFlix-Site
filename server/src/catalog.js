@@ -7,6 +7,7 @@ export function img(ref, size) {
   if (!ref) return null;
   if (ref.startsWith('tmdb:')) return `/img/t/${size}${ref.slice(5)}`;
   if (ref.startsWith('local:')) return `/img/l/${Buffer.from(ref.slice(6)).toString('base64url')}`;
+  if (ref.startsWith('cover:')) return `/api/cover/${ref.slice(6)}`;
   return ref;
 }
 
@@ -14,6 +15,10 @@ export const SEL = `i.*, s.title as show_title, s.poster as show_poster, s.backd
   s.rating as show_rating, s.genres as show_genres, p.position_s, p.duration_s, p.watched`;
 export const FROM = `from items i left join items s on s.id = i.show_id
   left join progress p on p.item_id = i.id and p.profile_id = $1`;
+
+// The kind of item each library type lists, and how many children a row has (issues in a series, albums by an artist).
+export const MAIN_KIND = { movies: 'movie', shows: 'show', books: 'book', comics: 'series', music: 'album' };
+export const COUNT = `(select count(*)::int from items c where c.parent_id = i.id and i.kind in ('series','artist','album')) as child_count`;
 
 const hash = (str) => { let h = 0; for (const c of String(str)) h = (h * 31 + c.charCodeAt(0)) | 0; return h; };
 
@@ -28,6 +33,8 @@ export function card(r) {
     logo: img(r.logo || r.show_logo, 'w500'),
     show: ep ? { id: r.show_id, title: r.show_title, season: r.season_no, episode: r.episode_no } : undefined,
     progress: r.position_s != null ? { position: r.position_s, duration: r.duration_s || r.runtime_s || 0, watched: !!r.watched } : undefined,
+    author: r.author || undefined, pages: r.pages ?? undefined, number: r.extra?.number ?? undefined, count: r.child_count ?? undefined,
+    track: r.kind === 'track' ? r.episode_no : undefined, disc: r.kind === 'track' ? r.season_no : undefined,
   };
 }
 
@@ -72,17 +79,19 @@ export function routes(r) {
   r.get('/api/home', async ({ profile }) => {
     const pid = profile.id;
     const day = new Date().toISOString().slice(0, 10);
-    const libs = await q(`select id, name, kind from libraries where kind in ('movies','shows') order by position, id`);
+    const libs = await q(`select id, name, kind from libraries where kind <> 'prerolls' order by position, id`);
     const home = await getSetting('home', {});
-    const sec = { continue: [], mylist: [], recent: [], top: [], genres: [] };
+    const sec = { continue: [], reading: [], mylist: [], recent: [], top: [], genres: [] };
+    const reading = await q(`select ${SEL} ${FROM} where i.kind in ('book','comic') and p.profile_id = $1 and not p.watched and p.position_s > 0 order by p.updated_at desc limit 20`, [pid]);
+    if (reading.length) sec.reading.push({ id: 'reading', title: 'Continue reading', items: reading.map(card) });
     const cont = await continueRow(pid);
     if (cont.length) sec.continue.push({ id: 'continue', title: `Continue watching for ${profile.name}`, shape: 'wide', items: cont });
     const mine = await q(`select ${SEL} ${FROM} join mylist m on m.item_id = i.id and m.profile_id = $1 order by m.added_at desc limit 30`, [pid]);
     if (mine.length) sec.mylist.push({ id: 'mylist', title: 'My List', items: mine.map(card) });
     for (const l of libs) {
-      const kind = l.kind === 'movies' ? 'movie' : 'show';
-      const recent = await q(`select ${SEL} ${FROM} where i.library_id = $2 and i.kind = $3 order by i.added_at desc, i.id desc limit 24`, [pid, l.id, kind]);
-      if (recent.length) sec.recent.push({ id: `recent-${l.id}`, title: `New in ${l.name}`, library: l.id, items: recent.map(card) });
+      const kind = MAIN_KIND[l.kind];
+      const recent = await q(`select ${SEL}, ${COUNT} ${FROM} where i.library_id = $2 and i.kind = $3 order by i.added_at desc, i.id desc limit 24`, [pid, l.id, kind]);
+      if (recent.length) sec.recent.push({ id: `recent-${l.id}`, title: `New in ${l.name}`, library: l.id, shape: l.kind === 'music' ? 'square' : undefined, items: recent.map(card) });
     }
     const genres = await q(
       `select g, count(*)::int as n from items i, unnest(i.genres) g where i.kind in ('movie','show') group by g having count(*) >= 4
@@ -94,7 +103,7 @@ export function routes(r) {
     const top = await q(`select ${SEL} ${FROM} where i.kind in ('movie','show') and i.score is not null order by i.score desc, i.id limit 20`, [pid]);
     if (top.length >= 6) sec.top.push({ id: 'top', title: 'Top rated', items: top.map(card) });
     // The Studio's Home layout decides the order of sections and which are hidden.
-    const known = ['libraries', 'continue', 'mylist', 'recent', 'top', 'collections', 'genres'];
+    const known = ['libraries', 'continue', 'reading', 'mylist', 'recent', 'top', 'collections', 'genres'];
     const order = [...(home.order || []).filter((x) => known.includes(x)), ...known.filter((x) => !(home.order || []).includes(x))];
     const hidden = new Set(home.hidden || []);
     const rows = [];
@@ -116,7 +125,7 @@ export function routes(r) {
     // Library tiles: each library's own background if it has one in its look, otherwise art from a recent title.
     const tiles = [];
     for (const l of libs) {
-      const kind = l.kind === 'movies' ? 'movie' : 'show';
+      const kind = MAIN_KIND[l.kind];
       const stats = await q1(`select count(*)::int as n, count(*) filter (where added_at > now() - interval '14 days')::int as fresh from items where library_id=$1 and kind=$2`, [l.id, kind]);
       if (!stats.n) continue;
       const art = await q(`select backdrop, poster from items where library_id=$1 and kind=$2 and (backdrop is not null or poster is not null) order by added_at desc, id desc limit 12`, [l.id, kind]);
@@ -143,23 +152,34 @@ export function routes(r) {
   r.get('/api/library/:id', async ({ profile, params, query }) => {
     const lib = await q1('select id, name, kind from libraries where id=$1', [params.id]);
     if (!lib || lib.kind === 'prerolls') throw new HttpError(404, 'Library not found');
-    const kind = lib.kind === 'movies' ? 'movie' : 'show';
-    const sorts = { title: 'i.sort_title asc', added: 'i.added_at desc', year: 'i.year desc nulls last, i.sort_title', score: 'i.score desc nulls last, i.sort_title' };
-    const order = sorts[query.sort] || sorts.title;
+    // Music lists albums, artists or songs.
+    const view = lib.kind === 'music' ? (['artists', 'songs'].includes(query.view) ? query.view : 'albums') : null;
+    const kind = view === 'artists' ? 'artist' : view === 'songs' ? 'track' : MAIN_KIND[lib.kind];
+    const sorts = {
+      title: 'i.sort_title asc', added: 'i.added_at desc', year: 'i.year desc nulls last, i.sort_title', score: 'i.score desc nulls last, i.sort_title',
+      author: 'lower(i.author) asc nulls last, i.sort_title', artist: 'lower(i.author) asc nulls last, i.year, i.sort_title',
+    };
+    let order = sorts[query.sort] || sorts.title;
+    if (kind === 'track' && !sorts[query.sort]) order = 'lower(i.author), i.parent_id, i.season_no, i.episode_no nulls last';
     const args = [profile.id, lib.id, kind];
     let where = 'i.library_id = $2 and i.kind = $3';
     if (query.genre) { args.push(query.genre); where += ` and $${args.length} = any(i.genres)`; }
     const total = (await q1(`select count(*)::int as n from items i where ${where.replace(/\$(\d)/g, (_, n) => `$${n - 1}`)}`, args.slice(1))).n;
-    const limit = Math.min(+query.limit || 60, 200), offset = +query.offset || 0;
-    const items = await q(`select ${SEL} ${FROM} where ${where} order by ${order}, i.id limit ${limit} offset ${offset}`, args);
-    const genres = await q(`select g, count(*)::int as n from items i, unnest(i.genres) g where i.library_id=$1 and i.kind=$2 group by g order by g`, [lib.id, kind]);
-    return { library: lib, total, items: items.map(card), genres: genres.map((g) => g.g) };
+    const limit = Math.min(+query.limit || 60, kind === 'track' ? 500 : 200), offset = +query.offset || 0;
+    const items = await q(`select ${SEL}, ${COUNT}, al.title as album_title, al.poster as album_poster ${FROM} left join items al on al.id = i.parent_id and i.kind = 'track'
+      where ${where} order by ${order}, i.id limit ${limit} offset ${offset}`, args);
+    const genres = await q(`select g, count(*)::int as n from items i, unnest(i.genres) g where i.library_id=$1 and i.kind=$2 group by g having count(*) > 0 order by g`, [lib.id, kind === 'track' || kind === 'artist' ? 'album' : kind]);
+    return {
+      library: lib, view, total, genres: kind === 'artist' ? [] : genres.map((g) => g.g),
+      items: items.map((x) => (x.kind === 'track' ? { ...card(x), album: x.album_title, albumId: x.parent_id, poster: img(x.album_poster, 'w342'), codec: x.extra?.codec, container: x.container } : card(x))),
+    };
   });
 
   r.get('/api/items/:id', async ({ profile, params }) => {
     const pid = profile.id;
     let row = await q1(`select ${SEL} ${FROM} where i.id = $2`, [pid, params.id]);
     if (!row || row.kind === 'clip') throw new HttpError(404, 'Not found');
+    if (['book', 'comic', 'series', 'album', 'artist', 'track'].includes(row.kind)) return shelfItem(pid, row);
     let focus = null;
     if (row.kind === 'episode' || row.kind === 'season') { focus = row.kind === 'episode' ? row.id : null; row = await q1(`select ${SEL} ${FROM} where i.id = $2`, [pid, row.show_id]); }
     const out = {
@@ -203,7 +223,7 @@ export function routes(r) {
     if (!term) return { items: [] };
     const like = `%${term.replace(/[%_\\]/g, '\\$&')}%`;
     const items = await q(
-      `select ${SEL} ${FROM} where i.kind in ('movie','show') and (i.title ilike $2 or $3 ilike any(i.genres)
+      `select ${SEL}, ${COUNT} ${FROM} where i.kind in ('movie','show','book','series','album','artist') and (i.title ilike $2 or $3 ilike any(i.genres) or i.author ilike $2
          or exists (select 1 from jsonb_array_elements(i.people) x where x->>'name' ilike $2))
        order by (i.title ilike $4) desc, nullif(position(lower($3) in lower(i.title)), 0) nulls last, i.sort_title limit 60`,
       [profile.id, like, term, `${term.replace(/[%_\\]/g, '\\$&')}%`]);
@@ -220,10 +240,10 @@ export function routes(r) {
   r.post('/api/progress', async ({ profile, req }) => {
     const { itemId, position, duration, ended } = await readJson(req);
     const it = await q1(`select id, kind, runtime_s from items where id=$1`, [itemId]);
-    if (!it || !['movie', 'episode'].includes(it.kind)) return { ok: true };
+    if (!it || !['movie', 'episode', 'book', 'comic'].includes(it.kind)) return { ok: true };
     const dur = +duration || it.runtime_s || 0;
     const pos = Math.max(0, +position || 0);
-    const watched = !!ended || (dur > 0 && pos / dur >= 0.92);
+    const watched = !!ended || (dur > 0 && pos / dur >= (it.kind === 'book' || it.kind === 'comic' ? 0.999 : 0.92));
     await q(
       `insert into progress (profile_id, item_id, position_s, duration_s, watched, updated_at) values ($1,$2,$3,$4,$5,now())
        on conflict (profile_id, item_id) do update set position_s=excluded.position_s, duration_s=excluded.duration_s,
@@ -236,11 +256,45 @@ export function routes(r) {
     const it = await q1('select id, kind from items where id=$1', [itemId]);
     if (!it) throw new HttpError(404, 'Not found');
     const ids = it.kind === 'show' ? (await q(`select id from items where show_id=$1 and kind='episode'`, [it.id])).map((x) => x.id)
-      : it.kind === 'season' ? (await q(`select id from items where parent_id=$1`, [it.id])).map((x) => x.id) : [it.id];
+      : it.kind === 'season' || it.kind === 'series' ? (await q(`select id from items where parent_id=$1`, [it.id])).map((x) => x.id) : [it.id];
     if (watched) {
       await q(`insert into progress (profile_id, item_id, position_s, watched, updated_at) select $1, unnest($2::bigint[]), 0, true, now()
                on conflict (profile_id, item_id) do update set position_s=0, watched=true, updated_at=now()`, [profile.id, ids]);
     } else await q('delete from progress where profile_id=$1 and item_id = any($2)', [profile.id, ids]);
     return { ok: true };
   });
+}
+
+// ---------- books, comics and music ----------
+const trackCard = (t) => ({ ...card(t), album: t.album_title, albumId: t.parent_id, poster: img(t.album_poster, 'w342'), codec: t.extra?.codec, container: t.container });
+const TRACKS = (where) => `select ${SEL}, al.title as album_title, al.poster as album_poster ${FROM} join items al on al.id = i.parent_id where ${where}`;
+
+async function shelfItem(pid, row) {
+  let focus = null;
+  if (row.kind === 'comic' || row.kind === 'track') { focus = row.id; row = await q1(`select ${SEL} ${FROM} where i.id = $2`, [pid, row.parent_id]); }
+  const lib = await q1('select id, name, kind from libraries where id=$1', [row.library_id]);
+  const out = { ...card(row), poster: img(row.poster, 'w500'), library: lib?.id, libraryName: lib?.name, publisher: row.studios?.[0] || null, focus,
+    inList: !!(await q1('select 1 from mylist where profile_id=$1 and item_id=$2', [pid, row.id])) };
+  if (row.kind === 'book') {
+    out.format = row.container;
+    out.more = (await q(`select ${SEL} ${FROM} where i.kind='book' and i.id<>$2 and i.author is not distinct from $3 and $3 is not null order by i.year nulls last, i.sort_title limit 20`, [pid, row.id, row.author])).map(card);
+  }
+  if (row.kind === 'series') {
+    const issues = await q(`select ${SEL} ${FROM} where i.parent_id = $2 and i.kind='comic' order by (i.extra->>'number')::float nulls last, i.sort_title`, [pid, row.id]);
+    out.issues = issues.map(card);
+    const started = issues.filter((x) => x.position_s != null && !x.watched);
+    out.next = (started[0] || issues.find((x) => !x.watched) || issues[0])?.id || null;
+    out.resuming = !!started.length;
+  }
+  if (row.kind === 'album') {
+    out.tracks = (await q(TRACKS(`i.parent_id = $2 and i.kind='track'`) + ' order by i.season_no, i.episode_no nulls last, i.sort_title', [pid, row.id])).map(trackCard);
+    out.discs = new Set(out.tracks.map((t) => t.disc)).size;
+    out.artistId = row.parent_id;
+    out.more = (await q(`select ${SEL} ${FROM} where i.kind='album' and i.parent_id=$2 and i.id<>$3 order by i.year desc nulls last`, [pid, row.parent_id, row.id])).map(card);
+  }
+  if (row.kind === 'artist') {
+    out.albums = (await q(`select ${SEL} ${FROM} where i.kind='album' and i.parent_id=$2 order by i.year desc nulls last, i.sort_title`, [pid, row.id])).map(card);
+    out.tracks = (await q(TRACKS(`i.show_id = $2 and i.kind='track'`) + ' order by al.year desc nulls last, al.sort_title, i.season_no, i.episode_no nulls last', [pid, row.id])).map(trackCard);
+  }
+  return out;
 }

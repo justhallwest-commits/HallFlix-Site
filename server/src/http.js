@@ -76,8 +76,8 @@ export class Router {
   routes = [];
   add(method, pattern, fn, opts = {}) {
     const keys = [];
-    const rx = new RegExp('^' + pattern.replace(/:(\w+)\*/g, (_, k) => { keys.push(k); return '(.+)'; })
-      .replace(/:(\w+)/g, (_, k) => { keys.push(k); return '([^/]+)'; }) + '$');
+    // One pass, so keys stay in the same order as the groups (":id/…/:rest*").
+    const rx = new RegExp('^' + pattern.replace(/:(\w+)(\*)?/g, (_, k, star) => { keys.push(k); return star ? '(.+)' : '([^/]+)'; }) + '$');
     this.routes.push({ method, rx, keys, fn, opts });
     return this;
   }

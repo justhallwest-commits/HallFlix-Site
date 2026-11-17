@@ -155,7 +155,7 @@ pages.overview = async (main) => {
     const s = o.scan;
     main.innerHTML = String(html`${head('Overview', `HallFlix ${o.version} — everything at a glance.`)}
       <div class="grid">
-        ${o.libraries.map((l) => html`<div class="stat"><span class="muted">${l.name}</span><b>${l.titles}</b><span class="muted small">${l.kind === 'shows' ? `shows · ${l.episodes} episodes` : l.kind === 'prerolls' ? 'clips' : 'movies'}${l.unmatched ? ` · ${l.unmatched} without details` : ''}</span></div>`)}
+        ${o.libraries.map((l) => html`<div class="stat"><span class="muted">${l.name}</span><b>${l.titles}</b><span class="muted small">${({ shows: `shows · ${l.episodes} episodes`, prerolls: 'clips', books: 'books', comics: `series · ${l.episodes} issues`, music: `albums · ${l.episodes} songs` })[l.kind] || 'movies'}${l.unmatched ? ` · ${l.unmatched} without details` : ''}</span></div>`)}
         <div class="stat"><span class="muted">Look right now</span><b style="font-size:19px">${lk.active || 'Everyday look'}</b><span class="muted small">${lk.active ? 'A season is switched on' : 'No season is running'}</span></div>
       </div>
       <div class="card"><h2>Health</h2>
@@ -176,21 +176,23 @@ pages.overview = async (main) => {
 
 // ---------- libraries ----------
 pages.libraries = async (main) => {
-  const KIND = { movies: 'Movies', shows: 'Shows', prerolls: 'Pre-roll clips' };
+  const KIND = { movies: 'Movies', shows: 'Shows', books: 'Books', comics: 'Comics', music: 'Music', prerolls: 'Pre-roll clips' };
+  const count = (l) => ({ shows: `${l.titles} shows, ${l.episodes} episodes`, books: `${l.titles} books`, comics: `${l.titles} series, ${l.episodes} issues`, music: `${l.titles} albums, ${l.episodes} songs`, prerolls: `${l.titles} clips` }[l.kind] || `${l.titles} titles`);
   const draw = async () => {
     const [o, hidden] = await Promise.all([api('GET', '/api/studio/overview'), api('GET', '/api/studio/hidden')]);
     const removed = [...new Map(hidden.map((h) => [`${h.library}|${h.title}`, h])).values()]; // a hidden season lists once, not per episode
     main.innerHTML = String(html`${head('Libraries', `Point HallFlix at folders inside ${o.mediaRoot}. Your files are only ever read, never changed.`, html`<button class="btn primary" data-add>Add a library</button>`)}
       <div class="card">${o.libraries.length ? o.libraries.map((l, i) => html`<div class="row" data-id="${l.id}">
         <div class="grow"><b>${l.name} <span class="pill">${KIND[l.kind]}</span> ${o.scan.running && o.scan.library === l.id ? html`<span class="pill live">Scanning</span>` : ''}</b>
-          <span>${l.path} · ${l.titles} ${l.kind === 'prerolls' ? 'clips' : 'titles'}${l.kind === 'shows' ? `, ${l.episodes} episodes` : ''}${l.unmatched ? ` · ${l.unmatched} without details` : ''}</span></div>
+          <span>${l.path} · ${count(l)}${l.unmatched ? ` · ${l.unmatched} without details` : ''}</span></div>
         <div class="tools">${i ? html`<button class="btn sm" data-up title="Move up">↑</button>` : ''}<button class="btn sm" data-scan>Scan</button>
-          ${l.kind !== 'prerolls' ? html`<button class="btn sm" data-fresh title="Look every title up again">Refresh details</button>` : ''}
+          ${['movies', 'shows'].includes(l.kind) ? html`<button class="btn sm" data-fresh title="Look every title up again">Refresh details</button>` : ''}
           <button class="btn sm" data-edit>Edit</button><button class="btn sm danger" data-del>Remove</button></div></div>`)
     : html`<p class="muted">No libraries yet. Add your Movies and Shows folders, plus a folder of pre-roll clips if you have one.</p>`}</div>
       ${removed.length ? html`<div class="card"><h2>Removed titles</h2><p class="muted small" style="margin-bottom:6px">Removed from HallFlix with their files left on the NAS. Bring one back and the next scan adds it again.</p>
         ${removed.map((h) => html`<div class="row" data-hidden="${h.id}"><div class="grow"><b>${h.title}</b><span>${h.library || 'Removed library'} · removed ${new Date(h.hidden_at).toLocaleDateString()}</span></div><button class="btn sm" data-restore>Bring back</button></div>`)}</div>` : ''}
-      <p class="muted small">Tip: inside a pre-roll folder, sub-folder names become tags. Clips in <code>halloween/</code> get the tag “halloween”, which pre-roll rules can use.</p>`);
+      <p class="muted small">Tip: inside a pre-roll folder, sub-folder names become tags. Clips in <code>halloween/</code> get the tag “halloween”, which pre-roll rules can use.</p>
+      <p class="muted small">Books: EPUB and PDF, Calibre folders included. Comics: CBZ, CBR, CB7 and PDF; a folder per series works best. Music: MP3, FLAC, AAC/M4A, Ogg, Opus, WAV and more, sorted by their tags.</p>`);
     const libOf = (e) => o.libraries.find((l) => l.id === +e.target.closest('[data-id]').dataset.id);
     const form = (l) => {
       const v = { name: l?.name || '', kind: l?.kind || 'movies', path: l?.path || '' };

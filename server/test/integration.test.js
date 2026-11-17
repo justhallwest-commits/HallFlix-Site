@@ -1,8 +1,26 @@
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 const ffprobeJson = (buf) => new Promise((resolve, reject) => {
   const c = spawn('ffprobe', ['-v', 'error', '-show_streams', '-of', 'json', '-i', 'pipe:0']);
   let out = ''; c.stdout.on('data', (d) => { out += d; }); c.on('close', () => resolve(out)); c.on('error', reject); c.stdin.end(buf);
 });
+/** A small PDF: one coloured rectangle per page. */
+function makePdf(pages) {
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', ''];
+  const kids = [];
+  for (let i = 0; i < pages; i++) {
+    const content = `${(i * 0.3) % 1} 0.4 0.7 rg 40 40 520 760 re f`;
+    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 840] /Contents ${objs.length + 2} 0 R >>`);
+    kids.push(`${objs.length} 0 R`);
+    objs.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  }
+  objs[1] = `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pages} >>`;
+  let out = '%PDF-1.4\n';
+  const at = [];
+  objs.forEach((o, i) => { at.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${at.map((n) => `${String(n).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+}
 // End-to-end: scan real files, then play them through every path and check what comes out with ffprobe.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -497,6 +515,146 @@ test('admins remove titles from HallFlix, delete files from the NAS, and bring t
 
   // Nothing outside a library can be targeted, and viewers cannot use any of this.
   assert.equal((await hf.api('GET', '/api/studio/items/999999/remove')).$status, 404);
+});
+
+test('books, comics and music: scanning, reading and listening', async () => {
+  const mk = (...p) => { const f = path.join(media, ...p); fs.mkdirSync(path.dirname(f), { recursive: true }); return f; };
+  const img = (color, size = '600x900') => { const f = path.join(os.tmpdir(), `hf-${color}-${size}.jpg`); if (!fs.existsSync(f)) execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `color=c=${color}:s=${size}`, '-frames:v', '1', f]); return fs.readFileSync(f); };
+  // An EPUB 3 with a cover, two chapters and a nav document.
+  const page = (t, body) => `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${t}</title><link rel="stylesheet" href="../style.css"/></head><body>${body}</body></html>`;
+  fs.writeFileSync(mk('Books', 'Ursula Vance', 'The Quiet Sea.epub'), zip({
+    mimetype: 'application/epub+zip',
+    'META-INF/container.xml': '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+    'OEBPS/content.opf': `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+      <dc:title>The Quiet Sea</dc:title><dc:creator>Ursula Vance</dc:creator><dc:date>2017-04-01</dc:date><dc:subject>Fantasy</dc:subject><dc:description>&lt;p&gt;A lighthouse keeper &amp;amp; the tide.&lt;/p&gt;</dc:description></metadata>
+      <manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="c1" href="text/one.xhtml" media-type="application/xhtml+xml"/>
+      <item id="c2" href="text/two.xhtml" media-type="application/xhtml+xml"/><item id="css" href="style.css" media-type="text/css"/><item id="cov" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/></manifest>
+      <spine><itemref idref="c1"/><itemref idref="c2"/></spine></package>`,
+    'OEBPS/nav.xhtml': page('Contents', '<nav epub:type="toc" xmlns:epub="http://www.idpf.org/2007/ops"><ol><li><a href="text/one.xhtml">Low Tide</a></li><li><a href="text/two.xhtml#storm">The Storm</a></li></ol></nav>'),
+    'OEBPS/text/one.xhtml': page('One', `<h1>Low Tide</h1>${'<p>The water drew back from the rocks and the keeper climbed down to count the boats. </p>'.repeat(60)}<script>alert(1)</script>`),
+    'OEBPS/text/two.xhtml': page('Two', `<h1 id="storm">The Storm</h1>${'<p>By evening the wind had turned and the lamp swung on its chain. </p>'.repeat(60)}`),
+    'OEBPS/style.css': 'h1 { color: #333 }', 'OEBPS/images/cover.jpg': img('navy'),
+  }));
+  // A Calibre-style folder: metadata.opf and cover.jpg beside a PDF; and the same book as EPUB and PDF (only the EPUB counts).
+  fs.writeFileSync(mk('Books', 'Hal Ortiz', 'Field Notes (12)', 'Field Notes - Hal Ortiz.pdf'), makePdf(3));
+  fs.writeFileSync(mk('Books', 'Hal Ortiz', 'Field Notes (12)', 'metadata.opf'), '<package><metadata xmlns:dc="x"><dc:title>Field Notes</dc:title><dc:creator>Hal Ortiz</dc:creator><dc:date>2009</dc:date></metadata></package>');
+  fs.writeFileSync(mk('Books', 'Hal Ortiz', 'Field Notes (12)', 'cover.jpg'), img('olive'));
+  fs.copyFileSync(path.join(media, 'Books', 'Ursula Vance', 'The Quiet Sea.epub'), mk('Books', 'Twins', 'Same Book.epub'));
+  fs.writeFileSync(mk('Books', 'Twins', 'Same Book.pdf'), makePdf(1));
+  // Comics: a CBZ series with ComicInfo, a loose issue, a tar-packed issue (read through bsdtar, like CBR) and a PDF.
+  for (const n of [1, 2]) {
+    fs.writeFileSync(mk('Comics', 'Saga (2012)', `Saga 00${n} (2012).cbz`), zip({
+      'ComicInfo.xml': `<ComicInfo><Series>Saga</Series><Number>${n}</Number><Title>Chapter ${n}</Title><Writer>Brian K. Vaughan</Writer><Year>2012</Year><Summary>Issue ${n}.</Summary><Genre>Science Fiction, Fantasy</Genre></ComicInfo>`,
+      'p10.jpg': img('red'), 'p2.jpg': img('green'), 'p1.jpg': img('blue'), '__MACOSX/._p1.jpg': 'junk',
+    }, { deflate: false }));
+  }
+  fs.writeFileSync(mk('Comics', 'Moonrise #7.cbz'), zip({ 'a.jpg': img('white'), 'b.png': img('black', '64x64') }));
+  const tarDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hf-cbt-'));
+  fs.writeFileSync(path.join(tarDir, '001.jpg'), img('yellow')); fs.writeFileSync(path.join(tarDir, '002.jpg'), img('purple'));
+  execFileSync('tar', ['-cf', mk('Comics', 'Hellboy', 'Hellboy v02.cbt'), '-C', tarDir, '001.jpg', '002.jpg']);
+  fs.writeFileSync(mk('Comics', 'Hellboy', 'Hellboy v01.pdf'), makePdf(4));
+  // Music: tagged MP3s with embedded art, a FLAC album with a folder cover across two discs, and an untagged file.
+  const tone = (out, meta, extra = []) => execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=f=440:d=3', ...extra, ...Object.entries(meta).flatMap(([k, v]) => ['-metadata', `${k}=${v}`]), out]);
+  const art = path.join(os.tmpdir(), 'hf-art.jpg'); fs.writeFileSync(art, img('teal', '300x300'));
+  for (const [n, t] of [[1, 'Neon Rain'], [2, 'Afterglow']]) {
+    tone(mk('Music', 'Nova Lines', 'Night Drive (2020)', `0${n} ${t}.mp3`), { title: t, artist: 'Nova Lines', album: 'Night Drive', album_artist: 'Nova Lines', track: `${n}/2`, date: '2020', genre: 'Synthwave' },
+      ['-i', art, '-map', '0:a', '-map', '1:v', '-c:v', 'mjpeg', '-id3v2_version', '3', '-disposition:v', 'attached_pic']);
+  }
+  tone(mk('Music', 'Quartet', 'Strings', 'Disc 1', 'a.flac'), { title: 'Allegro', artist: 'Quartet', album: 'Strings', track: '1', disc: '1', date: '1999' });
+  tone(mk('Music', 'Quartet', 'Strings', 'Disc 2', 'b.flac'), { title: 'Largo', artist: 'Quartet', album: 'Strings', track: '1', disc: '2', date: '1999' });
+  fs.writeFileSync(mk('Music', 'Quartet', 'Strings', 'folder.jpg'), img('maroon', '300x300'));
+  tone(mk('Music', 'Loose', 'Field Recording.m4a'), {}, ['-c:a', 'alac']);
+
+  const libs = {};
+  for (const [name, kind] of [['Books', 'books'], ['Comics', 'comics'], ['Music', 'music']]) libs[kind] = await hf.api('POST', '/api/studio/libraries', { name, kind, path: path.join(media, name) });
+  await hf.scan.idle();
+  assert.deepEqual(hf.scan.status.errors, []);
+
+  // ----- books -----
+  let l = await hf.api('GET', `/api/library/${libs.books.id}?sort=author`);
+  assert.deepEqual(l.items.map((b) => [b.title, b.author, b.year]), [['Field Notes', 'Hal Ortiz', 2009], ['The Quiet Sea', 'Ursula Vance', 2017], ['The Quiet Sea', 'Ursula Vance', 2017]]);
+  assert.equal(l.total, 3, 'the PDF twin of an EPUB is not listed twice');
+  const sea = l.items.find((b) => b.author === 'Ursula Vance' && b.title === 'The Quiet Sea');
+  const notes = l.items.find((b) => b.title === 'Field Notes');
+  assert.match(notes.poster, /^\/img\/l\//, 'Calibre cover used');
+  assert.equal(sea.poster, `/api/cover/${sea.id}`);
+  const cover = await fetch(hf.base + sea.poster, { headers: { Cookie: hf.getCookie() } });
+  assert.deepEqual([cover.status, cover.headers.get('content-type')], [200, 'image/jpeg']);
+  let d = await hf.api('GET', `/api/items/${sea.id}`);
+  assert.deepEqual([d.kind, d.format, d.overview, d.genres], ['book', 'epub', 'A lighthouse keeper & the tide.', ['Fantasy']]);
+  let rd = await hf.api('GET', `/api/read/${sea.id}`);
+  assert.deepEqual([rd.mode, rd.spine, rd.toc.map((t) => t.label), rd.toc[1].href], ['epub', ['OEBPS/text/one.xhtml', 'OEBPS/text/two.xhtml'], ['Low Tide', 'The Storm'], 'OEBPS/text/two.xhtml#storm']);
+  const ch = await fetch(`${hf.base}${rd.base}${rd.spine[0]}`, { headers: { Cookie: hf.getCookie() } });
+  assert.equal(ch.headers.get('content-type'), 'application/xhtml+xml; charset=utf-8');
+  assert.match(ch.headers.get('content-security-policy'), /script-src 'none'/);
+  assert.match(await ch.text(), /Low Tide/);
+  assert.equal((await fetch(`${hf.base}${rd.base}../../../etc/passwd`, { headers: { Cookie: hf.getCookie() } })).status, 404);
+  rd = await hf.api('GET', `/api/read/${notes.id}`);
+  assert.deepEqual([rd.mode, rd.pages], ['pages', 3]);
+  const pg = await fetch(`${hf.base}/api/read/${notes.id}/page/2`, { headers: { Cookie: hf.getCookie() } });
+  assert.deepEqual([pg.status, pg.headers.get('content-type')], [200, 'image/jpeg']);
+  assert.equal((await fetch(`${hf.base}/api/read/${notes.id}/page/9`, { headers: { Cookie: hf.getCookie() } })).status, 404);
+  // Reading progress: halfway through chapter two, then Continue reading on Home.
+  await hf.api('POST', '/api/progress', { itemId: sea.id, position: 1.5, duration: 2 });
+  assert.deepEqual((await hf.api('GET', `/api/read/${sea.id}`)).progress, { position: 1.5, duration: 2, finished: false });
+  let home = await hf.api('GET', '/api/home');
+  assert.deepEqual(home.rows.find((r) => r.id === 'reading').items.map((x) => x.title), ['The Quiet Sea']);
+  assert.ok(home.libraries.some((t) => t.kind === 'books' && t.count === 3));
+
+  // ----- comics -----
+  l = await hf.api('GET', `/api/library/${libs.comics.id}`);
+  assert.deepEqual(l.items.map((x) => [x.title, x.count]), [['Hellboy', 2], ['Moonrise', 1], ['Saga', 2]]);
+  const saga = l.items.find((x) => x.title === 'Saga');
+  d = await hf.api('GET', `/api/items/${saga.id}`);
+  assert.deepEqual(d.issues.map((x) => [x.title, x.number, x.pages, x.author]), [['Chapter 1', 1, 3, 'Brian K. Vaughan'], ['Chapter 2', 2, 3, 'Brian K. Vaughan']]);
+  assert.deepEqual([d.author, d.year, d.genres], ['Brian K. Vaughan', 2012, ['Science Fiction', 'Fantasy']]);
+  rd = await hf.api('GET', `/api/read/${d.issues[0].id}`);
+  assert.deepEqual([rd.mode, rd.pages, rd.next.title, rd.series.title], ['pages', 3, 'Chapter 2', 'Saga']);
+  const order = [];
+  for (const n of [1, 2, 3]) { const res = await fetch(`${hf.base}/api/read/${d.issues[0].id}/page/${n}`, { headers: { Cookie: hf.getCookie() } }); order.push((await res.arrayBuffer()).byteLength); }
+  assert.ok(order.every((n) => n > 100), 'pages come out of the zip');
+  const hb = await hf.api('GET', `/api/items/${l.items.find((x) => x.title === 'Hellboy').id}`);
+  assert.deepEqual(hb.issues.map((x) => [x.number, x.pages]), [[1, 4], [2, 2]]);
+  const tarPage = await fetch(`${hf.base}/api/read/${hb.issues[1].id}/page/1`, { headers: { Cookie: hf.getCookie() } });
+  assert.deepEqual([tarPage.status, tarPage.headers.get('content-type')], [200, 'image/jpeg']);
+  await hf.api('POST', '/api/progress', { itemId: d.issues[0].id, position: 3, duration: 3 });
+  assert.equal((await hf.api('GET', `/api/items/${saga.id}`)).next, d.issues[1].id, 'a finished issue moves Read on to the next');
+
+  // ----- music -----
+  l = await hf.api('GET', `/api/library/${libs.music.id}`);
+  assert.deepEqual(l.items.map((a) => [a.title, a.author, a.year]), [['Loose', 'Unknown artist', null], ['Night Drive', 'Nova Lines', 2020], ['Strings', 'Quartet', 1999]]);
+  const nd = l.items.find((a) => a.title === 'Night Drive'), strings = l.items.find((a) => a.title === 'Strings');
+  assert.equal(nd.poster, `/api/cover/${nd.id}`, 'embedded art');
+  assert.match(strings.poster, /^\/img\/l\//, 'folder.jpg');
+  const art2 = await fetch(hf.base + nd.poster, { headers: { Cookie: hf.getCookie() } });
+  assert.deepEqual([art2.status, art2.headers.get('content-type')], [200, 'image/jpeg']);
+  d = await hf.api('GET', `/api/items/${strings.id}`);
+  assert.deepEqual(d.tracks.map((t) => [t.title, t.disc, t.track, t.codec]), [['Allegro', 1, 1, 'flac'], ['Largo', 2, 1, 'flac']]);
+  assert.equal(d.discs, 2);
+  assert.ok(Math.abs(d.runtime - 6) < 0.5);
+  const artists = await hf.api('GET', `/api/library/${libs.music.id}?view=artists`);
+  assert.deepEqual(artists.items.map((a) => [a.title, a.count]), [['Nova Lines', 1], ['Quartet', 1], ['Unknown artist', 1]]);
+  const nova = await hf.api('GET', `/api/items/${artists.items[0].id}`);
+  assert.deepEqual([nova.albums.map((a) => a.title), nova.tracks.map((t) => t.title)], [['Night Drive'], ['Neon Rain', 'Afterglow']]);
+  const songs = await hf.api('GET', `/api/library/${libs.music.id}?view=songs`);
+  assert.equal(songs.total, 5);
+  const alac = songs.items.find((t) => t.codec === 'alac');
+  assert.equal(alac.title, 'Field Recording');
+  const mp3 = await fetch(`${hf.base}/api/audio/${alac.id}?at=1`, { headers: { Cookie: hf.getCookie() } });
+  const bytes = Buffer.from(await mp3.arrayBuffer());
+  assert.equal(mp3.headers.get('content-type'), 'audio/mpeg');
+  assert.ok(bytes.length > 4000 && (bytes[0] === 0xff || bytes.toString('latin1', 0, 3) === 'ID3'));
+  assert.equal((await fetch(`${hf.base}/api/file/${nova.tracks[0].id}`, { headers: { Cookie: hf.getCookie(), Range: 'bytes=0-9' } })).status, 206);
+  const found = await hf.api('GET', '/api/search?q=nova');
+  assert.deepEqual(found.items.map((x) => x.kind).sort(), ['album', 'artist']);
+  home = await hf.api('GET', '/api/home');
+  assert.equal(home.rows.find((r) => r.id === `recent-${libs.music.id}`).shape, 'square');
+
+  // A file that disappears takes its album and artist with it.
+  fs.rmSync(path.join(media, 'Music', 'Loose'), { recursive: true });
+  await hf.api('POST', '/api/studio/scan', { libraryId: libs.music.id }); await hf.scan.idle();
+  assert.deepEqual((await hf.api('GET', `/api/library/${libs.music.id}?view=artists`)).items.map((a) => a.title), ['Nova Lines', 'Quartet']);
+  for (const lb of Object.values(libs)) await hf.api('DELETE', `/api/studio/libraries/${lb.id}`);
 });
 
 test('app download links point at the latest builds', async () => {

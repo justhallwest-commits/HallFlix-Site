@@ -3,7 +3,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 const DIR = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
 function scope() {
-  const top = document.querySelector('.confirm, .surprise'); // dialogs above everything else
+  const top = document.querySelector('.confirm, .surprise, #nowplaying:not([hidden]), #reader:not([hidden])'); // layers above everything else
   if (top) return top;
   const player = document.getElementById('player');
   if (player && !player.hidden) return player;
@@ -16,7 +16,8 @@ const visible = (el) => { const r = el.getBoundingClientRect(); return r.width >
 export function move(key) {
   const [dx, dy] = DIR[key];
   const root = scope();
-  const all = [...root.querySelectorAll(FOCUSABLE)].filter(visible);
+  const bar = root.id === 'app' || root.id === 'overlay' ? [...document.querySelectorAll(`#nowbar:not([hidden]) :is(${FOCUSABLE})`)] : [];
+  const all = [...root.querySelectorAll(FOCUSABLE), ...bar].filter(visible);
   if (!all.length) return false;
   const from = document.activeElement && root.contains(document.activeElement) ? document.activeElement : null;
   if (!from) { (all.find((el) => el.matches('.btn.primary, .card')) || all[0]).focus(); return true; }

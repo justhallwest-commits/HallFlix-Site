@@ -2,6 +2,7 @@
 import { $, $$, api, html, raw, esc, icons, state, applyLook, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, themeNow } from './core.js';
 import * as browse from './browse.js';
 import * as feel from './feel.js';
+import * as media from './media.js';
 
 export const extraRows = []; // rows added by plugins through HallFlix.addHomeRow()
 const app = () => $('#app');
@@ -17,7 +18,28 @@ const metaLine = (it, extra = []) => html`<div class="meta">
   ${it.rating ? html`<span class="tag">${it.rating}</span>` : ''}${it.kind === 'movie' && it.runtime ? html`<span>${fmtRuntime(it.runtime)}</span>` : ''}
   ${extra.map((x) => html`<span>${x}</span>`)}${(it.genres || []).slice(0, 3).map((g) => html`<span>${g}</span>`)}</div>`;
 
-export function cardHtml(it, { wide = false } = {}) {
+export const NOUN = { movies: ['movie', 'movies'], shows: ['show', 'shows'], books: ['book', 'books'], comics: ['series', 'series'], music: ['album', 'albums'] };
+const plural = (n, [one, many]) => `${n} ${n === 1 ? one : many}`;
+const SHELF = new Set(['book', 'comic', 'series', 'album', 'artist']);
+
+/** Cards for books, comics, albums and artists: their own shapes and lines under the title. */
+function shelfCard(it, read = false) {
+  const square = it.kind === 'album' || it.kind === 'artist';
+  const reading = (it.kind === 'book' || it.kind === 'comic') && it.progress && !it.progress.watched;
+  const pct = reading && it.progress.duration ? Math.min(100, (it.progress.position / it.progress.duration) * 100) : 0;
+  const sub = it.kind === 'series' ? plural(it.count || 0, ['issue', 'issues']) : it.kind === 'artist' ? plural(it.count || 0, ['album', 'albums'])
+    : it.kind === 'album' ? [it.author, it.year].filter(Boolean).join(' · ') : it.kind === 'comic' && it.number != null ? `#${it.number}` : it.author || it.year || '';
+  const href = reading && read ? `#/read/${it.id}` : `#/title/${it.id}`; // only Continue reading jumps straight into the book
+  return html`<a class="card ${square ? 'square' : 'book'} k-${it.kind}" href="${href}" data-id="${it.id}" title="${it.title}">
+    <div class="art"><div class="fallback">${it.title}${it.author && it.kind !== 'album' ? html`<small>${it.author}</small>` : ''}</div>
+      ${it.poster ? html`<img loading="lazy" decoding="async" src="${it.poster}" alt="" onload="this.classList.add('in')" onerror="this.remove()">` : ''}
+      ${it.kind === 'album' ? html`<button class="playdot" data-playalbum="${it.id}" aria-label="Play ${it.title}" tabindex="-1"><span>${icons.play}</span></button>` : ''}
+      <div class="label">${it.title}<small>${sub}</small></div>
+      ${pct ? html`<div class="bar"><i style="width:${pct}%"></i></div>` : ''}${it.progress?.watched ? html`<div class="seen">✓</div>` : ''}</div></a>`;
+}
+
+export function cardHtml(it, { wide = false, read = false } = {}) {
+  if (SHELF.has(it.kind)) return shelfCard(it, read);
   const ep = it.kind === 'episode';
   const art = wide || ep ? it.backdrop || it.poster : it.poster;
   const pct = it.progress && !it.progress.watched && it.progress.duration ? Math.min(100, (it.progress.position / it.progress.duration) * 100) : 0;
@@ -32,10 +54,10 @@ export function cardHtml(it, { wide = false } = {}) {
       ${pct ? html`<div class="bar"><i style="width:${pct}%"></i></div>` : ''}${it.progress?.watched ? html`<div class="seen">✓</div>` : ''}</div></a>`;
 }
 
-const rowHtml = (r) => html`<section class="row ${r.shape === 'wide' ? 'keep' : ''}" data-row="${r.id}">
+const rowHtml = (r) => html`<section class="row ${r.shape === 'wide' ? 'keep' : ''} ${r.shape === 'square' ? 'squares' : ''}" data-row="${r.id}">
   <h2>${r.title}${r.library ? html`<a href="#/library/${r.library}">See all ›</a>` : ''}</h2>
   <button class="arrow l" hidden aria-label="Scroll left" tabindex="-1">‹</button>
-  <div class="scroller">${r.items.map((it) => cardHtml(it, { wide: r.shape === 'wide' }))}</div>
+  <div class="scroller">${r.items.map((it) => cardHtml(it, { wide: r.shape === 'wide', read: r.id === 'reading' }))}</div>
   <button class="arrow r" aria-label="Scroll right" tabindex="-1">›</button></section>`;
 
 const isVid = (u) => /\.(mp4|webm|m4v|mov)(\?|$)/i.test(u || '');
@@ -45,7 +67,8 @@ function tilesHtml(list) {
     const lk = libraryLook(l.id);
     const bg = lk.background && !isVid(lk.background) ? lk.background : l.backdrop;
     const style = [bg ? `--tile-bg:url("${String(bg).replace(/"/g, '%22')}")` : '', lk.accent ? `--tile-accent:${lk.accent}` : ''].filter(Boolean).join(';');
-    const noun = l.kind === 'movies' ? (l.count === 1 ? 'movie' : 'movies') : l.count === 1 ? 'show' : 'shows';
+    const [one, many] = NOUN[l.kind] || ['title', 'titles'];
+    const noun = l.count === 1 ? one : many;
     return html`<a class="lib-tile" href="#/library/${l.id}" style="${style}" aria-label="${l.name}, ${l.count} ${noun}">
       <span class="tile-art"></span>
       ${l.posters.length ? html`<span class="tile-stack">${l.posters.map((p, i) => html`<img src="${p}" alt="" loading="lazy" style="--i:${i}">`)}</span>` : ''}
@@ -131,6 +154,8 @@ async function onClick(e) {
   }
   const chip = t.closest('.chip');
   if (chip) { base.genre = chip.dataset.genre || ''; loadLibrary(true); return; }
+  const pa = t.closest('[data-playalbum]');
+  if (pa) { e.preventDefault(); e.stopPropagation(); media.playAlbum(+pa.dataset.playalbum); return; }
   if (t.closest('[data-surprise]')) { browse.surprise(base?.mood ? { mood: base.mood } : {}); return; }
   if (t.closest('[data-mic]')) { browse.listen($('.search input')); return; }
   if (t.closest('[data-dismiss]')) { const a = t.closest('.announce'); try { sessionStorage.setItem('hf_ann', a.textContent); } catch { /* fine */ } a.remove(); return; }
@@ -230,10 +255,14 @@ async function library(id) {
   setNav(`library-${id}`); applyLook(state.look, id);
   const lib = state.libraries.find((l) => l.id === id);
   const lk = libraryLook(id);
+  if (lib?.kind === 'music') return media.musicLibrary(view(), lib, lk, base);
+  const sorts = lib?.kind === 'books' ? [['title', 'A to Z'], ['author', 'Author'], ['added', 'Recently added'], ['year', 'Newest first']]
+    : lib?.kind === 'comics' ? [['title', 'A to Z'], ['added', 'Recently updated'], ['year', 'Newest first']]
+      : [['title', 'A to Z'], ['added', 'Recently added'], ['year', 'Newest first'], ['score', 'Top rated']];
   view().innerHTML = String(html`<div class="page"><div class="lib-head">
       ${lk.logo ? html`<img class="lib-logo" src="${lk.logo}" alt="${lib?.name || ''}">` : html`<h1>${lib?.name || 'Library'}</h1>`}
       <span class="count"></span>
-      <select data-sort aria-label="Sort"><option value="title">A to Z</option><option value="added">Recently added</option><option value="year">Newest first</option><option value="score">Top rated</option></select>
+      <select data-sort aria-label="Sort">${sorts.map(([v, n]) => html`<option value="${v}">${n}</option>`)}</select>
     </div><div class="chips"></div><div class="grid"></div><div class="sentinel" style="height:1px"></div></div>`);
   $('[data-sort]').value = base.sort;
   await loadLibrary(true);
@@ -251,7 +280,7 @@ async function loadLibrary(reset) {
     if (!grid) return;
     if (reset) {
       grid.innerHTML = '';
-      $('.count').textContent = `${d.total} ${d.library.kind === 'movies' ? (d.total === 1 ? 'movie' : 'movies') : d.total === 1 ? 'show' : 'shows'}`;
+      $('.count').textContent = plural(d.total, NOUN[d.library.kind] || ['title', 'titles']);
       $('.chips').innerHTML = String(html`<button class="chip ${base.genre ? '' : 'on'}" data-genre="">All</button>${d.genres.map((g) => html`<button class="chip ${base.genre === g ? 'on' : ''}" data-genre="${g}">${g}</button>`)}`);
       if (!d.total) grid.outerHTML = '<div class="empty grid"><p>Nothing here yet. If you just added this library, the first scan may still be running.</p></div>';
     }
@@ -285,6 +314,7 @@ export async function title(id) {
   const o = $('#overlay');
   let d;
   try { d = await api('GET', `/api/items/${id}`); } catch (e) { toast(e.message); history.back(); return; }
+  if (SHELF.has(d.kind)) { media.sheet(o, d, id); feel.grow($('.sheet', o)); feel.tint($('.sheet', o), d.poster); return; }
   const resume = d.kind === 'movie' ? d.progress : d.playProgress;
   const resuming = resume && !resume.watched && resume.position > 20;
   const playText = d.kind === 'show' ? `${resuming ? 'Resume' : 'Play'} ${d.playLabel || ''}` : resuming ? 'Resume' : 'Play';

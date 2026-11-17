@@ -5,6 +5,8 @@ import { openPlayer, closePlayer, playerOpen } from './player.js';
 import { initNav } from './nav.js';
 import { effects, startEffect } from './effects.js';
 import { initFeel } from './feel.js';
+import { openReader, closeReader, readerOpen } from './reader.js';
+import { initMusic } from './music.js';
 
 // What plugins can use. See docs/PLUGINS.md.
 window.HallFlix = {
@@ -33,6 +35,8 @@ async function route() {
     await openPlayer(+parts[1], { start });
     return;
   }
+  if (parts[0] === 'read' && +parts[1]) { views.closeTitle(); if (playerOpen()) closePlayer(); views.markStale(); await openReader(+parts[1]); return; }
+  if (readerOpen()) closeReader();
   if (parts[0] === 'party' && parts[1]) {
     views.closeTitle();
     try { const k = await api('GET', `/api/party/${encodeURIComponent(parts[1])}`); await openPlayer(k.itemId, { party: k.code, start: 0 }); }
@@ -59,7 +63,7 @@ function loadPlugins(list) {
 async function boot() {
   const params = new URLSearchParams(location.search);
   if (/AFT|Android TV|GoogleTV|BRAVIA|SmartTV|Tizen|Web0S/i.test(navigator.userAgent) || params.has('tv')) document.body.classList.add('tv');
-  initNav(); initFeel();
+  initNav(); initFeel(); initMusic();
   let b;
   try { b = await api('GET', '/api/boot'); }
   catch (e) { $('#app').innerHTML = `<div class="login"><div class="box"><h1>HallFlix is starting…</h1><p style="color:var(--muted)">The server is not answering yet. This page will retry.</p></div></div>`; setTimeout(boot, 4000); return; }
@@ -91,7 +95,7 @@ async function boot() {
 }
 
 addEventListener('keydown', (e) => {
-  if (e.defaultPrevented || playerOpen()) return;
+  if (e.defaultPrevented || playerOpen() || readerOpen()) return;
   if (e.key === 'Escape' && $('#overlay').childElementCount) { e.preventDefault(); history.back(); }
   if (e.key === '/' && !e.target.matches('input')) { e.preventDefault(); $('.search input')?.focus(); }
 });

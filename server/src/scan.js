@@ -5,6 +5,7 @@ import { q, q1 } from './db.js';
 import { probe } from './probe.js';
 import * as names from './names.js';
 import * as tmdb from './tmdb.js';
+import { scanBooks, scanComics, scanMusic } from './shelf.js';
 
 export const status = { running: false, library: null, phase: '', done: 0, total: 0, errors: [], finishedAt: null };
 const queue = [];
@@ -27,6 +28,9 @@ async function drain() {
     try {
       if (lib.kind === 'movies') await scanMovies(lib);
       else if (lib.kind === 'shows') await scanShows(lib);
+      else if (lib.kind === 'books') await scanBooks(lib);
+      else if (lib.kind === 'comics') await scanComics(lib);
+      else if (lib.kind === 'music') await scanMusic(lib);
       else await scanClips(lib);
     } catch (e) {
       console.error('[scan]', e);
@@ -51,12 +55,12 @@ async function walk(dir, out = []) {
 }
 
 /** Paths an admin hid. A hidden folder hides everything inside it. */
-async function hiddenFor(lib) {
+export async function hiddenFor(lib) {
   const set = new Set((await q('select path from hidden where library_id=$1', [lib.id])).map((r) => r.path));
   return (p) => { if (!set.size) return false; for (let x = p; ; x = path.dirname(x)) { if (set.has(x)) return true; if (x === path.dirname(x) || x === lib.path) return false; } };
 }
 
-async function pool(list, n, fn) {
+export async function pool(list, n, fn) {
   let i = 0;
   await Promise.all(Array.from({ length: Math.min(n, list.length) }, async () => {
     while (i < list.length) {
@@ -144,7 +148,7 @@ async function scanMovies(lib) {
 }
 
 // A library folder that is missing or unreadable (NAS volume not mounted) must not wipe the library.
-async function rootMissing(dir) {
+export async function rootMissing(dir) {
   try { await fs.promises.readdir(dir); return false; } catch { return true; }
 }
 

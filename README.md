@@ -6,6 +6,7 @@ A self-hosted media service with its own server, web app and design Studio. It r
 - **Pre-rolls:** rules decide which clips play before which titles, the same on every device.
 - **The Studio** (`/studio`): themes with live preview, a background and logo per library, seasons that switch on by date,
   pre-roll rules, profiles and plugins.
+- **Books, comics and music:** an EPUB and PDF reader, a comic reader with two-page spreads and manga order, and a music player that keeps playing while you browse.
 - **Ways to browse:** a mood dial, Surprise Me, a timeline by decade, hand-made collections, voice search and a year in review.
 - **Cinema touches:** a logo ident before the feature, scrub previews, skip intro, ambient glow and watch parties.
 - **Plugins:** add themes, styles and features from a zip. See [docs/PLUGINS.md](docs/PLUGINS.md).
