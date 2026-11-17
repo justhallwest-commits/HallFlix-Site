@@ -100,6 +100,8 @@ export function fakeTmdb({ generic = false, art = false } = {}) {
     let m = /^\/3\/(movie|tv)\/(\d+)\/images$/.exec(p);
     if (m) return send({ posters: [{ file_path: '/alt-poster-a.jpg', width: 1000, height: 1500, vote_average: 5.2, vote_count: 3, iso_639_1: 'en' }, { file_path: '/alt-poster-b.jpg', width: 2000, height: 3000, vote_average: 6.1, vote_count: 9, iso_639_1: 'en' }],
       backdrops: [{ file_path: '/alt-back-a.jpg', width: 1920, height: 1080, vote_average: 5.8, vote_count: 4, iso_639_1: null }], logos: [{ file_path: '/alt-logo.png', width: 800, height: 310, vote_average: 5, vote_count: 1, iso_639_1: 'en' }] });
+    m = /^\/3\/(movie|tv)\/(\d+)\/external_ids$/.exec(p);
+    if (m) return send({ id: +m[2], imdb_id: `tt${m[2].padStart(7, '0')}` });
     m = /^\/3\/movie\/(\d+)$/.exec(p);
     if (m) return movies[m[1]] || made[m[1]] ? send(movies[m[1]] || made[m[1]]) : send({}, 404);
     if (p === '/3/search/tv') return send({ results: url.searchParams.get('query') === 'Harbor Lights' ? [{ id: 55, name: 'Harbor Lights', first_air_date: '2018-09-01' }] : [] });

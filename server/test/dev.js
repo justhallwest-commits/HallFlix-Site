@@ -91,4 +91,22 @@ for (const [name, kind] of [['Movies', 'movies'], ['Shows', 'shows'], ['Books', 
 await hf.scan.idle();
 await hf.api('POST', '/api/studio/profiles', { name: 'Guest', password: '4321' });
 await hf.api('POST', '/api/studio/prerolls/rules', { name: 'HallFlix ident', clips: { mode: 'all' } });
+// Stand-ins for MDBList and OpenSubtitles, so the preview shows ratings from several sources and online subtitles.
+const http = await import('node:http');
+const svc = http.createServer((req, res) => {
+  const u = new URL(req.url, 'http://x');
+  const send = (body, type = 'application/json') => { res.writeHead(200, { 'Content-Type': type }); res.end(typeof body === 'string' ? body : JSON.stringify(body)); };
+  const m = /^\/mdb\/tmdb\/(movie|show)\/(\d+)$/.exec(u.pathname);
+  if (m) { const n = +m[2]; return send({ ids: { imdb: `tt${String(n).padStart(7, '0')}` }, ratings: [{ source: 'imdb', value: 5.8 + (n % 35) / 10, votes: 1000 * (n % 900) }, { source: 'tomatoes', value: 40 + (n * 7) % 60 },
+    { source: 'popcorn', value: 50 + (n * 3) % 50 }, { source: 'metacritic', value: 35 + (n * 5) % 60 }, { source: 'letterboxd', value: 2.6 + (n % 22) / 10 }, { source: 'trakt', value: 55 + (n % 40) }] }); }
+  if (u.pathname === '/os/subtitles') return send({ data: ['en', 'en', 'es', 'fr'].map((l, i) => ({ attributes: { language: l, release: ['Web.1080p.NTb', 'BluRay.720p.GRP', 'WEB-DL.SPANISH', 'FRENCH.HDTV'][i], download_count: [4200, 950, 300, 120][i], hearing_impaired: i === 1, files: [{ file_id: i + 1 }] } })) });
+  if (u.pathname === '/os/download') return send({ link: `http://127.0.0.1:${svc.address().port}/os/file.srt` });
+  if (u.pathname === '/os/file.srt') return send('1\n00:00:01,000 --> 00:00:06,000\nThe signal is getting stronger.\n\n2\n00:00:07,000 --> 00:00:12,000\nHold the line.\n', 'text/plain');
+  res.writeHead(404); res.end('{}');
+});
+await new Promise((ok) => svc.listen(0, '127.0.0.1', ok));
+Object.assign(hf.cfg, { mdblistBase: `http://127.0.0.1:${svc.address().port}/mdb`, opensubsBase: `http://127.0.0.1:${svc.address().port}/os`, ratingsDelayMs: 30 });
+await hf.api('PUT', '/api/studio/ratings', { providers: [{ id: 'tmdb' }, { id: 'omdb' }, { id: 'mdblist', apiKey: 'dev' }], autoFetch: true, badge: 'auto' });
+await hf.api('PUT', '/api/studio/subtitles', { providers: [{ id: 'opensubtitles', apiKey: 'dev' }, { id: 'subdl' }], languages: ['en', 'es'] });
+await hf.api('POST', '/api/studio/ratings/refresh', {});
 console.log(`READY ${hf.base}  errors=${JSON.stringify(hf.scan.status.errors)}`);

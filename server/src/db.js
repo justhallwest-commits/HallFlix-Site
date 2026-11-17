@@ -92,6 +92,12 @@ const MIGRATIONS = [
      played_at timestamptz not null default now());
    create index plays_profile on plays (profile_id, played_at desc);
    create index plays_item on plays (item_id);`,
+  // 8: ratings from outside services (IMDb, Rotten Tomatoes…), and subtitles downloaded from subtitle services.
+  `create table ratings (item_id bigint primary key references items on delete cascade, data jsonb not null default '[]', imdb_id text,
+     missing boolean not null default false, fetched_at timestamptz not null default now());
+   create table subtitles (id serial primary key, item_id bigint not null references items on delete cascade, lang text, label text not null,
+     provider text, file text not null, hi boolean not null default false, created_at timestamptz not null default now());
+   create index subtitles_item on subtitles (item_id);`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {

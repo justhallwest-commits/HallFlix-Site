@@ -12,6 +12,15 @@ A self-hosted media service with its own server, web app and design Studio. It r
   - **Metadata:** find titles across every library and edit many at once, with a preview, locks that survive rescans, a genre/tag/studio
     manager, CSV export and import, and undo.
   - **Parental controls:** rule sets that hide titles from chosen profiles by tag, genre or rating, enforced by the server in every app.
+- **Movies and shows:** each library opens on **For you** (a spotlight, Continue watching, new, a Top 10, unwatched picks, under 100
+  minutes, decades and genres) or **Browse all** (watched / unwatched / in progress, decade, age rating, A–Z jump, sorts by date, rating and
+  length, and three card sizes). Title pages show 4K/HDR/5.1/CC badges, time left on the Play button, the cast, and tabs for Episodes (season
+  pills, Up next, air dates, mark a season watched), More like this and Details (release, studio, languages, picture and sound, links out).
+  - **Ratings:** IMDb, Rotten Tomatoes and its Popcornmeter, Metacritic, Letterboxd, Trakt and TMDb on each title, and a badge on cards. TMDb is
+    built in; OMDb and MDBList take a free key; any JSON ratings API can be added in **Studio → Ratings**, and plugins can add services.
+  - **Subtitles:** "Find subtitles online" in the player searches OpenSubtitles, SubDL, your own JSON services and plugin services, ranked by your
+    languages and how well each fits the exact file; HallFlix can also fetch them by itself. Subtitle size, look (outline, dark box, yellow) and
+    timing can be changed while watching, and the language you pick is remembered.
 - **Music:** a Listen now page (quick tiles, jump back in, new albums, your top songs, genre mixes, artists, rediscover), song,
   artist and genre radio, Liked songs, a queue you can reorder (play next, add to queue, drag to move), volume and a sleep timer.
   Now Playing takes its colours from the album art and has time-synced lyrics that sweep across each line (word by word with

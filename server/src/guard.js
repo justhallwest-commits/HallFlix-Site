@@ -100,7 +100,7 @@ export function scrub(value, hidden) {
 }
 
 // Routes whose :id (or :item) is an item. Anything else with an id (playlists, collections, parties) is not.
-const ITEM_ROUTE = /^\/api\/(items|file|subs|cover|read|audio|chapters|lyrics|thumbs|bookmarks)\//;
+const ITEM_ROUTE = /^\/api\/(items|file|subs|subtitles|ratings|cover|read|audio|chapters|lyrics|thumbs|bookmarks)\//;
 const BODY_ROUTE = /^\/api\/(play|play\/session|progress|mylist|watched|party|bookmarks\/\d+)$/;
 export function blocked(pathname, params, body, hidden) {
   if (!hidden?.size) return false;

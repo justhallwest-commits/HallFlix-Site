@@ -115,6 +115,62 @@ HallFlix.addLyricsProvider({
 `synced` can also be a list of `{ t, text }` (seconds). Enhanced LRC with a timestamp before each word
 (`[00:12.00]<00:12.00>Hold <00:12.40>on`) lights up word by word.
 
+## Ratings services
+
+A plugin can add places to get ratings from. They appear in **Studio → Ratings** with the built-in ones (TMDb, OMDb,
+MDBList) and are asked in the order set there; for each kind of rating (IMDb, Rotten Tomatoes, Letterboxd…) the first
+service that has it wins. What's found is kept for two weeks.
+
+```json
+"contributes": {
+  "ratings": [{
+    "name": "My ratings",
+    "url": "https://ratings.example.com/title/{imdb}",
+    "list": "ratings",
+    "source": "name",
+    "value": "score"
+  }]
+}
+```
+
+| Key | What it is |
+| --- | --- |
+| `url` | The address to ask. `{imdb}` (tt1234567), `{tmdb}`, `{type}` (`movie` or `tv`), `{kind}` (`movie` or `show`), `{title}` and `{year}` are filled in. |
+| `list` | Where a list of ratings sits in the JSON answer. Each needs a name and a score. |
+| `source`, `value` | In each list entry: the field with the name (`IMDb`, `Rotten Tomatoes`, `Metacritic`, `Letterboxd`, `Trakt`… are recognised) and the score (`7.7`, `83%`, `67/100`). |
+| `votes`, `link` | Optional: fields with the number of votes and a link to the page. |
+| `value`, `label`, `max` | For a service that gives one score: leave `list` empty, point `value` at the score, give it a `label` and the best possible score in `max` (`10`, `5`, `100`). |
+| `headers` | Optional: extra request headers, such as an API key. |
+
+## Subtitle services
+
+A plugin can add places to search for subtitles. They appear in **Studio → Subtitles** with OpenSubtitles and SubDL,
+are searched from the player's "Find subtitles online", and can be used when HallFlix fetches subtitles by itself.
+
+```json
+"contributes": {
+  "subtitles": [{
+    "name": "My subtitles",
+    "url": "https://subs.example.com/search?tmdb={tmdb}&s={season}&e={episode}&lang={lang}",
+    "list": "results",
+    "download": "file_url",
+    "language": "lang",
+    "release": "release_name"
+  }]
+}
+```
+
+| Key | What it is |
+| --- | --- |
+| `url` | The search address. `{tmdb}`, `{imdb}`, `{type}` (`movie` or `tv`), `{kind}` (`movie` or `episode`), `{title}`, `{year}`, `{season}`, `{episode}`, `{lang}` (like `en,es`), `{query}` and `{file}` (the video's file name) are filled in. For an episode, `{tmdb}` and `{imdb}` are the show's. |
+| `list` | Where the list of results sits (empty if the answer is the list). |
+| `download` | In each result: the field with the download address. It can be an `.srt`, `.ass` or `.vtt` file, or a `.zip` of them (for a season pack, the file named with the episode is picked). |
+| `language`, `release` | In each result: the language code (`en`, `pt-br`) and the release name, used to rank the results against the video file. |
+| `hi`, `downloads` | Optional: whether it is for deaf and hard of hearing viewers, and how many times it was downloaded. |
+| `headers` | Optional: extra request headers, such as an API key. |
+
+Files come back in whatever encoding they were made in (UTF-8, UTF-16, Windows-1252) and are converted to UTF-8.
+
 ### Music
 
 `HallFlix.music` has `play(tracks, index, { source })`, `playNext(tracks)`, `addToQueue(tracks)`,

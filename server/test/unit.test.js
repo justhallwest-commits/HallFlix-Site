@@ -162,3 +162,37 @@ test('looks: tile covers default to the bottom right, and a library can change o
   assert.deepEqual(out.theme.tileCovers, { show: 'yes', place: 'br', size: 48, count: 3, style: 'angled', x: 0, y: 0 });
   assert.deepEqual(out.libraries[3].tileCovers, { place: 'tr' }, 'empty choices mean "same as the whole app"');
 });
+
+test('ratings: reading scores from services', async () => {
+  const { parseValue, display, sourceKey } = await import('../src/ratings.js');
+  assert.deepEqual(parseValue('7.7/10'), { value: 7.7, max: 10 });
+  assert.deepEqual(parseValue('83%'), { value: 83, max: 100 });
+  assert.deepEqual(parseValue('67/100'), { value: 67, max: 100 });
+  assert.deepEqual(parseValue('1,234', 100), { value: 1234, max: 100 });
+  assert.equal(parseValue('N/A'), null);
+  assert.equal(parseValue(''), null);
+  assert.equal(display('rt', 83, 100), '83%');
+  assert.equal(display('metacritic', 67, 100), '67');
+  assert.equal(display('imdb', 7, 10), '7.0');
+  assert.equal(display('rogerebert', 3.5, 4), '3.5/4');
+  assert.equal(sourceKey('Internet Movie Database'), 'imdb');
+  assert.equal(sourceKey('Rotten Tomatoes'), 'rt');
+  assert.equal(sourceKey('popcorn'), 'rtAudience');
+  assert.equal(sourceKey('Douban'), null);
+});
+
+test('subtitles: encodings, season zips and language codes', async () => {
+  const { decode, pickFile, lang2, langName } = await import('../src/subtitles.js');
+  const { zip } = await import('./helpers.js');
+  assert.equal(decode(Buffer.from('Caf\xe9', 'latin1')), 'Café');
+  assert.equal(decode(Buffer.from('﻿Hi', 'utf8')), 'Hi');
+  assert.equal(decode(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('Olá', 'utf16le')])), 'Olá');
+  assert.equal(decode(Buffer.from('Ünïcödé', 'utf8')), 'Ünïcödé');
+  const season = zip({ 'Show.S02E09.srt': 'nine', 'Show.S02E10.srt': 'ten', 'Show.S02E10.ass': 'ten-ass', 'readme.txt': 'x' });
+  assert.equal(pickFile(season, { ep: true, season_no: 2, episode_no: 10 }).data.toString(), 'ten', '.srt preferred, and E10 is not E1');
+  assert.equal(pickFile(season, { ep: true, season_no: 2, episode_no: 9 }).data.toString(), 'nine');
+  assert.throws(() => pickFile(season, { ep: true, season_no: 2, episode_no: 3 }), /whole season/);
+  assert.equal(pickFile(zip({ 'Movie.srt': 'm' }), { ep: false }).data.toString(), 'm');
+  assert.equal(pickFile(Buffer.from('1\n00:00:01,000 --> 00:00:02,000\nx'), {}).name, 'subtitle.srt');
+  assert.equal(lang2('eng'), 'en'); assert.equal(lang2('pt_BR'), 'pt-br'); assert.equal(langName('ger'), 'German');
+});

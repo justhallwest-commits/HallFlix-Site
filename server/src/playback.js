@@ -10,6 +10,7 @@ import { HttpError, readJson, sendFile, json } from './http.js';
 import { run } from './probe.js';
 import { card, img } from './catalog.js';
 import * as prerolls from './prerolls.js';
+import * as subtitles from './subtitles.js';
 
 const DEFAULT_CAPS = { containers: ['mp4'], video: ['h264'], video10: [], audio: ['aac', 'mp3'], hlsHevc: false, audioSwitch: false, maxHeight: 0 };
 const HLS_AUDIO_COPY = ['aac', 'mp3', 'ac3', 'eac3'];
@@ -67,7 +68,7 @@ async function sidecarSubs(file) {
   return entries.filter((e) => e.startsWith(base + '.') && /\.(srt|vtt|ass|ssa)$/i.test(e)).sort().map((e) => {
     const mid = e.slice(base.length + 1).replace(/\.(srt|vtt|ass|ssa)$/i, '');
     const lang = mid.split('.').find((p) => LANG[p.toLowerCase()]) || null;
-    return { file: path.join(dir, e), lang, forced: /forced/i.test(mid) };
+    return { file: path.join(dir, e), lang, forced: /forced/i.test(mid), sdh: /(^|\.)(sdh|hi|cc)(\.|$)/i.test(mid) };
   });
 }
 
@@ -78,7 +79,8 @@ async function tracks(item) {
     lang: a.lang, default: a.default }));
   const subs = st.filter((s) => s.type === 'sub').map((s, i) => ({ s, i })).filter((x) => x.s.text).map(({ s, i }) => ({
     id: `e${i}`, label: s.title || langName(s.lang) + (s.forced ? ' (forced)' : ''), lang: s.lang, url: `/api/subs/${item.id}/e${i}` }));
-  (await sidecarSubs(item.path)).forEach((x, i) => subs.push({ id: `x${i}`, label: langName(x.lang) + (x.forced ? ' (forced)' : ''), lang: x.lang, url: `/api/subs/${item.id}/x${i}` }));
+  (await sidecarSubs(item.path)).forEach((x, i) => subs.push({ id: `x${i}`, label: langName(x.lang) + (x.sdh ? ' (SDH)' : '') + (x.forced ? ' (forced)' : ''), lang: x.lang, url: `/api/subs/${item.id}/x${i}` }));
+  subs.push(...await subtitles.downloaded(item.id)); // found with a subtitle service
   return { audio, subs };
 }
 
@@ -189,10 +191,14 @@ export function routes(r) {
   // Text subtitles as WebVTT, converted once and kept.
   r.get('/api/subs/:id/:track', async ({ req, res, params }) => {
     const item = await q1('select id, path, mtime, streams from items where id=$1', [params.id]);
-    const m = /^([ex])(\d+)$/.exec(params.track);
+    const m = /^([exd])(\d+)$/.exec(params.track);
     if (!item?.path || !m) throw new HttpError(404, 'Not found');
     const dir = path.join(cfg.dataDir, 'cache', 'subs');
-    const out = path.join(dir, `${item.id}-${item.mtime}-${params.track}.vtt`);
+    // Files beside the video are named in the cache by file name, since saving a new one shifts the numbers.
+    const side = m[1] === 'x' ? (await sidecarSubs(item.path))[+m[2]] : null;
+    if (m[1] === 'x' && !side) throw new HttpError(404, 'Not found');
+    const tag = side ? Buffer.from(path.basename(side.file)).toString('base64url').slice(-40) : params.track;
+    const out = path.join(dir, `${item.id}-${item.mtime}-${tag}.vtt`);
     if (!fs.existsSync(out)) {
       await fs.promises.mkdir(dir, { recursive: true });
       const tmp = `${out}.${process.pid}.tmp.vtt`;
@@ -201,9 +207,11 @@ export function routes(r) {
         const s = subs[+m[2]];
         if (!s?.text) throw new HttpError(404, 'Not found');
         await run(cfg.ffmpeg, ['-v', 'error', '-nostdin', '-y', '-i', item.path, '-map', `0:${s.index}`, '-f', 'webvtt', tmp], { timeout: 180e3 });
+      } else if (m[1] === 'd') {
+        const file = await subtitles.downloadedFile(item.id, +m[2]);
+        if (!file) throw new HttpError(404, 'Not found');
+        await run(cfg.ffmpeg, ['-v', 'error', '-nostdin', '-y', '-i', file, '-f', 'webvtt', tmp], { timeout: 60e3 });
       } else {
-        const side = (await sidecarSubs(item.path))[+m[2]];
-        if (!side) throw new HttpError(404, 'Not found');
         await run(cfg.ffmpeg, ['-v', 'error', '-nostdin', '-y', '-i', side.file, '-f', 'webvtt', tmp], { timeout: 60e3 });
       }
       await fs.promises.rename(tmp, out);

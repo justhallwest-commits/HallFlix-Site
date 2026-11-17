@@ -25,6 +25,9 @@ import * as archive from './archive.js';
 import * as profilesMod from './profiles.js';
 import * as lyricsMod from './lyrics.js';
 import * as musicMod from './music.js';
+import * as ratingsMod from './ratings.js';
+import * as videosMod from './videos.js';
+import * as subtitlesMod from './subtitles.js';
 import { IMAGE_EXT } from './names.js';
 
 const open = { auth: false };
@@ -39,6 +42,7 @@ r.get('/api/boot', async (ctx) => {
     version: cfg.version, setup, look: lk, plugins: setup ? [] : await plugins.clientPlugins(),
     profile: profile ? auth.publicProfile(profile) : null,
   };
+  if (profile) out.media = { ratings: await ratingsMod.clientSettings(), subtitles: await subtitlesMod.clientSettings() };
   if (profile) out.libraries = await q(`select id, name, kind from libraries where kind <> 'prerolls' order by position, id`);
   else if (!setup && (await getSetting('showProfilesOnLogin', true))) {
     out.profiles = (await q('select id, name, avatar, color from profiles order by id'));
@@ -94,6 +98,9 @@ art.routes(r);
 prerollsMod.routes(r);
 profilesMod.routes(r);
 lyricsMod.routes(r);
+ratingsMod.routes(r);
+videosMod.routes(r);
+subtitlesMod.routes(r);
 musicMod.routes(r);
 
 // TMDb artwork, fetched once and then served from the NAS.
