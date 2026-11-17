@@ -53,6 +53,9 @@ class PlayerActivity : Activity() {
     private var retries = 0
     private var finished = false
     private var nextUp: Runnable? = null
+    private val remoteIo = Executors.newSingleThreadExecutor()
+    private val deviceId = java.util.UUID.randomUUID().toString().take(12)
+    private val deviceName = if (android.os.Build.MODEL.startsWith("AFT")) "Fire TV" else android.os.Build.MODEL
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,6 +86,7 @@ class PlayerActivity : Activity() {
         start(intent.getLongExtra("itemId", 0), intent.getDoubleExtra("start", -1.0).takeIf { it >= 0 }, prerolls = true)
         ui.postDelayed(tick, 10_000)
         ui.postDelayed(introWatch, 1000)
+        ui.postDelayed(remote, 2000)
     }
 
     private fun current(): Entry? = entries.getOrNull(exo.currentMediaItemIndex)
@@ -266,6 +270,42 @@ class PlayerActivity : Activity() {
         }
     }
 
+    /** The phone remote: say what is playing every two seconds and do what the phone asked. */
+    private val remote = object : Runnable {
+        override fun run() {
+            val e = current()
+            if (e != null && e.main && exo.playbackState != Player.STATE_IDLE && !finished) {
+                val dur = if (e.duration > 0) e.duration else e.offset + exo.duration.coerceAtLeast(0) / 1000.0
+                val next = e.json.optJSONObject("next")
+                val body = JSONObject().put("device", deviceId).put("name", deviceName).put("itemId", e.itemId).put("title", e.json.optString("title"))
+                    .put("subtitle", e.json.optString("subtitle")).put("position", position(e)).put("duration", dur).put("paused", !exo.isPlaying)
+                    .put("art", e.json.optString("backdrop")).put("hasNext", next != null)
+                remoteIo.execute {
+                    try {
+                        val cmds = Server.call(server, token, "POST", "/api/remote/state", body).optJSONArray("commands") ?: JSONArray()
+                        if (cmds.length() > 0) ui.post { for (i in 0 until cmds.length()) command(cmds.getJSONObject(i), e, next) }
+                    } catch (_: Exception) { }
+                }
+            }
+            ui.postDelayed(this, 2000)
+        }
+    }
+
+    private fun command(c: JSONObject, e: Entry, next: JSONObject?) {
+        if (finished || current() !== e) return
+        val p = view.player ?: return
+        val v = c.optDouble("value", 0.0)
+        when (c.optString("cmd")) {
+            "toggle" -> if (exo.isPlaying) exo.pause() else exo.play()
+            "play" -> exo.play()
+            "pause" -> exo.pause()
+            "seek" -> p.seekTo(((v - e.offset) * 1000).toLong().coerceAtLeast(0))
+            "skip" -> p.seekTo((exo.currentPosition + (v * 1000).toLong()).coerceAtLeast(0))
+            "next" -> if (next != null) { report(); start(next.getLong("id"), null, prerolls = false) }
+            "stop" -> finish()
+        }
+    }
+
     private fun stopSessions() {
         for (sid in entries.mapNotNull { it.sid }) io.execute { try { Server.call(server, token, "DELETE", "/api/play/session/$sid") } catch (_: Exception) { } }
     }
@@ -301,6 +341,7 @@ class PlayerActivity : Activity() {
             finished = true
             nextUp?.let { ui.removeCallbacks(it) }
             report()
+            try { remoteIo.execute { try { Server.call(server, token, "POST", "/api/remote/state", JSONObject().put("device", deviceId).put("closed", true)) } catch (_: Exception) { } } } catch (_: Exception) { }
             if (::exo.isInitialized) stopSessions()
         }
         super.finish()
@@ -310,6 +351,7 @@ class PlayerActivity : Activity() {
         ui.removeCallbacksAndMessages(null)
         if (::exo.isInitialized) exo.release()
         io.shutdown()
+        remoteIo.shutdown()
         super.onDestroy()
     }
 }

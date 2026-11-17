@@ -1,9 +1,9 @@
 // The music player: a queue that keeps playing while you browse, a bar along the bottom, and a full-screen
 // Now Playing view with a visualiser. Files the browser can play go straight from the NAS; the rest arrive as MP3.
-import { $, $$, html, icons, fmtTime, toast } from './core.js';
+import { $, $$, api, html, icons, fmtTime, toast } from './core.js';
 import { tint } from './feel.js';
 
-const S = { queue: [], order: [], at: -1, shuffle: false, repeat: 'off', offset: 0, audio: null, ctx: null, analyser: null, raf: 0, seeking: null };
+const S = { queue: [], order: [], at: -1, shuffle: false, repeat: 'off', offset: 0, audio: null, ctx: null, analyser: null, raf: 0, seeking: null, side: 'queue', line: -1, pre: null };
 const bar = () => $('#nowbar');
 const full = () => $('#nowplaying');
 const tv = () => document.body.classList.contains('tv');
@@ -22,7 +22,7 @@ function audio() {
   if (S.audio) return S.audio;
   const a = S.audio = new Audio();
   a.preload = 'auto';
-  a.addEventListener('timeupdate', () => { if (S.seeking == null) progress(); });
+  a.addEventListener('timeupdate', () => { if (S.seeking == null) progress(); lyricTick(); });
   a.addEventListener('ended', () => next(true));
   a.addEventListener('play', () => { paint(); session(); });
   a.addEventListener('pause', paint);
@@ -48,6 +48,76 @@ function load(at = 0, play = true) {
   else { S.offset = at; a.src = `/api/audio/${t.id}${at > 0 ? `?at=${Math.floor(at)}` : ''}`; }
   if (play) a.play().catch(() => paint());
   render();
+  if (at === 0) fetch('/api/progress', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: t.id }) }).catch(() => {});
+  // Warm up the next song so the gap between tracks is as short as the browser allows.
+  const nx = S.queue[S.order[S.at + 1]];
+  if (nx && playable(nx)) { S.pre ||= new Audio(); S.pre.preload = 'auto'; S.pre.muted = true; if (!S.pre.src.endsWith(`/api/file/${nx.id}`)) S.pre.src = `/api/file/${nx.id}`; }
+}
+
+// ---------- lyrics ----------
+async function lyricsFor(t) {
+  if (t.lyrics === undefined) { try { t.lyrics = await api('GET', `/api/lyrics/${t.id}`); } catch { t.lyrics = {}; } }
+  return t.lyrics;
+}
+async function drawSide() {
+  const t = cur(), box = $('#nowplaying .np-side');
+  if (!t || !box) return;
+  for (const b of $$('#nowplaying [data-side]')) b.classList.toggle('on', b.dataset.side === S.side);
+  if (S.side === 'queue') {
+    const up = S.order.slice(S.at + 1, S.at + 30).map((i) => S.queue[i]);
+    box.innerHTML = String(up.length ? html`<ol class="np-queue">${up.map((x, k) => html`<li><button data-jump="${S.at + 1 + k}"><b>${x.title}</b><small>${x.author || ''}</small><span>${fmtTime(x.runtime)}</span></button></li>`)}</ol>`
+      : html`<p class="np-none">Nothing else is queued.</p>`);
+    return;
+  }
+  box.innerHTML = '<p class="np-none">Looking for lyrics…</p>';
+  const l = await lyricsFor(t);
+  if (cur() !== t || S.side !== 'lyrics' || !box.isConnected) return;
+  S.line = -1;
+  box.innerHTML = String(l.synced ? html`<ol class="np-lyrics synced">${l.synced.map((x, i) => html`<li><button data-line="${i}">${x.text || '♪'}</button></li>`)}</ol>`
+    : l.plain ? html`<div class="np-lyrics plain">${l.plain}</div>`
+      : html`<p class="np-none">No lyrics for this song. Put a .lrc file with the same name next to the song on the NAS and they will show here, in time with the music.</p>`);
+  lyricTick();
+}
+function lyricTick() {
+  const list = cur()?.lyrics?.synced;
+  if (!list || S.side !== 'lyrics' || full().hidden) return;
+  const now = time() + 0.25;
+  let i = -1;
+  for (let k = 0; k < list.length && list[k].t <= now; k++) i = k;
+  if (i === S.line) return;
+  S.line = i;
+  const rows = $$('#nowplaying .np-lyrics.synced li');
+  rows.forEach((li, k) => { li.classList.toggle('now', k === i); li.classList.toggle('past', k < i); });
+  rows[Math.max(0, i)]?.scrollIntoView({ block: 'center', behavior: tv() ? 'auto' : 'smooth' });
+}
+
+/** Choose a playlist for some songs, or start a new one. */
+export async function pickPlaylist(ids) {
+  let lists = [];
+  try { lists = await api('GET', '/api/playlists'); } catch (e) { toast(e.message); return; }
+  const back = document.activeElement;
+  const box = document.createElement('div');
+  box.className = 'confirm';
+  box.innerHTML = String(html`<div class="panel" role="dialog" aria-modal="true" aria-labelledby="pl-h"><h2 id="pl-h">Add to a playlist</h2>
+    <div class="pl-pick">${lists.map((p) => html`<button class="choice" data-pl="${p.id}"><b>${p.name}</b><span>${p.count} song${p.count === 1 ? '' : 's'}</span></button>`)}</div>
+    <form class="pl-new"><input name="name" placeholder="New playlist name" maxlength="80" autocomplete="off" aria-label="New playlist name"><button class="btn primary">Create and add</button></form>
+    <div class="actions"><button class="btn" data-x>Cancel</button></div></div>`);
+  const close = () => { box.remove(); back?.focus?.(); };
+  const add = async (id, name) => { try { await api('POST', `/api/playlists/${id}/tracks`, { add: ids }); toast(`Added to ${name}`); dispatchEvent(new Event('hallflix-playlists')); } catch (e) { toast(e.message); } close(); };
+  box.onclick = (e) => {
+    if (e.target === box || e.target.closest('[data-x]')) return close();
+    const b = e.target.closest('[data-pl]');
+    if (b) add(+b.dataset.pl, $('b', b).textContent);
+  };
+  $('form', box).onsubmit = async (e) => {
+    e.preventDefault();
+    const name = new FormData(e.target).get('name').trim();
+    if (!name) return $('input', box).focus();
+    try { const p = await api('POST', '/api/playlists', { name }); await add(p.id, p.name); } catch (err) { toast(err.message); }
+  };
+  box.onkeydown = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  document.body.append(box);
+  ($('[data-pl]', box) || $('input', box)).focus();
 }
 
 function reorder(startAt) {
@@ -136,7 +206,6 @@ function progress() {
 function drawFull() {
   const t = cur(), f = full();
   if (!t) return;
-  const up = S.order.slice(S.at + 1, S.at + 30).map((i) => S.queue[i]);
   f.innerHTML = String(html`<div class="np-bg" style="${t.poster ? `background-image:url('${t.poster}')` : ''}"></div>
     <button class="btn round np-close" data-close aria-label="Close">${icons.back}</button>
     <div class="np-main">
@@ -152,8 +221,10 @@ function drawFull() {
           <button data-act="next" aria-label="Next">${icons.fwd}</button>
           <button class="np-mode ${S.repeat !== 'off' ? 'on' : ''}" data-act="repeat" aria-label="Repeat: ${S.repeat}" title="Repeat: ${S.repeat === 'one' ? 'this song' : S.repeat === 'all' ? 'all' : 'off'}">${icons.repeat}${S.repeat === 'one' ? html`<i>1</i>` : ''}</button>
         </div>
-        ${up.length ? html`<h3>Up next</h3><ol class="np-queue">${up.map((x, k) => html`<li><button data-jump="${S.at + 1 + k}"><b>${x.title}</b><small>${x.author || ''}</small><span>${fmtTime(x.runtime)}</span></button></li>`)}</ol>` : ''}
+        <div class="np-tabs"><button data-side="queue">Up next</button><button data-side="lyrics">Lyrics</button><span></span><button data-addto="${t.id}" class="np-add">${icons.plus} Playlist</button></div>
+        <div class="np-side"></div>
       </div></div>`);
+  drawSide();
   tint(f, t.poster);
   paint(); progress();
   viz();
@@ -190,6 +261,7 @@ function viz() {
     if (full().hidden || !cv.isConnected) return;
     S.analyser.getByteFrequencyData(data);
     g.clearRect(0, 0, cv.width, cv.height);
+    full().style.setProperty('--beat', ((data[1] + data[2] + data[3]) / 765).toFixed(3)); // the low end moves the cover
     const n = 40, w = cv.width / n;
     g.fillStyle = accent;
     for (let i = 0; i < n; i++) {
@@ -231,10 +303,15 @@ export function initMusic() {
     const jump = e.target.closest('[data-jump]');
     if (jump) { S.at = +jump.dataset.jump; load(0); return; }
     if (e.target.closest('[data-open]')) { openFull(); return; }
+    const side = e.target.closest('[data-side]');
+    if (side) { S.side = side.dataset.side; drawSide(); return; }
+    const line = e.target.closest('[data-line]');
+    if (line) { const l = cur()?.lyrics?.synced?.[+line.dataset.line]; if (l) seek(l.t); return; }
     if (e.target.closest('[data-close]')) { closeFull(); return; }
     const sk = e.target.closest('[data-seek]');
     if (sk) { const r = sk.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * length()); }
   });
+  addEventListener('click', (e) => { const b = e.target.closest('[data-addto]'); if (b) { e.preventDefault(); e.stopPropagation(); pickPlaylist(b.dataset.addto.split(',').map(Number)); } }, true);
   addEventListener('input', (e) => {
     if (!e.target.matches('#nowplaying [data-range]')) return;
     S.seeking = +e.target.value; progress();
@@ -242,8 +319,8 @@ export function initMusic() {
   });
   addEventListener('change', (e) => { if (e.target.matches('#nowplaying [data-range]')) { const t = +e.target.value; S.seeking = null; seek(t); } });
   addEventListener('keydown', (e) => {
-    if (full().hidden) return;
-    if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'GoBack') { e.preventDefault(); e.stopImmediatePropagation(); closeFull(); }
+    if (full().hidden || $('.confirm')) return;
+    if (e.key === 'Escape' || (e.key === 'Backspace' && !e.target.matches?.('input')) || e.key === 'GoBack') { e.preventDefault(); e.stopImmediatePropagation(); closeFull(); }
     else if ((e.key === ' ' || e.key === 'MediaPlayPause') && !e.target.matches('button, input')) { e.preventDefault(); toggle(); }
   }, true);
   // Video takes over the speakers.

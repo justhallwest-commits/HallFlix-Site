@@ -376,7 +376,9 @@ pages.look = async (main) => {
         <div class="card"><h2>Motion and sound</h2>
           ${check(theme, 'artColor', 'Colour follows the artwork in focus')}${check(theme, 'depth', 'Posters lean toward the pointer')}
           ${select(theme, 'heroMotion', 'Spotlight', L.options.heroMotions)}<p class="muted small">“Trailer” plays a muted trailer behind the spotlight on computers. “Pan” moves the picture slowly.</p>
-          ${select(theme, 'sounds', 'Navigation sounds', L.options.sounds)}${check(theme, 'profileColors', 'Tint each profile’s session with its own colour')}</div>
+          ${select(theme, 'sounds', 'Navigation sounds', L.options.sounds)}${check(theme, 'profileColors', 'Tint each profile’s session with its own colour')}
+          ${check(theme, 'glass', 'Glass controls that pick up the picture behind them')}${check(theme, 'previews', 'Open a larger preview when the pointer rests on a title')}
+          ${select(theme, 'screensaver', 'Screensaver after five idle minutes', L.options.screensavers)}<p class="muted small">“tv” shows drifting artwork on TVs only, “all” on every screen. Glass and previews switch themselves off on TVs to keep them fast.</p></div>
         <div class="card"><h2>Ident before a feature</h2>${check(theme, 'ident.enabled', 'Play the HallFlix logo card before a movie or episode')}
           ${image(theme, 'ident.video', 'Your own ident video (MP4, H.264). Empty uses the built-in animation on the website.')}
           <p class="muted small">An uploaded video also plays in the Fire TV, phone and Roku apps. A season can carry its own.</p></div>

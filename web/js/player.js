@@ -23,6 +23,8 @@ export function caps() {
 }
 
 let P = null;
+const SPEEDS = [0.75, 1, 1.25, 1.5];
+const keep = { speed: 1, sleep: null, sleepMin: 0 }; // carried from one episode to the next
 const QUALITIES = [['auto', 'Original'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']];
 
 export function closePlayer({ silent = false } = {}) {
@@ -33,12 +35,13 @@ export function closePlayer({ silent = false } = {}) {
   if (p.party) { try { p.party.es.close(); } catch { /* gone */ } }
   removeEventListener('keydown', p.onKey, true);
   report(p, false, true);
+  remoteReport(p, true);
   for (const s of p.slots) teardown(s, true);
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   p.root.hidden = true; p.root.innerHTML = ''; p.root.className = '';
   document.body.classList.remove('locked');
   pauseEffects(false);
-  if (!silent) emit('player:close', { itemId: p.itemId });
+  if (!silent) { keep.sleep = null; emit('player:close', { itemId: p.itemId }); }
 }
 export const playerOpen = () => !!P;
 
@@ -136,10 +139,13 @@ async function startEntry(p, idx) {
   $('.sub', p.root).textContent = entry.kind === 'main' ? entry.subtitle || '' : '';
   p.thumbs = null; p.creditsDone = false; $('.skipintro', p.root).hidden = true;
   $('[data-act=next]', p.root).hidden = !(entry.kind === 'main' && entry.next);
+  $('[data-act=episodes]', p.root).hidden = !(entry.kind === 'main' && entry.showId);
+  p.chapters = []; for (const c of $$('.scrub .chap', p.root)) c.remove();
+  for (const s of p.slots) s.video.playbackRate = entry.kind === 'main' ? p.speed : 1;
   p.cues = []; p.subSel = null; $('.subs', p.root).textContent = '';
   p.started = false;
   await play(p);
-  if (entry.kind === 'main') { emit('player:start', { itemId: entry.itemId, title: entry.title }); mediaSession(p, entry); loadThumbs(p, entry, 0); partyReady(p); }
+  if (entry.kind === 'main') { emit('player:start', { itemId: entry.itemId, title: entry.title }); mediaSession(p, entry); loadThumbs(p, entry, 0); partyReady(p); loadChapters(p, entry); }
   // Get the next item ready while this one plays.
   const upcoming = p.queue[idx + 1];
   if (upcoming) {
@@ -155,8 +161,52 @@ function advance(p) {
   report(p, true);
   p.started = false;
   emit('player:ended', { itemId: entry.itemId });
+  if (entry.next && p.sleep === 'end') { keep.sleep = null; toast('Sleep timer: stopped after this episode'); history.back(); return; }
   if (entry.next) { if ($('.upnext', p.root)) return goNext(p, entry.next); return upNext(p, entry.next, 8); }
   history.back();
+}
+
+/** Chapter ticks on the scrub bar, read from the file itself. */
+async function loadChapters(p, entry) {
+  try {
+    const { chapters } = await api('GET', `/api/chapters/${entry.itemId}`);
+    if (p.closed || p.queue[p.idx] !== entry || !chapters.length || !entry.duration) return;
+    p.chapters = chapters;
+    $('.scrub .track', p.root).insertAdjacentHTML('beforeend', chapters.filter((c) => c.start > 1).map((c) => `<i class="chap" style="left:${(c.start / entry.duration) * 100}%"></i>`).join(''));
+  } catch { /* no chapters */ }
+}
+const chapterAt = (p, t) => { let c = null; for (const x of p.chapters || []) if (x.start <= t + 0.5) c = x; return c; };
+
+/** The phone remote: say what is playing every couple of seconds and do what the phone asked. */
+const deviceId = () => { let id = localStorageGet('hf_device', ''); if (!id) { id = Math.random().toString(36).slice(2, 12); localStorageSet('hf_device', id); } return id; };
+function deviceName() {
+  const ua = navigator.userAgent;
+  if (/AFT|Fire TV/i.test(ua)) return 'Fire TV';
+  if (/Android TV|GoogleTV|BRAVIA|SmartTV|Tizen|Web0S/i.test(ua)) return 'TV';
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'Chromebook' : /Linux/.test(ua) ? 'Linux' : 'Browser';
+  const br = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+  return br ? `${br} on ${os}` : os;
+}
+async function remoteReport(p, closed = false) {
+  const e = p.slots[p.active]?.entry;
+  if (state.preview || (!closed && e?.kind !== 'main')) return;
+  const body = closed ? { device: deviceId(), closed: true }
+    : { device: deviceId(), name: deviceName(), itemId: e.itemId, title: e.title, subtitle: e.subtitle || '', position: now(p), duration: duration(p), paused: p.slots[p.active].video.paused, art: e.backdrop || '', hasNext: !!e.next };
+  try {
+    const r = await fetch('/api/remote/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: closed, credentials: 'same-origin' });
+    if (closed || p.closed || !r.ok) return;
+    for (const c of (await r.json()).commands || []) {
+      const v = p.slots[p.active].video;
+      showControls(p);
+      if (c.cmd === 'toggle') { if (v.paused) play(p); else v.pause(); }
+      else if (c.cmd === 'play') play(p);
+      else if (c.cmd === 'pause') v.pause();
+      else if (c.cmd === 'seek') seekTo(p, c.value);
+      else if (c.cmd === 'skip') seekTo(p, (p.pending ?? now(p)) + c.value);
+      else if (c.cmd === 'next' && e.next) { report(p); goNext(p, e.next); return; }
+      else if (c.cmd === 'stop') { history.back(); return; }
+    }
+  } catch { /* offline for a moment */ }
 }
 
 /** Scrub previews: a sheet of small frames the server makes the first time a title plays. */
@@ -261,6 +311,25 @@ function ident(p) {
   });
 }
 
+/** Movie night: the lights go down on a title card before the programme starts. */
+function marquee(p, main) {
+  p.root.classList.add('cinema');
+  (p.root.requestFullscreen || p.root.webkitRequestFullscreen)?.call(p.root)?.catch?.(() => {});
+  return new Promise((resolve) => {
+    const el = document.createElement('div');
+    el.className = 'marquee';
+    el.innerHTML = String(html`<div class="mq-bg" style="${main.backdrop ? `background-image:url('${main.backdrop}')` : ''}"></div>
+      <div class="mq-in"><p>Tonight's feature</p>${main.logo ? html`<img src="${main.logo}" alt="${main.title}">` : html`<h1>${main.title}</h1>`}<small>${[main.subtitle, main.duration ? fmtTime(main.duration) : ''].filter(Boolean).join(' · ')}</small>
+      <button class="btn primary" data-go>${icons.play} Start the show</button></div>`);
+    p.root.classList.remove('waiting');
+    p.root.append(el);
+    const done = () => { clearTimeout(timer); el.classList.add('out'); setTimeout(() => { el.remove(); resolve(); }, 500); };
+    const timer = setTimeout(done, 6000);
+    $('[data-go]', el).onclick = (e) => { e.stopPropagation(); done(); };
+    $('[data-go]', el).focus();
+  });
+}
+
 function upNext(p, next, seconds) {
   $('.upnext', p.root)?.remove();
   p.root.classList.add('show');
@@ -353,18 +422,43 @@ function menu(p, kind) {
     body = html`<h4>Audio</h4>${entry.audio.map((a) => html`<button data-audio="${a.index}" class="${a.index === sel ? 'on' : ''}">${a.label}</button>`)}`;
   } else if (kind === 'subs') {
     body = html`<h4>Subtitles</h4><button data-sub="" class="${p.subSel ? '' : 'on'}">Off</button>${entry.subs.map((s) => html`<button data-sub="${s.id}" class="${p.subSel === s.id ? 'on' : ''}">${s.label}</button>`)}`;
+  } else if (kind === 'episodes') {
+    body = html`<h4>Episodes</h4><div class="eps-load">Loading…</div>`;
+    api('GET', `/api/items/${entry.showId}`).then((d) => {
+      const box = $('.pmenu[data-kind=episodes]', p.root);
+      if (!box) return;
+      const season = d.seasons.find((s) => s.episodes.some((x) => x.id === entry.itemId)) || d.seasons[0];
+      const list = (s) => html`${s.episodes.map((x) => html`<button class="ep ${x.id === entry.itemId ? 'on' : ''}" data-ep="${x.id}"><i style="${x.still ? `background-image:url('${x.still}')` : ''}"></i>
+        <span><b>${x.number}. ${x.title}</b><small>${x.id === entry.itemId ? 'Playing now' : x.progress?.watched ? 'Watched' : fmtTime(x.runtime || 0)}</small></span></button>`)}`;
+      box.innerHTML = String(html`<h4>${d.title}</h4>${d.seasons.length > 1 ? html`<div class="eps-seasons">${d.seasons.map((s) => html`<button data-season="${s.id}" class="${s === season ? 'on' : ''}">${s.title}</button>`)}</div>` : ''}<div class="eps-list">${list(season)}</div>`);
+      box.seasons = d.seasons; box.list = list;
+      ($('.ep.on', box) || $('.ep', box))?.focus();
+      $('.ep.on', box)?.scrollIntoView({ block: 'center' });
+    }).catch((e) => toast(e.message));
+  } else if (kind === 'info') {
+    const f = entry.file || {};
+    const gb = f.size ? (f.size >= 1e9 ? `${(f.size / 1e9).toFixed(1)} GB` : `${Math.round(f.size / 1e6)} MB`) : '';
+    const slot = p.slots[p.active];
+    const rows = [['Playing', slot.kind === 'direct' ? 'The original file, untouched' : entry.reason || 'Streamed'], ['Picture', f.video], ['Sound', f.audio],
+      ['File', [String(f.container || '').toUpperCase(), gb, f.bitrate ? `${(f.bitrate / 1e6).toFixed(1)} Mbps` : ''].filter(Boolean).join(' · ')],
+      ['Chapters', p.chapters?.length ? String(p.chapters.length) : ''], ['Speed', p.speed !== 1 ? `${p.speed}×` : '']];
+    body = html`<h4>About this video</h4><dl class="pinfo">${rows.filter(([, v]) => v).map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl><button data-menu="quality">Back</button>`;
   } else {
     const m = entry.marks || {};
-    body = html`<h4>Quality</h4>${QUALITIES.map(([k, label]) => html`<button data-q="${k}" class="${p.quality === k ? 'on' : ''}">${label}<span style="opacity:.6">${k === 'auto' ? entry.reason || '' : ''}</span></button>`)}
+    const sleepOn = p.sleep === 'end' ? 'end' : p.sleep ? String(p.sleepMin) : '';
+    body = html`<h4>Speed</h4><div class="prow">${SPEEDS.map((s) => html`<button data-speed="${s}" class="${p.speed === s ? 'on' : ''}">${s === 1 ? 'Normal' : `${s}×`}</button>`)}</div>
+      <h4>Sleep timer</h4><div class="prow">${[['', 'Off'], ['15', '15 min'], ['30', '30 min'], ['60', '1 hour'], ...(entry.next ? [['end', 'End of episode']] : [])].map(([v, n]) => html`<button data-sleep="${v}" class="${sleepOn === v ? 'on' : ''}">${n}</button>`)}</div>
+      <h4>Quality</h4>${QUALITIES.map(([k, label]) => html`<button data-q="${k}" class="${p.quality === k ? 'on' : ''}">${label}<span style="opacity:.6">${k === 'auto' ? entry.reason || '' : ''}</span></button>`)}
       ${state.profile?.admin ? html`<h4>Skip buttons (admin)</h4>
         <button data-mark="introStart">Intro starts here<span style="opacity:.6">${m.introEnd ? fmtTime(m.introStart || 0) : ''}</span></button>
         <button data-mark="introEnd">Intro ends here<span style="opacity:.6">${m.introEnd ? fmtTime(m.introEnd) : ''}</span></button>
         <button data-mark="credits">Credits start here<span style="opacity:.6">${m.credits ? fmtTime(m.credits) : ''}</span></button>
         ${entry.next || /S\d+ E\d+/.test(entry.subtitle || '') ? html`<button data-mark="season">Copy to the whole season</button>` : ''}
-        ${m.introEnd || m.credits ? html`<button data-mark="clear">Clear marks</button>` : ''}` : ''}`;
+        ${m.introEnd || m.credits ? html`<button data-mark="clear">Clear marks</button>` : ''}` : ''}
+      <button data-menu="info">About this video</button>`;
   }
   p.root.insertAdjacentHTML('beforeend', `<div class="pmenu" data-kind="${kind}">${body}</div>`);
-  $('.pmenu .on', p.root)?.focus();
+  ($('.pmenu .on', p.root) || $('.pmenu button', p.root))?.focus();
 }
 
 async function reloadAt(p) {
@@ -407,6 +501,7 @@ export async function openPlayer(itemId, opts = {}) {
           <button class="pbtn hide-s" data-act="mute" aria-label="Mute"><span class="ico-vol">${icons.vol}</span></button>
           <input type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
           <span class="time"></span><span class="spacer"></span>
+          <button class="pbtn txt mainonly" data-act="episodes" hidden aria-label="Episodes">${icons.list}<span class="hide-s">Episodes</span></button>
           <button class="pbtn txt mainonly" data-act="next" hidden>${icons.next}<span class="hide-s">Next episode</span></button>
           ${window.EventSource ? html`<button class="pbtn mainonly hide-s" data-act="party" aria-label="Watch together" title="Watch together">${icons.people}</button>` : ''}
           <button class="pbtn mainonly" data-act="audio" aria-label="Audio">${icons.audio}</button>
@@ -421,7 +516,7 @@ export async function openPlayer(itemId, opts = {}) {
     <button class="btn skipintro" data-act="skipintro" hidden>Skip intro ${icons.next}</button>
     <div class="party" hidden></div>`);
   const vids = $$('video', root);
-  const p = P = { root, itemId, queue: [], idx: 0, active: 0, quality: 'auto', audioSel: null, cues: [], subSel: null, pending: null, started: false, closed: false,
+  const p = P = { root, itemId, queue: [], idx: 0, active: 0, speed: keep.speed, sleep: typeof keep.sleep === 'number' && keep.sleep < Date.now() ? null : keep.sleep, sleepMin: keep.sleepMin, chapters: [], cinema: !!opts.cinema, quality: 'auto', audioSel: null, cues: [], subSel: null, pending: null, started: false, closed: false,
     slots: vids.map((video) => ({ video, hls: null, sid: null, entry: null, offset: 0, kind: null, retries: 0 })) };
   const saved = +localStorageGet('hf_volume', 1);
   for (const v of vids) v.volume = Number.isFinite(saved) ? saved : 1;
@@ -451,7 +546,7 @@ export async function openPlayer(itemId, opts = {}) {
     mute: () => { const m = !activeVideo().muted; for (const v of vids) v.muted = m; $('.ico-vol', root).innerHTML = m ? icons.mute : icons.vol; },
     full: () => { if (document.fullscreenElement) document.exitFullscreen(); else (root.requestFullscreen || root.webkitRequestFullscreen)?.call(root)?.catch?.(() => {}); },
     skip: () => advance(p), next: () => { const n = p.queue[p.idx].next; if (n) { report(p); goNext(p, n); } },
-    audio: () => menu(p, 'audio'), subs: () => menu(p, 'subs'), quality: () => menu(p, 'quality'),
+    audio: () => menu(p, 'audio'), subs: () => menu(p, 'subs'), quality: () => menu(p, 'quality'), episodes: () => menu(p, 'episodes'),
     playnext: () => goNext(p, p.queue[p.idx].next),
     cancelnext: () => { clearInterval(p.countdown); if (activeVideo().ended) history.back(); else $('.upnext', root)?.remove(); },
     skipintro: () => { const m = p.slots[p.active].entry?.marks; if (m?.introEnd) seekTo(p, m.introEnd); },
@@ -465,6 +560,17 @@ export async function openPlayer(itemId, opts = {}) {
     if (rx) { partySend(p, 'react', { emoji: rx.dataset.react }); return; }
     const m = e.target.closest('.pmenu button');
     if (m) {
+      if (m.dataset.season) { const box = m.closest('.pmenu'); for (const b of $$('[data-season]', box)) b.classList.toggle('on', b === m); $('.eps-list', box).innerHTML = String(box.list(box.seasons.find((s) => s.id === +m.dataset.season))); return; }
+      if (m.dataset.speed) { p.speed = keep.speed = +m.dataset.speed; for (const s of p.slots) if (s.entry?.kind === 'main') s.video.playbackRate = p.speed; for (const b of $$('[data-speed]', root)) b.classList.toggle('on', b === m); return; }
+      if (m.dataset.sleep != null) {
+        const v = m.dataset.sleep;
+        p.sleep = keep.sleep = v === 'end' ? 'end' : v ? Date.now() + +v * 60e3 : null; p.sleepMin = keep.sleepMin = +v || 0;
+        for (const b of $$('[data-sleep]', root)) b.classList.toggle('on', b === m);
+        toast(v === 'end' ? 'Stopping after this episode' : v ? `Pausing in ${v === '60' ? '1 hour' : `${v} minutes`}` : 'Sleep timer off', 1800);
+        return;
+      }
+      if (m.dataset.menu) { $('.pmenu', root).remove(); menu(p, m.dataset.menu); return; }
+      if (m.dataset.ep) { $('.pmenu', root).remove(); if (+m.dataset.ep !== p.slots[p.active].entry.itemId) { report(p); history.replaceState(null, '', `#/watch/${+m.dataset.ep}`); openPlayer(+m.dataset.ep); } return; }
       $('.pmenu', root)?.remove();
       if (m.dataset.mark) { await mark(p, m.dataset.mark); return; }
       if (m.dataset.audio != null) { p.audioSel = +m.dataset.audio; await reloadAt(p); }
@@ -476,7 +582,7 @@ export async function openPlayer(itemId, opts = {}) {
       }
       return;
     }
-    if (e.target.closest('.pmenu, .scrub, .upnext, .err, .party, .ident')) return;
+    if (e.target.closest('.pmenu, .scrub, .upnext, .err, .party, .ident, .marquee')) return;
     if ($('.pmenu', root)) { $('.pmenu', root).remove(); return; }
     if (e.pointerType === 'touch' || matchMedia('(hover: none)').matches) { if (root.classList.contains('show')) root.classList.remove('show'); else showControls(p); return; }
     actions.toggle();
@@ -487,7 +593,7 @@ export async function openPlayer(itemId, opts = {}) {
 
   const scrub = $('.scrub', root);
   const at = (e) => { const r = scrub.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * duration(p); };
-  scrub.onpointermove = (e) => { const tip = $('.tip', root); const r = scrub.getBoundingClientRect(); tip.style.left = `${Math.max(th(p), Math.min(r.width - th(p), e.clientX - r.left))}px`; $('span', tip).textContent = fmtTime(at(e)); showThumb(p, at(e)); if (scrub.classList.contains('drag')) { p.pending = at(e); updateBar(p); } };
+  scrub.onpointermove = (e) => { const tip = $('.tip', root); const r = scrub.getBoundingClientRect(); tip.style.left = `${Math.max(th(p), Math.min(r.width - th(p), e.clientX - r.left))}px`; { const c = chapterAt(p, at(e)); $('span', tip).textContent = c ? `${c.title} · ${fmtTime(at(e))}` : fmtTime(at(e)); } showThumb(p, at(e)); if (scrub.classList.contains('drag')) { p.pending = at(e); updateBar(p); } };
   scrub.onpointerdown = (e) => { scrub.setPointerCapture(e.pointerId); scrub.classList.add('drag'); p.pending = at(e); updateBar(p); };
   scrub.onpointerup = (e) => { if (!scrub.classList.contains('drag')) return; scrub.classList.remove('drag'); seekTo(p, at(e)); };
 
@@ -500,7 +606,7 @@ export async function openPlayer(itemId, opts = {}) {
   p.onKey = (e) => {
     if (P !== p || e.target.matches?.('input[type=range]')) return;
     const k = e.key;
-    const inMenu = e.target.closest?.('.pmenu, .upnext, .err');
+    const inMenu = e.target.closest?.('.pmenu, .upnext, .err, .marquee');
     const pre = root.classList.contains('preroll');
     showControls(p);
     if (k === 'Escape' || k === 'Backspace' || k === 'BrowserBack' || k === 'GoBack') { e.preventDefault(); e.stopPropagation(); if ($('.pmenu', root)) $('.pmenu', root).remove(); else history.back(); return; }
@@ -525,16 +631,20 @@ export async function openPlayer(itemId, opts = {}) {
     if (p.closed) return;
     p.beat = (p.beat || 0) + 1;
     if (p.beat % 10 === 0 && !activeVideo().paused) report(p);
+    if (p.beat % 2 === 0) remoteReport(p);
+    if (typeof p.sleep === 'number' && Date.now() >= p.sleep) { p.sleep = keep.sleep = null; activeVideo().pause(); showControls(p, 8000); toast('Sleep timer: paused. Press play to keep watching.', 6000); }
     if (p.beat % 30 === 0) for (const s of p.slots) if (s.sid) fetch(`/api/play/ping/${s.sid}`, { method: 'POST', credentials: 'same-origin' }).catch(() => {});
   }, 1000);
 
   try {
-    const { queue } = await api('POST', '/api/play', { itemId, caps: caps(), start: opts.start, prerolls: opts.party ? false : undefined });
+    const { queue } = await api('POST', '/api/play', { itemId, caps: caps(), start: opts.start, cinema: opts.cinema || undefined, prerolls: opts.party ? false : undefined });
     if (p.closed) return;
     p.queue = queue;
+    if (opts.cinema) await marquee(p, queue[queue.length - 1]);
+    if (p.closed) return;
     if (opts.party) partyJoin(p, opts.party);
     const main = queue[queue.length - 1];
-    const wantIdent = themeNow()?.ident?.enabled !== false && !opts.party && opts.start == null && !(main.resumeAt > 60) && !queue.some((q) => q.kind === 'ident') && !state.preview;
+    const wantIdent = opts.cinema ? !queue.some((q) => q.kind === 'ident') : themeNow()?.ident?.enabled !== false && !opts.party && opts.start == null && !(main.resumeAt > 60) && !queue.some((q) => q.kind === 'ident') && !state.preview;
     p.wantIdent = wantIdent;
     await startEntry(p, 0);
   } catch (e) { fail(p, e.message); }

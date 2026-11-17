@@ -3,6 +3,7 @@ import { $, $$, api, html, raw, esc, icons, state, applyLook, logoUrl, libraryLo
 import * as browse from './browse.js';
 import * as feel from './feel.js';
 import * as media from './media.js';
+import * as more from './more.js';
 
 export const extraRows = []; // rows added by plugins through HallFlix.addHomeRow()
 const app = () => $('#app');
@@ -54,10 +55,10 @@ export function cardHtml(it, { wide = false, read = false } = {}) {
       ${pct ? html`<div class="bar"><i style="width:${pct}%"></i></div>` : ''}${it.progress?.watched ? html`<div class="seen">✓</div>` : ''}</div></a>`;
 }
 
-const rowHtml = (r) => html`<section class="row ${r.shape === 'wide' ? 'keep' : ''} ${r.shape === 'square' ? 'squares' : ''}" data-row="${r.id}">
+const rowHtml = (r) => html`<section class="row ${r.shape === 'wide' ? 'keep' : ''} ${r.shape === 'square' ? 'squares' : ''} ${r.shape === 'ranked' ? 'ranked' : ''}" data-row="${r.id}">
   <h2>${r.title}${r.library ? html`<a href="#/library/${r.library}">See all ›</a>` : ''}</h2>
   <button class="arrow l" hidden aria-label="Scroll left" tabindex="-1">‹</button>
-  <div class="scroller">${r.items.map((it) => cardHtml(it, { wide: r.shape === 'wide', read: r.id === 'reading' }))}</div>
+  <div class="scroller">${r.items.map((it, i) => (r.shape === 'ranked' ? html`<div class="rank"><span class="num" aria-hidden="true">${i + 1}</span>${cardHtml(it)}</div>` : cardHtml(it, { wide: r.shape === 'wide', read: r.id === 'reading' })))}</div>
   <button class="arrow r" aria-label="Scroll right" tabindex="-1">›</button></section>`;
 
 const isVid = (u) => /\.(mp4|webm|m4v|mov)(\?|$)/i.test(u || '');
@@ -123,7 +124,7 @@ export function shell() {
   const p = state.profile;
   app().innerHTML = String(html`
     <header class="nav"><a class="logo" href="#/" aria-label="Home"><img data-site-logo src="${logoUrl()}" alt="${themeNow()?.siteName || 'HallFlix'}"></a>
-      <nav class="links"><a href="#/" data-nav="home">Home</a>${state.libraries.map((l) => html`<a href="#/library/${l.id}" data-nav="library-${l.id}">${l.name}</a>`)}<a href="#/timeline" data-nav="timeline">Timeline</a><a href="#/list" data-nav="list">My List</a></nav>
+      <nav class="links"><a href="#/" data-nav="home">Home</a>${state.libraries.map((l) => html`<a href="#/library/${l.id}" data-nav="library-${l.id}">${l.name}</a>`)}<a href="#/timeline" data-nav="timeline">Timeline</a><a href="#/me" data-nav="me">My HallFlix</a></nav>
       <button class="btn round navbtn" data-surprise aria-label="Surprise me" title="Surprise me">${icons.dice}</button>
       <div class="search"><input type="search" placeholder="Titles, people, genres" aria-label="Search" autocomplete="off">${browse.canListen() ? html`<button class="mic" data-mic aria-label="Search by voice" title="Search by voice">${icons.mic}</button>` : ''}</div>
       <button class="avatar" style="${avatarStyle(p)}" aria-label="Profile menu" data-menu>${p.avatar ? html`<img src="${p.avatar}" alt="" style="width:100%;height:100%;border-radius:8px;object-fit:cover">` : p.name[0].toUpperCase()}</button>
@@ -152,7 +153,7 @@ async function onClick(e) {
     try { const d = await api('GET', `/api/items/${play.dataset.play}`); location.hash = `#/watch/${d.playId}`; } catch (err) { toast(err.message); }
     return;
   }
-  const chip = t.closest('.chip');
+  const chip = t.closest('.chip[data-genre]');
   if (chip) { base.genre = chip.dataset.genre || ''; loadLibrary(true); return; }
   const pa = t.closest('[data-playalbum]');
   if (pa) { e.preventDefault(); e.stopPropagation(); media.playAlbum(+pa.dataset.playalbum); return; }
@@ -166,6 +167,7 @@ async function onClick(e) {
   const act = t.closest('[data-do]')?.dataset.do;
   if (act === 'signout' || act === 'switch') { await api('POST', '/api/logout'); location.hash = '#/'; location.reload(); }
   if (act === 'server') window.HallFlixNative?.changeServer();
+  if (act === 'previews') { more.setPreviews(!more.previewsOn()); $('.menu')?.remove(); toast(more.previewsOn() ? 'Previews on' : 'Previews off'); }
   if (act === 'sounds') { feel.setSounds(!feel.soundsOn()); $('.menu')?.remove(); toast(feel.soundsOn() ? 'Sounds on' : 'Sounds off'); }
   if (act === 'password') {
     $('.menu')?.remove();
@@ -180,7 +182,8 @@ function toggleMenu() {
   const p = state.profile;
   $('.nav').insertAdjacentHTML('beforeend', String(html`<div class="menu"><div class="who">Signed in as <b>${p.name}</b></div>
     <button data-do="switch">Switch profile</button>${p.admin ? html`<a href="/studio">Open the Studio</a>` : ''}
-    <a href="#/wrapped">Your year in review</a>${feel.soundsAvailable() ? html`<button data-do="sounds">${feel.soundsOn() ? 'Turn sounds off' : 'Turn sounds on'}</button>` : ''}
+    <a href="#/me">My HallFlix</a><a href="#/remote">Remote for another screen</a><a href="#/wrapped">Your year in review</a>
+    ${themeNow()?.previews !== false && !document.body.classList.contains('tv') ? html`<button data-do="previews">${more.previewsOn() ? 'Turn previews off' : 'Turn previews on'}</button>` : ''}${feel.soundsAvailable() ? html`<button data-do="sounds">${feel.soundsOn() ? 'Turn sounds off' : 'Turn sounds on'}</button>` : ''}
     <button data-do="password">Change password</button>${window.HallFlixNative ? html`<button data-do="server">Change server</button>` : ''}<button data-do="signout">Sign out</button></div>`));
   $('.menu button').focus();
   for (const a of $$('.menu a')) a.addEventListener('click', () => $('.menu')?.remove());
@@ -197,22 +200,32 @@ export async function show(name, arg) {
   if (name !== 'home') feel.wash(null);
   const same = base?.name === name && base?.arg === arg;
   base = { name, arg, sort: same ? base.sort : 'title', genre: same ? base.genre : '', mood: name === 'home' ? base?.mood || '' : '' };
-  try {
+  const draw = async () => {
+   try {
     if (name === 'library') await library(+arg);
+    else if (name === 'me') { setNav('me'); applyLook(state.look, null); await more.hub(view(), rowHtml); for (const r of $$('.row')) syncArrows(r); }
+    else if (name === 'person') { setNav(''); applyLook(state.look, null); await more.person(view(), decodeURIComponent(arg || '')); }
+    else if (name === 'remote') { setNav(''); applyLook(state.look, null); await more.remote(view()); }
+    else if (name === 'pair') { setNav(''); applyLook(state.look, null); await more.pairApprove(view(), arg || ''); }
+    else if (name === 'playlist') { setNav(''); applyLook(state.look, null); await media.playlist(view(), +arg); }
     else if (name === 'search') await search(decodeURIComponent(arg || ''));
     else if (name === 'list') await myList();
     else if (name === 'timeline') { setNav('timeline'); applyLook(state.look, null); await browse.timeline(view(), arg); }
     else if (name === 'collection') { setNav(''); applyLook(state.look, null); await browse.collection(view(), +arg); }
     else if (name === 'wrapped') { setNav(''); applyLook(state.look, null); await browse.wrapped(view(), arg); }
     else await home();
-  } catch (e) { view().innerHTML = String(html`<div class="page"><div class="empty"><h2>Something went wrong</h2><p>${e.message}</p></div></div>`); }
-  scrollTo(0, keepY);
+   } catch (e) { view().innerHTML = String(html`<div class="page"><div class="empty"><h2>Something went wrong</h2><p>${e.message}</p></div></div>`); }
+   scrollTo(0, keepY);
+  };
+  // Pages cross-fade into each other where the browser can do it cheaply; TVs and reduced-motion get a plain swap.
+  const smooth = document.startViewTransition && !same && !document.body.classList.contains('tv') && !matchMedia('(prefers-reduced-motion: reduce)').matches && !state.preview;
+  if (smooth) { try { await document.startViewTransition(draw).updateCallbackDone; } catch { /* drawn anyway */ } } else await draw();
   emit('route', { name, arg });
 }
 
 async function home() {
   setNav('home'); applyLook(state.look, null);
-  const data = await api('GET', '/api/home');
+  const data = await api('GET', `/api/home${document.body.classList.contains('tv') ? '?lite=1' : ''}`);
   const rows = [...data.rows];
   for (const x of extraRows) {
     try { const items = typeof x.load === 'function' ? await x.load() : x.items; if (items?.length) rows.splice(Math.min(rows.length, x.position ?? rows.length), 0, { id: x.id, title: x.title, items, shape: x.shape }); }
@@ -296,11 +309,12 @@ async function search(term) {
   if (input && document.activeElement !== input) input.value = term;
   const d = await api('GET', `/api/search?q=${encodeURIComponent(term)}`);
   view().innerHTML = String(html`<div class="page"><div class="lib-head"><h1>Results for “${term}”</h1></div>
-    ${d.items.length ? html`<div class="grid">${d.items.map((it) => cardHtml(it))}</div>` : html`<div class="empty"><p>No titles, people or genres match that.</p></div>`}</div>`);
+    ${d.understood?.length ? html`<p class="understood">Showing ${d.understood.map((u) => html`<span class="chip on">${u}</span>`)}</p>` : ''}
+    ${d.items.length ? html`<div class="grid">${d.items.map((it) => cardHtml(it))}</div>` : html`<div class="empty"><p>No titles, people or genres match that. You can also describe what you want, like “funny movies from the 90s under two hours”.</p></div>`}</div>`);
 }
 
 async function myList() {
-  setNav('list'); applyLook(state.look, null);
+  setNav('me'); applyLook(state.look, null);
   const d = await api('GET', '/api/home');
   const row = d.rows.find((r) => r.id === 'mylist');
   view().innerHTML = String(html`<div class="page"><div class="lib-head"><h1>My List</h1></div>
@@ -330,16 +344,17 @@ export async function title(id) {
         <button class="btn round ${d.inList ? 'on' : ''}" data-list aria-label="My List" title="My List">${d.inList ? icons.check : icons.plus}</button>
         <button class="btn round" data-seen aria-label="Mark as watched" title="Mark as watched or unwatched">${icons.eye}</button>
         ${d.trailer ? html`<a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=${d.trailer}">${icons.trailer} Trailer</a>` : ''}
+        ${d.kind === 'movie' && d.playId && !window.HallFlixNative ? html`<a class="btn" href="#/watch/${d.playId}?night=1" title="Dims the room, plays the opening and starts from the beginning">${raw(MOON)} Movie night</a>` : ''}
         ${state.profile.admin ? html`<span class="manage"><button class="btn round" data-manage aria-label="Remove or delete" title="Remove or delete" aria-haspopup="menu">${raw(TRASH)}</button></span>` : ''}
       </div></div></div>
     <div class="body"><div class="cols"><div>
         ${metaLine(d, [d.kind === 'show' ? `${d.seasons.length} season${d.seasons.length === 1 ? '' : 's'}` : '', d.media?.quality, d.media?.hdr ? 'HDR' : ''].filter(Boolean))}
         ${d.tagline ? html`<p class="tagline">${d.tagline}</p>` : ''}<p class="overview">${d.overview || 'No description yet.'}</p></div>
-      <div class="facts">${d.people.length ? html`<div><b>Cast:</b> ${d.people.slice(0, 4).map((x) => x.name).join(', ')}</div>` : ''}
+      <div class="facts">${d.people.length ? html`<div><b>Cast:</b> ${d.people.slice(0, 4).map((x, i) => html`${i ? ', ' : ''}<a href="#/person/${encodeURIComponent(x.name)}">${x.name}</a>`)}</div>` : ''}
         ${d.genres.length ? html`<div><b>Genres:</b> ${d.genres.join(', ')}</div>` : ''}${d.studios?.length ? html`<div><b>From:</b> ${d.studios.join(', ')}</div>` : ''}
         ${audio ? html`<div><b>Audio:</b> ${audio.toUpperCase()}</div>` : ''}${d.media?.subs?.length ? html`<div><b>Subtitles:</b> ${d.media.subs.length} track${d.media.subs.length === 1 ? '' : 's'}</div>` : ''}</div></div>
       ${d.seasons ? html`<h3>Episodes ${d.seasons.length > 1 ? html`<select data-season aria-label="Season">${d.seasons.map((s) => html`<option value="${s.id}" ${s === season ? raw('selected') : ''}>${s.title}</option>`)}</select>` : html`<small style="color:var(--muted);font-family:var(--font-body);font-size:14px;font-weight:500">${season?.title || ''}</small>`}</h3><div class="episodes"></div>` : ''}
-      ${d.people.length > 4 ? html`<h3>Cast</h3><div class="cast">${d.people.map((x) => html`<div>${x.photo ? html`<img loading="lazy" src="${x.photo}" alt="">` : html`<div class="ph"></div>`}${x.name}<small>${x.role}</small></div>`)}</div>` : ''}
+      ${d.people.length > 4 ? html`<h3>Cast</h3><div class="cast">${d.people.map((x) => html`<a href="#/person/${encodeURIComponent(x.name)}">${x.photo ? html`<img loading="lazy" src="${x.photo}" alt="">` : html`<div class="ph"></div>`}${x.name}<small>${x.role}</small></a>`)}</div>` : ''}
       ${d.similar.length ? html`<h3>More like this</h3><div class="similar">${d.similar.map((it) => cardHtml(it))}</div>` : ''}
     </div></article>`);
   document.body.classList.add('locked');
@@ -390,6 +405,7 @@ export async function title(id) {
 }
 
 // ---------- removing titles (admins) ----------
+const MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>';
 const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
 const gb = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${Math.round(n / 1e6)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
 
@@ -447,20 +463,23 @@ export function login(boot) {
       <form class="form">${p ? html`<h1 style="text-align:center;margin-bottom:6px">Hi, ${p.name}</h1>` : html`<label>Name<input name="name" autocomplete="username" required></label>`}
       <label>Password or PIN<input name="password" type="password" autocomplete="current-password" required></label>
       <div class="err"></div><button class="btn primary">Sign in</button></form>
-      ${tiles ? html`<button class="linkbtn" data-back>Choose a different profile</button>` : ''}`);
+      ${tiles ? html`<button class="linkbtn" data-back>Choose a different profile</button>` : ''}<button class="linkbtn" data-pair>Sign in with your phone instead</button>`);
+    $('[data-pair]').onclick = () => more.pairScreen($('.login .box'), tiles ? picker : () => formFor(null));
     const form = $('.login form');
     $(p ? '[name=password]' : '[name=name]', form).focus();
     form.onsubmit = async (e) => {
       e.preventDefault();
       const f = new FormData(form);
-      try { await api('POST', '/api/login', { profileId: p?.id, name: f.get('name'), password: f.get('password') }); if (!/^#\/party\//.test(location.hash)) location.hash = '#/'; location.reload(); }
+      try { await api('POST', '/api/login', { profileId: p?.id, name: f.get('name'), password: f.get('password') }); if (!/^#\/(party|pair)\//.test(location.hash)) location.hash = '#/'; location.reload(); }
       catch (err) { $('.err', form).textContent = err.message; $('[name=password]', form).select(); }
     };
     $('[data-back]')?.addEventListener('click', picker);
   };
   const picker = () => {
     $('.login .box').innerHTML = String(html`<img class="brand" src="${logoUrl()}" alt=""><h1>Who's watching?</h1>
-      <div class="who">${boot.profiles.map((p) => html`<button data-p="${p.id}"><div class="avatar" style="${avatarStyle(p)}">${p.avatar ? html`<img src="${p.avatar}" alt="">` : p.name[0].toUpperCase()}</div>${p.name}</button>`)}</div>`);
+      <div class="who">${boot.profiles.map((p) => html`<button data-p="${p.id}"><div class="avatar" style="${avatarStyle(p)}">${p.avatar ? html`<img src="${p.avatar}" alt="">` : p.name[0].toUpperCase()}</div>${p.name}</button>`)}</div>
+      <button class="linkbtn" data-pair>Sign in with your phone</button>`);
+    $('[data-pair]').onclick = () => more.pairScreen($('.login .box'), picker);
     for (const b of $$('.who button')) b.onclick = () => formFor(boot.profiles.find((p) => p.id === +b.dataset.p));
     $('.who button')?.focus();
   };

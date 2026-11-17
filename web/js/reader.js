@@ -1,6 +1,6 @@
 // The reader: comics and PDFs page by page (one page or two side by side, left-to-right or manga order),
 // EPUBs as flowing text laid out in pages, with the reader's own size, typeface and colours.
-import { $, $$, api, html, icons, toast } from './core.js';
+import { $, $$, api, html, raw, icons, toast } from './core.js';
 
 let R = null;
 const pref = (k, d) => { try { return localStorage.getItem(`hf_read_${k}`) ?? d; } catch { return d; } };
@@ -37,9 +37,30 @@ function frame(el, d, extra) {
   el.innerHTML = String(html`<div class="rd-stage"></div>
     <header class="rd-top"><button class="rd-btn" data-act="close" aria-label="Back">${icons.back}</button>
       <div class="rd-title"><b>${d.title}</b><small>${d.series?.title || d.author || ''}</small></div>
-      ${extra}</header>
+      <button class="rd-btn" data-act="marks" aria-label="Bookmarks">${raw(RIBBON)}</button>${extra}</header>
     <footer class="rd-bottom"><input type="range" class="rd-range" min="1" value="1" aria-label="Page"><span class="rd-where"></span></footer>
-    <div class="rd-panel" hidden></div><div class="rd-end" hidden></div>`);
+    <div class="rd-panel" hidden></div><div class="rd-end" hidden></div><div class="rd-warm" aria-hidden="true"></div>`);
+}
+const RIBBON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10v18l-5-4-5 4z"/></svg>';
+const calm = () => document.body.classList.contains('tv') || matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** A warm tint over the page for reading at night, the same on every book. */
+const warmHtml = (r) => html`<h4>Night warmth</h4><label class="rd-warmrow"><input type="range" min="0" max="60" step="5" value="${r.warm}" data-warm aria-label="Night warmth"><span>${r.warm ? `${Math.round((r.warm / 60) * 100)}%` : 'Off'}</span></label>`;
+function setWarm(r, v) {
+  r.warm = v; setPref('warm', v);
+  $('.rd-warm', r.el).style.opacity = String(v / 100);
+  const s = $('.rd-warmrow span', r.el); if (s) s.textContent = v ? `${Math.round((v / 60) * 100)}%` : 'Off';
+}
+async function marksPanel(r) {
+  let list = [];
+  try { list = await api('GET', `/api/bookmarks/${r.d.id}`); } catch { /* shown empty */ }
+  if (R !== r) return;
+  const p = $('.rd-panel', r.el);
+  p.dataset.body = 'marks';
+  p.innerHTML = String(html`<h4>Bookmarks</h4><button data-act="addmark" class="rd-add">${raw(RIBBON)} Bookmark this page</button>
+    <div class="rd-toc">${list.length ? list.map((b) => html`<div class="rd-mark"><button data-act="gomark" data-pos="${b.position}">${b.label || 'Bookmark'}</button><button data-act="delmark" data-id="${b.id}" aria-label="Remove bookmark">${icons.x}</button></div>`)
+    : html`<p class="rd-none">No bookmarks in this one yet.</p>`}</div>`);
+  p.hidden = false;
+  $('button', p)?.focus();
 }
 function showUi(r, on = !r.el.classList.contains('ui')) {
   r.el.classList.toggle('ui', on);
@@ -54,6 +75,20 @@ function panel(r, body) {
   $('button.on, button', p)?.focus();
 }
 function common(r) {
+  r.warm = +pref('warm', 0) || 0;
+  $('.rd-warm', r.el).style.opacity = String(r.warm / 100);
+  r.el.addEventListener('input', (e) => { if (e.target.matches('[data-warm]')) setWarm(r, +e.target.value); });
+  const inner = r.act;
+  r.act = async (a, btn) => {
+    if (a === 'marks') { const p = $('.rd-panel', r.el); if (!p.hidden && p.dataset.body === 'marks') { p.hidden = true; return; } return marksPanel(r); }
+    if (a === 'addmark') {
+      try { await api('POST', `/api/bookmarks/${r.d.id}`, { position: r.where().position, label: $('.rd-where', r.el).textContent }); toast('Bookmarked'); } catch (e) { toast(e.message); }
+      return marksPanel(r);
+    }
+    if (a === 'gomark') { panel(r, null); r.goTo(+btn.dataset.pos); return; }
+    if (a === 'delmark') { await api('DELETE', `/api/bookmarks/${r.d.id}/${btn.dataset.id}`).catch(() => {}); return marksPanel(r); }
+    return inner(a, btn);
+  };
   r.save = (now = false) => {
     clearTimeout(r.saveTimer);
     const send = () => {
@@ -152,7 +187,9 @@ function pages(el, d) {
     $('.rd-end', el).hidden = true;
     r.page = dir < 0 && spread() && to > 1 ? (to % 2 === 0 ? to : to - 1) : to;
     draw();
+    if (!calm()) { const fwd = (dir > 0) !== r.rtl; stage.classList.remove('turn-f', 'turn-b'); void stage.offsetWidth; stage.classList.add(fwd ? 'turn-f' : 'turn-b'); }
   };
+  r.goTo = (pos) => r.jump(Math.floor(pos));
   r.jump = (n) => { r.page = Math.max(1, Math.min(total, n)); $('.rd-end', el).hidden = true; draw(); };
   r.scroll = (dir) => {
     if (r.fit !== 'width') return null;
@@ -166,7 +203,7 @@ function pages(el, d) {
     if (a === 'settings') {
       panel(r, html`<h4>Page fit</h4><div class="seg"><button data-act="fit" data-v="screen" class="${r.fit === 'screen' ? 'on' : ''}">Whole page</button><button data-act="fit" data-v="width" class="${r.fit === 'width' ? 'on' : ''}">Fit width</button></div>
         <h4>Pages</h4><div class="seg"><button data-act="spread" data-v="auto" class="${r.spreadPref === 'auto' ? 'on' : ''}">Automatic</button><button data-act="spread" data-v="one" class="${r.spreadPref === 'one' ? 'on' : ''}">One</button><button data-act="spread" data-v="two" class="${r.spreadPref === 'two' ? 'on' : ''}">Two</button></div>
-        <h4>Reading direction</h4><div class="seg"><button data-act="dir" data-v="0" class="${r.rtl ? '' : 'on'}">Left to right</button><button data-act="dir" data-v="1" class="${r.rtl ? 'on' : ''}">Right to left (manga)</button></div>`);
+        <h4>Reading direction</h4><div class="seg"><button data-act="dir" data-v="0" class="${r.rtl ? '' : 'on'}">Left to right</button><button data-act="dir" data-v="1" class="${r.rtl ? 'on' : ''}">Right to left (manga)</button></div>${warmHtml(r)}`);
       return;
     }
     if (a === 'fit') { r.fit = btn.dataset.v; setPref('fit', r.fit); }
@@ -223,10 +260,10 @@ function book(el, d) {
     r.pages = Math.max(1, Math.round((total + g.gap) / g.step));
     r.step = g.step;
   };
-  const show = () => {
+  const show = (anim = false) => {
     r.page = Math.max(0, Math.min(r.pages - 1, r.page));
     const dc = doc();
-    if (dc?.body) dc.body.style.transform = `translateX(${-r.page * r.step}px)`;
+    if (dc?.body) { dc.body.style.transition = anim && !calm() ? 'transform 0.28s cubic-bezier(0.3, 0.7, 0.2, 1)' : 'none'; dc.body.style.transform = `translateX(${-r.page * r.step}px)`; }
     const pos = r.chapter * 100 + Math.round((r.pages > 1 ? r.page / (r.pages - 1) : 0) * 99);
     range.value = String(pos); range.style.setProperty('--p', `${(pos / Math.max(1, d.spine.length * 100)) * 100}%`);
     const toc = [...d.toc].reverse().find((t) => d.spine.indexOf(t.href.split('#')[0]) <= r.chapter && d.spine.indexOf(t.href.split('#')[0]) >= 0);
@@ -274,9 +311,10 @@ function book(el, d) {
     frameEl.src = d.base + d.spine[r.chapter].split('/').map(encodeURIComponent).join('/');
   });
   r.turn = (dir) => {
-    if (dir > 0) { if (r.page < r.pages - 1) { r.page++; show(); } else if (r.chapter < d.spine.length - 1) load(r.chapter + 1, 0); else if (!r.ended) { r.ended = true; r.save(true); toast(`You finished ${d.title}`); } }
-    else if (r.page > 0) { r.page--; show(); } else if (r.chapter > 0) load(r.chapter - 1, 'end');
+    if (dir > 0) { if (r.page < r.pages - 1) { r.page++; show(true); } else if (r.chapter < d.spine.length - 1) load(r.chapter + 1, 0); else if (!r.ended) { r.ended = true; r.save(true); toast(`You finished ${d.title}`); } }
+    else if (r.page > 0) { r.page--; show(true); } else if (r.chapter > 0) load(r.chapter - 1, 'end');
   };
+  r.goTo = (pos) => { const c = Math.min(d.spine.length - 1, Math.floor(pos)); if (c !== r.chapter) load(c, pos % 1); else { r.page = Math.round((pos % 1) * (r.pages - 1)); show(); } };
   r.jump = (v) => { const c = Math.min(d.spine.length - 1, Math.floor(v / 100)), f = (v % 100) / 99; if (c !== r.chapter) load(c, f); else { r.page = Math.round(f * (r.pages - 1)); show(); } };
   r.act = (a, btn) => {
     if (a === 'close') { history.back(); return; }
@@ -291,7 +329,7 @@ function book(el, d) {
     if (a === 'type') {
       panel(r, html`<h4>Text size</h4><div class="seg"><button data-act="size" data-v="-10" aria-label="Smaller">A−</button><span class="rd-size">${r.size}%</span><button data-act="size" data-v="10" aria-label="Larger">A+</button></div>
         <h4>Typeface</h4><div class="seg">${[['publisher', 'Book’s own'], ['serif', 'Serif'], ['sans', 'Sans']].map(([k, n]) => html`<button data-act="font" data-v="${k}" class="${r.font === k ? 'on' : ''}">${n}</button>`)}</div>
-        <h4>Colours</h4><div class="seg">${[['dark', 'Dark'], ['sepia', 'Sepia'], ['light', 'Light']].map(([k, n]) => html`<button data-act="theme" data-v="${k}" class="sw-${k} ${r.theme === k ? 'on' : ''}">${n}</button>`)}</div>`);
+        <h4>Colours</h4><div class="seg">${[['dark', 'Dark'], ['sepia', 'Sepia'], ['light', 'Light']].map(([k, n]) => html`<button data-act="theme" data-v="${k}" class="sw-${k} ${r.theme === k ? 'on' : ''}">${n}</button>`)}</div>${warmHtml(r)}`);
       return;
     }
     const keep = r.pages > 1 ? r.page / (r.pages - 1) : 0;

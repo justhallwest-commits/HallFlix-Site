@@ -125,6 +125,7 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   body.classList.toggle('ui-hud', (t.interface || 'futuristic') === 'futuristic');
   body.classList.toggle('hero-pan', (t.heroMotion || 'trailer') !== 'none');
   body.classList.toggle('depth', t.depth !== false);
+  body.classList.toggle('glass', t.glass !== false);
   const signedOut = !state.profile;
   const bg = signedOut ? (t.login?.image || t.background?.image) : (lib.background || t.background?.image);
   const dim = signedOut ? (t.login?.dim ?? 0.45) : (lib.dim ?? t.background?.dim ?? 0.6);

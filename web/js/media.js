@@ -12,12 +12,37 @@ export async function playAlbum(id, { shuffle = false, from = 0 } = {}) {
   try { const d = await api('GET', `/api/items/${id}`); music.play(d.tracks, from, { shuffle }); } catch (e) { toast(e.message); }
 }
 
-const trackList = (tracks, { showAlbum = false, discs = 1 } = {}) => html`<ol class="tracks">${tracks.map((t, i) => html`
+const trackList = (tracks, { showAlbum = false, discs = 1, unlist = false } = {}) => html`<ol class="tracks">${tracks.map((t, i) => html`
   ${discs > 1 && (i === 0 || tracks[i - 1].disc !== t.disc) ? html`<li class="disc">Disc ${t.disc}</li>` : ''}
   <li><button data-track="${i}"><span class="tn">${showAlbum ? i + 1 : t.track || i + 1}</span>
     ${showAlbum && t.poster ? html`<img src="${t.poster}" alt="" loading="lazy">` : ''}
     <span class="tt"><b>${t.title}</b>${showAlbum || (t.author && t.author !== tracks.artist) ? html`<small>${[t.author, showAlbum ? t.album : ''].filter(Boolean).join(' · ')}</small>` : ''}</span>
-    <span class="td">${fmtTime(t.runtime)}</span></button></li>`)}</ol>`;
+    <span class="td">${fmtTime(t.runtime)}</span></button>${unlist ? html`<button class="t-more" data-unlist="${t.id}" aria-label="Remove ${t.title} from this playlist" title="Remove from this playlist">${icons.x}</button>`
+      : html`<button class="t-more" data-addto="${t.id}" aria-label="Add ${t.title} to a playlist" title="Add to a playlist">${icons.plus}</button>`}</li>`)}</ol>`;
+
+/** One playlist: its songs in order, with play, shuffle and delete. */
+export async function playlist(view, id) {
+  const d = await api('GET', `/api/playlists/${id}`);
+  const total = d.tracks.reduce((a, t) => a + (t.runtime || 0), 0);
+  const art = [...new Set(d.tracks.map((t) => t.poster).filter(Boolean))].slice(0, 4);
+  view.innerHTML = String(html`<div class="page pl-page"><header class="pl-head"><div class="pl-art n${art.length}">${art.length ? art.map((a) => html`<img src="${a}" alt="">`) : html`<span>♪</span>`}</div>
+      <div><p class="m-kind">Playlist</p><h1>${d.name}</h1><p class="count">${plural(d.tracks.length, 'song')}${total ? ` · ${fmtRuntime(total)}` : ''}</p>
+        <div class="actions">${d.tracks.length ? html`<button class="btn primary" data-playall>${icons.play} Play</button><button class="btn" data-shuffle>${icons.shuffle} Shuffle</button>` : ''}<button class="btn" data-delpl>Delete playlist</button></div></div></header>
+    ${d.tracks.length ? trackList(d.tracks, { showAlbum: true, unlist: true }) : html`<div class="empty"><p>No songs yet. Use the + next to any song, or in Now Playing, to add it here.</p></div>`}</div>`);
+  $('.pl-page', view).addEventListener('click', async (e) => {
+    const t = e.target;
+    const un = t.closest('[data-unlist]');
+    if (un) { await api('POST', `/api/playlists/${id}/tracks`, { remove: [+un.dataset.unlist] }).catch((err) => toast(err.message)); return playlist(view, id); }
+    const tr = t.closest('[data-track]');
+    if (tr) return music.play(d.tracks, +tr.dataset.track);
+    if (t.closest('[data-playall]')) return music.play(d.tracks, 0, { shuffle: false });
+    if (t.closest('[data-shuffle]')) return music.play(d.tracks, 0, { shuffle: true });
+    if (t.closest('[data-delpl]')) {
+      if (!confirm(`Delete the playlist “${d.name}”? The songs stay in your library.`)) return;
+      try { await api('DELETE', `/api/playlists/${id}`); toast('Playlist deleted'); history.back(); } catch (err) { toast(err.message); }
+    }
+  });
+}
 
 /** The title page for a book, comic series, album or artist, drawn into the overlay. */
 export function sheet(o, d, id) {
@@ -101,11 +126,20 @@ export async function musicLibrary(view, lib, lk, base) {
   if (!['title', 'artist', 'year', 'added'].includes(base.sort)) base.sort = 'artist';
   view.innerHTML = String(html`<div class="page music-lib"><div class="lib-head">
       ${lk.logo ? html`<img class="lib-logo" src="${lk.logo}" alt="${lib.name}">` : html`<h1>${lib.name}</h1>`}<span class="count"></span>
-      <div class="tabs-row">${[['albums', 'Albums'], ['artists', 'Artists'], ['songs', 'Songs']].map(([v, n]) => html`<button class="chip ${base.view === v ? 'on' : ''}" data-view="${v}">${n}</button>`)}</div>
+      <div class="tabs-row">${[['albums', 'Albums'], ['artists', 'Artists'], ['songs', 'Songs'], ['playlists', 'Playlists']].map(([v, n]) => html`<button class="chip ${base.view === v ? 'on' : ''}" data-view="${v}">${n}</button>`)}</div>
       <select data-msort aria-label="Sort" ${base.view === 'albums' ? '' : raw('hidden')}>${[['artist', 'Artist'], ['title', 'A to Z'], ['year', 'Newest first'], ['added', 'Recently added']].map(([v, n]) => html`<option value="${v}" ${base.sort === v ? raw('selected') : ''}>${n}</option>`)}</select>
     </div><div class="chips"></div><div class="mbody"></div></div>`);
   const draw = async () => {
     const v = base.view, box = $('.mbody', view);
+    if (v === 'playlists') {
+      const lists = await api('GET', '/api/playlists');
+      if (!box.isConnected) return;
+      $('.count', view).textContent = plural(lists.length, 'playlist'); $('.chips', view).innerHTML = ''; $('[data-msort]', view).hidden = true;
+      box.innerHTML = String(html`<div class="grid squares pl-grid">${lists.map((p) => html`<a class="card square pl-card" href="#/playlist/${p.id}"><div class="art"><div class="pl-art n${p.art.length}">${p.art.length ? p.art.map((a) => html`<img src="${a}" alt="" loading="lazy">`) : html`<span>♪</span>`}</div>
+          <div class="label">${p.name}<small>${plural(p.count, 'song')}</small></div></div></a>`)}
+        <button class="card square pl-card pl-make" data-newpl><div class="art"><div class="pl-art"><span>+</span></div><div class="label">New playlist<small>Start an empty one</small></div></div></button></div>`);
+      return;
+    }
     const q = v === 'albums' ? `&sort=${base.sort}&genre=${encodeURIComponent(base.genre || '')}` : v === 'artists' ? '&sort=title' : '';
     const d = await api('GET', `/api/library/${lib.id}?view=${v}&limit=${v === 'songs' ? 500 : 200}${q}`);
     if (!box.isConnected) return;
@@ -128,6 +162,11 @@ export async function musicLibrary(view, lib, lk, base) {
     const box = $('.mbody', view);
     const tr = t.closest('[data-track]');
     if (tr && box.tracks) { music.play(box.tracks, +tr.dataset.track); return; }
+    if (t.closest('[data-newpl]')) {
+      const name = prompt('Name the playlist');
+      if (name?.trim()) api('POST', '/api/playlists', { name: name.trim() }).then((p) => { location.hash = `#/playlist/${p.id}`; }, (err) => toast(err.message));
+      return;
+    }
     if (t.closest('[data-allsongs]')) music.play(box.tracks, 0, { shuffle: false });
     if (t.closest('[data-allshuffle]')) music.play(box.tracks, 0, { shuffle: true });
   });

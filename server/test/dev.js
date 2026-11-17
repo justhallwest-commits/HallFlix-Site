@@ -56,6 +56,9 @@ albums.forEach(([artist, album, year, genre, songs], ai) => {
   songs.forEach((t, k) => execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `sine=f=${220 * (1 + k * 0.25)}:d=40,volume=0.25`, '-f', 'lavfi', '-i', `sine=f=${330 + ai * 50}:d=40,volume=0.15`, '-i', art,
     '-filter_complex', '[0:a][1:a]amix=inputs=2[a]', '-map', '[a]', '-map', '2:v', '-c:v', 'mjpeg', '-disposition:v', 'attached_pic', '-id3v2_version', '3',
     ...Object.entries({ title: t, artist, album, album_artist: artist, track: `${k + 1}`, date: String(year), genre }).flatMap(([a, b]) => ['-metadata', `${a}=${b}`]), mk('Music', artist, album, `${k + 1} ${t}.mp3`)]));
+  // Timed lyrics beside the first song of each album.
+  fs.writeFileSync(mk('Music', artist, album, `1 ${songs[0]}.lrc`), ['[00:00.50]City lights are bleeding through the rain', '[00:04.00]Every window holds a different name', '[00:08.00]We keep driving till the signs run out',
+    '[00:12.00]Radio is all we talk about', '[00:16.00]Neon on the glass, neon in your eyes', '[00:20.00]Nothing in the mirror but the night', '[00:26.00]Hold on, hold on', '[00:32.00]The morning is a long way off'].join('\n'));
 });
 
 const hf = await boot({ generic: true, art: true, port: 8790 });

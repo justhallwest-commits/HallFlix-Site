@@ -7,6 +7,7 @@ import { effects, startEffect } from './effects.js';
 import { initFeel } from './feel.js';
 import { openReader, closeReader, readerOpen } from './reader.js';
 import { initMusic } from './music.js';
+import { initMore } from './more.js';
 
 // What plugins can use. See docs/PLUGINS.md.
 window.HallFlix = {
@@ -32,7 +33,7 @@ async function route() {
     const start = /(^|&)t=0/.test(qs) ? 0 : undefined;
     // Inside the HallFlix Android app, video plays in the app's own player.
     if (window.HallFlixNative) { window.HallFlixNative.play(JSON.stringify({ itemId: +parts[1], start: start ?? null })); history.back(); return; }
-    await openPlayer(+parts[1], { start });
+    await openPlayer(+parts[1], { start, cinema: /(^|&)night=1/.test(qs) });
     return;
   }
   if (parts[0] === 'read' && +parts[1]) { views.closeTitle(); if (playerOpen()) closePlayer(); views.markStale(); await openReader(+parts[1]); return; }
@@ -83,6 +84,7 @@ async function boot() {
   if (!b.profile) return views.login(b);
   loadPlugins(b.plugins);
   views.shell();
+  initMore();
   on('signedout', () => location.reload());
   addEventListener('hashchange', route);
   await route();
