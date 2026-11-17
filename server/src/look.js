@@ -15,7 +15,11 @@ export const DEFAULT_THEME = {
   background: { image: '', dim: 0.6, blur: 0 },
   // The sign-in page: background, where the box sits, the logo above it, and what makes the box stand out.
   login: { image: '', dim: 0.45, blur: 0, logo: '', logoPlace: 'above', logoSize: 150, x: 'center', y: 'middle', panel: 'none', panelOpacity: 0.72, panelBlur: 18,
-    darkWhere: 'none', dark: 0.5, blurWhere: 'all', focusBlur: 0, title: '' },
+    darkWhere: 'none', dark: 0.5, blurWhere: 'all', focusBlur: 0, title: '',
+    // Layout: a floating box, or a full-height side panel with the picture beside it.
+    layout: 'floating', side: 'left', sideWidth: 33, sideColor: '', sideOpacity: 0.96, divider: true,
+    // Profile tiles, the other ways to sign in, and a note at the bottom.
+    tileShape: 'theme', tileMotion: true, tileSize: 132, tileColumns: 0, buttons: 'links', manualButton: true, manualLabel: '', phoneLabel: '', footer: '', footerLink: '' },
   logo: { image: '', height: 46 },
   effect: 'none', // none | snow | embers | hearts | leaves | confetti | stars | bats
   artColor: true, // the accent follows the artwork in focus

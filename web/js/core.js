@@ -153,12 +153,28 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
 /** Lay out the sign-in page from the look: where the box sits, the logo, the panel, and darkening or blur to set the box off. */
 export function styleLogin(t = themeNow()) {
   const el = $('.login.signin');
-  if (!el || !t) return;
+  const root = document.documentElement;
+  if (!el || !t) { root.classList.remove('signin-split-left', 'signin-split-right'); return; }
   const L = t.login || {};
   const pick = (v, ok, d) => (ok.includes(v) ? v : d);
-  const x = pick(L.x, ['left', 'center', 'right'], 'center'), y = pick(L.y, ['top', 'middle', 'bottom'], 'middle');
-  Object.assign(el.dataset, { x, y, logo: pick(L.logoPlace, ['above', 'inside', 'corner', 'hidden'], 'above'), panel: pick(L.panel, ['none', 'glass', 'solid'], 'none') });
+  const split = L.layout === 'split', side = pick(L.side, ['left', 'right'], 'left');
+  // In the side-panel layout the box fills a full-height panel, so it sits on the panel's side.
+  const x = split ? side : pick(L.x, ['left', 'center', 'right'], 'center'), y = pick(L.y, ['top', 'middle', 'bottom'], 'middle');
+  Object.assign(el.dataset, { x, y, layout: split ? 'split' : 'floating', logo: pick(L.logoPlace, ['above', 'inside', 'corner', 'hidden'], 'above'), panel: split ? 'none' : pick(L.panel, ['none', 'glass', 'solid'], 'none'),
+    tiles: pick(L.tileShape, ['theme', 'rounded', 'circle', 'square'], 'theme'), buttons: pick(L.buttons, ['links', 'outlined', 'filled'], 'links'), divider: L.divider === false ? 'no' : 'yes', motion: L.tileMotion === false ? 'still' : 'tilt' });
   const s = el.style;
+  const w = Math.max(20, Math.min(70, +L.sideWidth || 33));
+  s.setProperty('--side-w', `${w}vw`);
+  const sc = /^#[0-9a-f]{6}$/i.test(L.sideColor || '') ? rgb(L.sideColor) : null;
+  s.setProperty('--side-rgb', sc || 'var(--bg-rgb)');
+  s.setProperty('--side-op', String(Math.max(0.2, Math.min(1, L.sideOpacity ?? 0.96))));
+  s.setProperty('--tile-size', `${Math.max(56, Math.min(220, +L.tileSize || 132))}px`);
+  s.setProperty('--tile-cols', +L.tileColumns > 0 ? `repeat(${Math.min(8, +L.tileColumns)}, var(--tile-size))` : '');
+  el.classList.toggle('fixed-cols', +L.tileColumns > 0);
+  // The background picture moves into the space beside the panel, so the panel doesn't hide it.
+  root.classList.toggle('signin-split-left', split && side === 'left');
+  root.classList.toggle('signin-split-right', split && side === 'right');
+  root.style.setProperty('--side-w', `${w}vw`);
   s.setProperty('--logo-size', `${Math.max(30, Math.min(360, +L.logoSize || 150))}px`);
   s.setProperty('--lp-op', String(Math.max(0, Math.min(1, L.panelOpacity ?? 0.72))));
   s.setProperty('--lp-blur', `${Math.max(0, Math.min(40, +L.panelBlur || 0))}px`);
@@ -186,6 +202,15 @@ export function styleLogin(t = themeNow()) {
   if (img) img.src = L.logo || logoUrl();
   const h = $('[data-login-title]', el);
   if (h) h.textContent = String(L.title || '').trim() || "Who's watching?";
+  const m = $('[data-manual]', el);
+  if (m) { m.hidden = L.manualButton === false; m.textContent = String(L.manualLabel || '').trim() || 'Sign in with name and password'; }
+  for (const b of $$('[data-pair]', el)) b.textContent = String(L.phoneLabel || '').trim() || b.dataset.default;
+  const f = $('.signin-foot', el);
+  if (f) {
+    const txt = String(L.footer || '').trim(), link = /^https?:\/\//i.test(L.footerLink || '') ? L.footerLink : '';
+    f.hidden = !txt;
+    f.innerHTML = !txt ? '' : link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(txt)}</a>` : esc(txt);
+  }
 }
 export const logoUrl = () => themeNow()?.logo?.image || '/assets/logo.png';
 export const libraryLook = (id) => state.look?.libraries?.[id] || {};
