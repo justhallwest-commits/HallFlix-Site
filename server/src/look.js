@@ -42,6 +42,10 @@ export const DEFAULT_THEME = {
   profileColors: true, // each profile's colour tints its own session
   ident: { enabled: true, video: '' }, // the HallFlix logo card before a feature; `video` replaces the built-in animation
   night: { enabled: false, from: '20:00', to: '06:00', theme: {} }, // a second look for the evening, by the viewer's clock
+  // Rows on Home and in every library (a library can override any of it): how many titles each row shows (0 = all),
+  // how many rows show before "Show more rows" (0 = all), arrows or a visible scroll bar under each row, and whether the
+  // rows sit in their own scrolling panel so the background stays in view.
+  rows: { items: 15, sections: 8, scroll: 'arrows', panel: false, panelHeight: 60 },
   // The covers on each library's Home tile: where they sit, how big, how many and how they stand. A library can override any of it.
   tileCovers: { show: 'yes', place: 'br', size: 56, count: 3, style: 'angled', x: 0, y: 0 },
 };

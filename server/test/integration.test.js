@@ -284,6 +284,11 @@ test('looks: theme, library looks, seasons, uploads', async () => {
   assert.equal((await fetch(hf.base + snd.url)).headers.get('content-type'), 'audio/mpeg');
   const d = (await hf.api('GET', '/api/studio/look')).defaults;
   assert.deepEqual([d.glowStyle, d.focusRing, d.atmosphere, d.tiles3d.style, d.soundFx.volume, d.login.music.enabled], ['natural', 'glow', 'none', 'layered', 0.8, false]);
+  assert.deepEqual(d.rows, { items: 15, sections: 8, scroll: 'arrows', panel: false, panelHeight: 60 });
+  // A library's own row limits ride along with its look; empty choices mean "same as the whole app".
+  await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: { rows: { items: '6', sections: '', panel: 'yes' } } });
+  assert.deepEqual((await hf.api('GET', '/api/boot')).look.libraries[lib.movies.id].rows, { items: '6', panel: 'yes' });
+  await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: {} });
   const cur = (await hf.api('GET', '/api/studio/look')).theme;
   await hf.api('PUT', '/api/studio/theme', { theme: { ...cur, sounds: 'glass', soundFx: { volume: 0.5, events: { select: { url: snd.url, volume: 1.2 } } },
     login: { ...(cur.login || {}), music: { enabled: true, tracks: [{ url: snd.url, name: 'Theme' }], volume: 0.4 } } } });
