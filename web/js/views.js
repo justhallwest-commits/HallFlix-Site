@@ -1,5 +1,5 @@
 // Screens: first-run setup, sign-in, home, libraries, search and the title sheet.
-import { $, $$, api, html, raw, esc, icons, state, applyLook, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, themeNow } from './core.js';
+import { $, $$, api, html, raw, esc, icons, state, applyLook, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, on, themeNow } from './core.js';
 import * as browse from './browse.js';
 import * as feel from './feel.js';
 import * as media from './media.js';
@@ -64,8 +64,25 @@ const rowHtml = (r) => html`<section class="row ${r.shape === 'wide' ? 'keep' : 
   <button class="arrow r" aria-label="Scroll right" tabindex="-1">›</button></section>`;
 
 const isVid = (u) => /\.(mp4|webm|m4v|mov)(\?|$)/i.test(u || '');
+// Where each place puts the covers on the tile: [across, down], 0 = left/top, 1 = right/bottom.
+const PLACES = { br: [1, 1], mr: [1, 0.5], tr: [1, 0], bc: [0.5, 1], tc: [0.5, 0], tl: [0, 0] };
+/** The covers on a library tile, set up in Studio → Look and feel (whole app, then each library). */
+function coversHtml(posters, lk) {
+  const c = { show: 'yes', place: 'br', size: 56, count: 3, style: 'angled', x: 0, y: 0, ...(themeNow()?.tileCovers || {}), ...(lk.tileCovers || {}) };
+  const list = (posters || []).slice(0, Math.max(1, Math.min(3, +c.count || 3)));
+  if (c.show === 'no' || !list.length) return '';
+  const [ax, ay] = PLACES[c.place] || PLACES.br;
+  const step = c.style === 'fan' ? 0.12 : 0.24; // how far each cover sits from the next, as a share of the stack's width
+  const ar = (2 / 3) / (1 - step * (list.length - 1));
+  const style = `--ar:${ar.toFixed(3)};--ax:${ax};--ay:${ay};--cov-h:${Math.max(20, Math.min(100, +c.size || 56))}%;--cov-x:${Math.max(-40, Math.min(40, +c.x || 0))}%;--cov-y:${Math.max(-40, Math.min(40, +c.y || 0))}%;--n:${list.length}`;
+  return html`<span class="tile-stack st-${['angled', 'flat', 'fan'].includes(c.style) ? c.style : 'angled'}" style="${style}">${list.map((p, i) => html`<img src="${p}" alt="" loading="lazy" style="--i:${i}">`)}</span>`;
+}
+let lastTiles = null;
+// A new look (from the Studio's live preview, or a season starting) redraws the library tiles on Home.
+on('look', () => { const el = $('.libs'); if (el && lastTiles) el.outerHTML = String(tilesHtml(lastTiles)); });
 function tilesHtml(list) {
   if (!list?.length) return '';
+  lastTiles = list;
   return html`<section class="libs" data-count="${list.length}">${list.map((l) => {
     const lk = libraryLook(l.id);
     const bg = lk.background && !isVid(lk.background) ? lk.background : l.backdrop;
@@ -74,7 +91,7 @@ function tilesHtml(list) {
     const noun = l.count === 1 ? one : many;
     return html`<a class="lib-tile" href="#/library/${l.id}" style="${style}" aria-label="${l.name}, ${l.count} ${noun}">
       <span class="tile-art"></span>
-      ${l.posters.length ? html`<span class="tile-stack">${l.posters.map((p, i) => html`<img src="${p}" alt="" loading="lazy" style="--i:${i}">`)}</span>` : ''}
+      ${coversHtml(l.posters, lk)}
       <span class="tile-text">${lk.logo ? html`<img class="tile-logo" src="${lk.logo}" alt="">` : html`<b class="tile-name">${l.name}</b>`}
         <span class="tile-count">${l.count} ${noun}${l.fresh ? html`<em>${l.fresh} new</em>` : ''}</span></span>
       <span class="tile-sweep"></span></a>`;

@@ -26,6 +26,8 @@ export const DEFAULT_THEME = {
   profileColors: true, // each profile's colour tints its own session
   ident: { enabled: true, video: '' }, // the HallFlix logo card before a feature; `video` replaces the built-in animation
   night: { enabled: false, from: '20:00', to: '06:00', theme: {} }, // a second look for the evening, by the viewer's clock
+  // The covers on each library's Home tile: where they sit, how big, how many and how they stand. A library can override any of it.
+  tileCovers: { show: 'yes', place: 'br', size: 56, count: 3, style: 'angled', x: 0, y: 0 },
 };
 
 const P = (name, description, patch) => ({ id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, description, theme: patch });
