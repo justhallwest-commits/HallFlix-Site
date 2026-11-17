@@ -126,13 +126,13 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   body.classList.toggle('hero-pan', (t.heroMotion || 'trailer') !== 'none');
   body.classList.toggle('depth', t.depth !== false);
   body.classList.toggle('glass', t.glass !== false);
-  const signedOut = !state.profile;
+  const signedOut = !state.profile || !!state.signinPreview;
   const bg = signedOut ? (t.login?.image || t.background?.image) : (lib.background || t.background?.image);
   const dim = signedOut ? (t.login?.dim ?? 0.45) : (lib.dim ?? t.background?.dim ?? 0.6);
   const layer = $('#backdrop');
   layer.classList.toggle('has-image', !!bg);
   root.setProperty('--bg-dim', String(dim));
-  root.setProperty('--bg-blur', `${+(signedOut ? t.background?.blur : lib.blur ?? t.background?.blur) || 0}px`);
+  root.setProperty('--bg-blur', `${+(signedOut ? t.login?.blur : lib.blur ?? t.background?.blur) || 0}px`);
   // How the darkening is laid on (even, fading down, spotlight, accent tint) and which part of the picture stays in view.
   const shade = signedOut ? 'even' : lib.shade || t.background?.shade || 'even';
   layer.dataset.shade = ['even', 'fade', 'spot', 'tint'].includes(shade) ? shade : 'even';
@@ -146,7 +146,46 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   document.title = t.siteName || 'HallFlix';
   for (const img of $$('img[data-site-logo]')) img.src = logoUrl();
   startEffect(t.effect || 'none');
+  styleLogin(t);
   emit('look', look);
+}
+
+/** Lay out the sign-in page from the look: where the box sits, the logo, the panel, and darkening or blur to set the box off. */
+export function styleLogin(t = themeNow()) {
+  const el = $('.login.signin');
+  if (!el || !t) return;
+  const L = t.login || {};
+  const pick = (v, ok, d) => (ok.includes(v) ? v : d);
+  const x = pick(L.x, ['left', 'center', 'right'], 'center'), y = pick(L.y, ['top', 'middle', 'bottom'], 'middle');
+  Object.assign(el.dataset, { x, y, logo: pick(L.logoPlace, ['above', 'inside', 'corner', 'hidden'], 'above'), panel: pick(L.panel, ['none', 'glass', 'solid'], 'none') });
+  const s = el.style;
+  s.setProperty('--logo-size', `${Math.max(30, Math.min(360, +L.logoSize || 150))}px`);
+  s.setProperty('--lp-op', String(Math.max(0, Math.min(1, L.panelOpacity ?? 0.72))));
+  s.setProperty('--lp-blur', `${Math.max(0, Math.min(40, +L.panelBlur || 0))}px`);
+  // Shapes for darkening and blurring: everywhere, behind the box, away from the box (a spotlight), or the box's side.
+  const px = { left: '22%', center: '50%', right: '78%' }[x], py = { top: '26%', middle: '50%', bottom: '74%' }[y];
+  const shape = (where, c) => {
+    if (where === 'behind') return `radial-gradient(ellipse 46% 68% at ${px} ${py}, ${c} 0%, ${c} 42%, transparent 100%)`;
+    if (where === 'away') return `radial-gradient(ellipse 46% 68% at ${px} ${py}, transparent 0%, transparent 32%, ${c} 100%)`;
+    if (where === 'side') {
+      if (x !== 'center') return `linear-gradient(to ${x === 'left' ? 'right' : 'left'}, ${c} 0%, ${c} 36%, transparent 78%)`;
+      if (y !== 'middle') return `linear-gradient(to ${y === 'top' ? 'bottom' : 'top'}, ${c} 0%, ${c} 36%, transparent 80%)`;
+      return `linear-gradient(to right, transparent 8%, ${c} 30%, ${c} 70%, transparent 92%)`;
+    }
+    return `linear-gradient(${c}, ${c})`;
+  };
+  const dark = Math.max(0, Math.min(1, L.dark ?? 0.5));
+  const dw = pick(L.darkWhere, ['none', 'all', 'behind', 'away', 'side'], 'none');
+  s.setProperty('--lf-bg', dw === 'none' || !dark ? 'none' : shape(dw, `rgba(0,0,0,${dark})`));
+  const fb = Math.max(0, Math.min(40, +L.focusBlur || 0));
+  const bw = pick(L.blurWhere, ['all', 'behind', 'away', 'side'], 'all');
+  s.setProperty('--lf-blur', `${fb}px`);
+  s.setProperty('--lf-mask', !fb || bw === 'all' ? 'none' : shape(bw, '#000'));
+  el.classList.toggle('lf-blurred', fb > 0);
+  const img = $('.brand', el);
+  if (img) img.src = L.logo || logoUrl();
+  const h = $('[data-login-title]', el);
+  if (h) h.textContent = String(L.title || '').trim() || "Who's watching?";
 }
 export const logoUrl = () => themeNow()?.logo?.image || '/assets/logo.png';
 export const libraryLook = (id) => state.look?.libraries?.[id] || {};

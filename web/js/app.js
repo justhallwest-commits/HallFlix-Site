@@ -63,6 +63,18 @@ function loadPlugins(list) {
   }
 }
 
+/** In the Studio's preview: draw the sign-in page as visitors see it, with this server's profiles. Nothing can sign in. */
+async function signinPreview() {
+  state.signinPreview = true;
+  let profiles = [];
+  try {
+    const [st, list] = await Promise.all([api('GET', '/api/studio/settings'), api('GET', '/api/studio/profiles')]);
+    if (st.showProfilesOnLogin !== false) profiles = (Array.isArray(list) ? list : list.profiles || []).map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, color: p.color }));
+  } catch { /* show the name-and-password form */ }
+  for (const el of document.querySelectorAll('#player, .mini, .np, #overlay')) el.hidden = true;
+  views.login({ ...state.boot, look: state.look, profiles });
+}
+
 async function boot() {
   const params = new URLSearchParams(location.search);
   if (/AFT|Android TV|GoogleTV|BRAVIA|SmartTV|Tizen|Web0S/i.test(navigator.userAgent) || params.has('tv')) document.body.classList.add('tv');
@@ -78,7 +90,11 @@ async function boot() {
     addEventListener('message', (e) => {
       if (e.origin !== location.origin || !e.data) return;
       if (e.data.type === 'hallflix-look') applyLook(e.data.look, e.data.library ?? undefined);
-      if (e.data.type === 'hallflix-go' && location.hash !== e.data.hash) location.hash = e.data.hash;
+      if (e.data.type === 'hallflix-go') {
+        if (e.data.hash === '#/signin') signinPreview();
+        else if (state.signinPreview) { location.hash = e.data.hash; location.reload(); } // back to the signed-in app
+        else if (location.hash !== e.data.hash) location.hash = e.data.hash;
+      }
       if (e.data.type === 'hallflix-show' && typeof e.data.selector === 'string') document.querySelector(e.data.selector)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     });
     parent?.postMessage({ type: 'hallflix-ready' }, location.origin);

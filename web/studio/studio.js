@@ -349,7 +349,7 @@ pages.collections = async (main) => {
 // ---------- live preview shared by Look and Seasons ----------
 function previewPane(libraries) {
   return html`<section class="preview"><div class="bar"><h3 style="margin-right:auto">Live preview</h3>
-    <select data-pv-go style="width:auto"><option value="#/">Home</option>${libraries.map((l) => html`<option value="#/library/${l.id}" data-lib="${l.id}">${l.name}</option>`)}</select>
+    <select data-pv-go style="width:auto"><option value="#/">Home</option>${libraries.map((l) => html`<option value="#/library/${l.id}" data-lib="${l.id}">${l.name}</option>`)}<option value="#/signin">Sign-in page</option></select>
     <div class="tabs" style="margin:0"><button class="on" data-pv-size="tv">TV / computer</button><button data-pv-size="phone">Phone</button></div></div>
     <div class="stage"><iframe src="/?preview=1" title="Preview of HallFlix"></iframe></div></section>`;
 }
@@ -370,6 +370,29 @@ function wirePreview(main, payload) {
 }
 const swatch = (t, d) => { const c = { ...d.colors, ...(t.colors || {}) }; return html`<span class="sw" style="background:${c.bg}"><i style="background:${c.accent}"></i><i style="background:${c.accent2}"></i><i style="background:${c.text}"></i></span>`; };
 
+// The Sign-in page tab: background, logo, where the box sits, and what sets the box off from the picture behind it.
+const LOGO_PLACES = [['above', 'Above the sign-in box'], ['inside', 'Inside the box’s panel'], ['corner', 'Top-left corner'], ['hidden', 'Hidden']];
+const PANELS = [['none', 'No panel (floating)'], ['glass', 'Frosted glass'], ['solid', 'Solid']];
+const WHERE = [['all', 'Everywhere'], ['behind', 'Behind the box'], ['away', 'Around the box (spotlight)'], ['side', 'The box’s side of the screen']];
+function signinCards(theme) {
+  const L = theme.login || {};
+  const x = L.x || 'center', y = L.y || 'middle';
+  return html`<div class="card"><h2>Background</h2>${image(theme, 'login.image', 'Sign-in background picture or video')}
+      ${range(theme, 'login.dim', 'Darken the whole screen', 0, 0.95, 0.05)}${range(theme, 'login.blur', 'Blur the whole picture', 0, 30, 1)}</div>
+    <div class="card"><h2>Logo</h2>${choose(theme, 'login.logoPlace', 'Where', LOGO_PLACES)}${range(theme, 'login.logoSize', 'Size (pixels tall)', 40, 340, 5)}
+      ${image(theme, 'login.logo', 'A different logo for this page (empty uses the site logo)')}
+      ${text(theme, 'login.title', 'Heading over the profiles', 'Who’s watching?')}</div>
+    <div class="card"><h2>Sign-in box</h2>
+      <div class="f"><span>Where on the screen</span><div class="posgrid" role="group" aria-label="Where the sign-in box sits">${['top', 'middle', 'bottom'].flatMap((yy) => ['left', 'center', 'right'].map((xx) => html`<button type="button" data-lpos="${xx},${yy}" class="${x === xx && y === yy ? 'on' : ''}" aria-label="${yy} ${xx}" title="${yy === 'middle' ? '' : `${yy} `}${xx === 'center' ? (yy === 'middle' ? 'centre' : 'centre') : xx}"><i></i></button>`))}</div></div>
+      ${choose(theme, 'login.panel', 'Panel behind the box', PANELS)}
+      ${L.panel && L.panel !== 'none' ? html`${range(theme, 'login.panelOpacity', 'Panel strength', 0.1, 1, 0.05)}${L.panel === 'glass' ? range(theme, 'login.panelBlur', 'Frost (blur behind the panel)', 0, 40, 1) : ''}` : ''}
+      <p class="muted small">On phones the box is always centred.</p></div>
+    <div class="card"><h2>Make the box stand out</h2>
+      ${choose(theme, 'login.darkWhere', 'Darken', [['none', 'Nothing extra'], ...WHERE])}${L.darkWhere && L.darkWhere !== 'none' ? range(theme, 'login.dark', 'How dark', 0.05, 1, 0.05) : ''}
+      ${range(theme, 'login.focusBlur', 'Blur', 0, 40, 1)}${+L.focusBlur ? choose(theme, 'login.blurWhere', 'Blur where', WHERE) : ''}
+      <p class="muted small">“Behind the box” keeps the rest of the picture clear; “Around the box” fades and softens everything else so the box is the bright spot.</p></div>`;
+}
+
 // ---------- look and feel ----------
 pages.look = async (main) => {
   main.className = 'split';
@@ -383,8 +406,8 @@ pages.look = async (main) => {
   const draw = () => {
     const lib = L.libraries.find((l) => `lib-${l.id}` === tab);
     box.innerHTML = String(html`${head('Look and feel', 'Changes show in the preview straight away. Nothing goes live until you save.')}
-      <div class="tabs"><button data-tab="theme" class="${tab === 'theme' ? 'on' : ''}">Whole app</button>${L.libraries.map((l) => html`<button data-tab="lib-${l.id}" class="${tab === `lib-${l.id}` ? 'on' : ''}">${l.name}</button>`)}</div>
-      ${lib ? html`<div class="card" data-form="lib"><h2>${lib.name} only</h2><p class="muted small">Leave anything empty to use the whole-app look.</p>
+      <div class="tabs"><button data-tab="theme" class="${tab === 'theme' ? 'on' : ''}">Whole app</button><button data-tab="signin" class="${tab === 'signin' ? 'on' : ''}">Sign-in page</button>${L.libraries.map((l) => html`<button data-tab="lib-${l.id}" class="${tab === `lib-${l.id}` ? 'on' : ''}">${l.name}</button>`)}</div>
+      ${tab === 'signin' ? signinCards(theme) : lib ? html`<div class="card" data-form="lib"><h2>${lib.name} only</h2><p class="muted small">Leave anything empty to use the whole-app look.</p>
           ${image(libs[lib.id], 'background', 'Background picture or video')}${range(libs[lib.id], 'dim', 'Darken background', 0, 0.95, 0.05, theme.background.dim)}
           ${range(libs[lib.id], 'blur', 'Blur background', 0, 30, 1, theme.background.blur || 0)}${choose(libs[lib.id], 'shade', 'Shade', BG_SHADES, 'Same as whole app')}${choose(libs[lib.id], 'position', 'Keep in view', BG_PLACES, 'Same as whole app')}
           <p class="muted small">You can also change this on the ${lib.name} page itself: admins see a picture button next to the library name.</p>
@@ -399,7 +422,7 @@ pages.look = async (main) => {
           ${range(theme, 'radius', theme.interface === 'classic' ? 'Card corners' : 'Corner cut', 0, 28, 1)}${range(theme, 'glow', 'Neon glow', 0, 1, 0.05)}${select(theme, 'cardShape', 'Card shape', L.options.cardShapes)}${range(theme, 'heroHeight', 'Banner height', 40, 100, 5)}</div>
         <div class="card"><h2>Texture and effects</h2>${select(theme, 'texture', 'Texture', L.options.textures)}${select(theme, 'effect', 'Moving effect', L.options.effects)}</div>
         <div class="card"><h2>Backgrounds</h2>${image(theme, 'background.image', 'Home background picture or video')}${range(theme, 'background.dim', 'Darken', 0, 0.95, 0.05)}${range(theme, 'background.blur', 'Blur', 0, 30, 1)}${choose(theme, 'background.shade', 'Shade', BG_SHADES)}${choose(theme, 'background.position', 'Keep in view', BG_PLACES)}
-          ${image(theme, 'login.image', 'Sign-in screen background')}${range(theme, 'login.dim', 'Darken sign-in', 0, 0.95, 0.05)}</div>
+          <p class="muted small">The sign-in screen has its own background and layout: see the Sign-in page tab.</p></div>
         ${coversCard(theme, theme.tileCovers || {}, '')}
         <div class="card"><h2>Motion and sound</h2>
           ${check(theme, 'artColor', 'Colour follows the artwork in focus')}${check(theme, 'depth', 'Posters lean toward the pointer')}
@@ -432,6 +455,8 @@ pages.look = async (main) => {
     if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false;
     send();
   });
+  // On the Sign-in page tab, some choices show or hide others (panel strength, how dark, where to blur).
+  box.addEventListener('change', (e) => { if (tab === 'signin' && e.target.matches('select[data-path^="login."], [data-path="login.focusBlur"]')) draw(); });
   // While the tile covers are being changed, the preview shows Home with the library tiles in view.
   const showTiles = () => {
     const sel = $('[data-pv-go]', main), frame = $('iframe', main);
@@ -442,11 +467,18 @@ pages.look = async (main) => {
   box.addEventListener('input', (e) => { if (e.target.closest('[data-path^="tileCovers"]')) showTiles(); });
   box.addEventListener('click', async (e) => {
     if (e.target.closest('[data-covers-reset]') && curLib()) { delete libs[curLib().id].tileCovers; dirty = true; draw(); send(); showTiles(); return; }
+    const lp = e.target.closest('[data-lpos]');
+    if (lp) {
+      const [x, y] = lp.dataset.lpos.split(',');
+      theme.login = { ...(theme.login || {}), x, y };
+      dirty = true; draw(); send();
+      return;
+    }
     const t = e.target.closest('[data-tab],[data-preset],[data-save],[data-undo]');
     if (!t) return;
     if (t.dataset.tab) {
       tab = t.dataset.tab; draw();
-      const sel = $('[data-pv-go]', main); sel.value = curLib() ? `#/library/${curLib().id}` : '#/'; sel.onchange({ target: sel });
+      const sel = $('[data-pv-go]', main); sel.value = curLib() ? `#/library/${curLib().id}` : tab === 'signin' ? '#/signin' : '#/'; sel.onchange({ target: sel });
     } else if (t.dataset.preset) {
       const p = L.presets.find((x) => x.id === t.dataset.preset);
       const keep = { siteName: theme.siteName, logo: theme.logo, background: theme.background, login: theme.login };
