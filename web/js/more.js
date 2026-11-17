@@ -141,7 +141,7 @@ export async function pairScreen(box, back) {
   const qr = await loadQr();
   let svg = '';
   if (qr) { const q = qr(0, 'M'); q.addData(link); q.make(); svg = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); }
-  box.innerHTML = String(html`<img class="brand" src="${logoUrl()}" alt=""><h1>Sign in with your phone</h1>
+  box.innerHTML = String(html`${box.closest('.signin') ? '' : html`<img class="brand" src="${logoUrl()}" alt="">`}<h1>Sign in with your phone</h1>
     <div class="pair"><div class="pair-qr">${raw(svg)}</div><ol><li>Point your phone's camera at the code.</li><li>Sign in to HallFlix on the phone if it asks.</li><li>Tap <b>Sign in this screen</b>.</li></ol></div>
     <p class="pair-code">No camera? Open HallFlix on your phone and go to <b>${location.host}/#/pair/${p.code}</b></p>
     <button class="linkbtn" data-back>Use a password instead</button>`);

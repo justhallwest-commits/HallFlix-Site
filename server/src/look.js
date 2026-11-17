@@ -13,7 +13,9 @@ export const DEFAULT_THEME = {
   cardShape: 'poster', // poster | wide
   heroHeight: 80, // % of the screen height
   background: { image: '', dim: 0.6, blur: 0 },
-  login: { image: '', dim: 0.45 },
+  // The sign-in page: background, where the box sits, the logo above it, and what makes the box stand out.
+  login: { image: '', dim: 0.45, blur: 0, logo: '', logoPlace: 'above', logoSize: 150, x: 'center', y: 'middle', panel: 'none', panelOpacity: 0.72, panelBlur: 18,
+    darkWhere: 'none', dark: 0.5, blurWhere: 'all', focusBlur: 0, title: '' },
   logo: { image: '', height: 46 },
   effect: 'none', // none | snow | embers | hearts | leaves | confetti | stars | bats
   artColor: true, // the accent follows the artwork in focus

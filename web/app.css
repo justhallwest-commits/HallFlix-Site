@@ -1453,3 +1453,35 @@ a.rating:hover { background: rgba(var(--text-rgb), 0.12); transform: translateY(
 .bg-r input[type=range] { width: 100%; accent-color: var(--accent); }
 .bg-r .seg { align-self: flex-start; flex-wrap: wrap; }
 @media (max-width: 600px) { .bg-panel { right: 12px; left: 12px; bottom: 12px; width: auto; max-height: 62vh; } }
+
+/* ---------- the sign-in page: where the box sits, the logo, a panel, and darkening or blur around it ---------- */
+.login.signin { display: flex; place-items: initial; padding: clamp(24px, 5vw, 84px); }
+.login.signin[data-x="left"] { justify-content: flex-start; }
+.login.signin[data-x="center"] { justify-content: center; }
+.login.signin[data-x="right"] { justify-content: flex-end; }
+.login.signin[data-y="top"] { align-items: flex-start; }
+.login.signin[data-y="middle"] { align-items: center; }
+.login.signin[data-y="bottom"] { align-items: flex-end; }
+.login.signin::before, .login.signin::after { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+.login.signin::before { background: var(--lf-bg, none); transition: background 0.3s; }
+.login.signin.lf-blurred::after { -webkit-backdrop-filter: blur(var(--lf-blur)); backdrop-filter: blur(var(--lf-blur)); -webkit-mask-image: var(--lf-mask, none); mask-image: var(--lf-mask, none); }
+.login.signin .stack { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; max-width: min(760px, 100%); animation: rise 0.6s ease both; }
+.login.signin .box { width: auto; max-width: 100%; animation: none; }
+.login.signin .brand { height: min(var(--logo-size, 150px), 26vh); width: auto; margin: 0 auto 26px; }
+.login.signin[data-logo="corner"] .brand { position: fixed; top: clamp(16px, 3vw, 34px); left: clamp(16px, 3vw, 40px); height: min(var(--logo-size, 150px), 14vh); margin: 0; z-index: 2; }
+.login.signin[data-logo="hidden"] .brand { display: none; }
+.login.signin[data-x="left"] .stack, .login.signin[data-x="left"] .box { align-items: flex-start; text-align: left; }
+.login.signin[data-x="left"] .brand { margin-left: 0; }
+.login.signin[data-x="left"] .who { justify-content: flex-start; }
+.login.signin[data-x="right"] .stack, .login.signin[data-x="right"] .box { align-items: flex-end; text-align: right; }
+.login.signin[data-x="right"] .brand { margin-right: 0; }
+.login.signin[data-x="right"] .who { justify-content: flex-end; }
+.login.signin:not([data-x="center"]) .form { text-align: left; }
+/* The panel goes round the box, or round the logo and box together when the logo is inside it. */
+.login.signin[data-panel="glass"]:not([data-logo="inside"]) .box, .login.signin[data-panel="glass"][data-logo="inside"] .stack,
+.login.signin[data-panel="solid"]:not([data-logo="inside"]) .box, .login.signin[data-panel="solid"][data-logo="inside"] .stack {
+  background: rgba(var(--surface-rgb, var(--bg-rgb)), var(--lp-op, 0.72)); border: 1px solid rgba(var(--text-rgb), 0.14); border-radius: max(var(--radius), 14px);
+  padding: clamp(22px, 3.2vw, 44px); box-shadow: 0 24px 80px rgba(0,0,0,0.5); }
+.login.signin[data-panel="glass"]:not([data-logo="inside"]) .box, .login.signin[data-panel="glass"][data-logo="inside"] .stack { -webkit-backdrop-filter: blur(var(--lp-blur, 18px)) saturate(1.2); backdrop-filter: blur(var(--lp-blur, 18px)) saturate(1.2); }
+.login.signin[data-logo="inside"] .brand { height: min(var(--logo-size, 150px), 20vh); margin-bottom: 20px; }
+@media (max-width: 640px) { .login.signin { justify-content: center !important; padding: 18px; } .login.signin .stack, .login.signin .box { align-items: center !important; text-align: center !important; } .login.signin .who { justify-content: center !important; } }

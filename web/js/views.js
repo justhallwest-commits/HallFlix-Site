@@ -1,5 +1,5 @@
 // Screens: first-run setup, sign-in, home, libraries, search and the title sheet.
-import { $, $$, api, html, raw, esc, icons, state, applyLook, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, on, themeNow } from './core.js';
+import { $, $$, api, html, raw, esc, icons, state, applyLook, styleLogin, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, on, themeNow } from './core.js';
 import * as browse from './browse.js';
 import * as feel from './feel.js';
 import * as media from './media.js';
@@ -610,17 +610,19 @@ async function removeDialog(itemId, done) {
 export function login(boot) {
   applyLook(boot.look, null);
   const tiles = boot.profiles?.length;
+  const preview = !!state.signinPreview; // drawn inside the Studio's live preview: nothing signs in
+  const box = () => $('.login .box');
   const formFor = (p) => {
-    $('.login .box').innerHTML = String(html`<img class="brand" src="${logoUrl()}" alt="">
-      <form class="form">${p ? html`<h1 style="text-align:center;margin-bottom:6px">Hi, ${p.name}</h1>` : html`<label>Name<input name="name" autocomplete="username" required></label>`}
-      <label>Password or PIN<input name="password" type="password" autocomplete="current-password" required></label>
+    box().innerHTML = String(html`<form class="form">${p ? html`<h1 style="text-align:center;margin-bottom:6px">Hi, ${p.name}</h1>` : html`<label>Name<input name="name" autocomplete="username" required></label>`}
+      <label>Password or PIN<input name="password" type="password" autocomplete="current-password" ${preview ? '' : raw('required')}></label>
       <div class="err"></div><button class="btn primary">Sign in</button></form>
       ${tiles ? html`<button class="linkbtn" data-back>Choose a different profile</button>` : ''}<button class="linkbtn" data-pair>Sign in with your phone instead</button>`);
-    $('[data-pair]').onclick = () => more.pairScreen($('.login .box'), tiles ? picker : () => formFor(null));
+    $('[data-pair]').onclick = () => (preview ? toast('This is a preview') : more.pairScreen(box(), tiles ? picker : () => formFor(null)));
     const form = $('.login form');
-    $(p ? '[name=password]' : '[name=name]', form).focus();
+    if (!preview) $(p ? '[name=password]' : '[name=name]', form).focus();
     form.onsubmit = async (e) => {
       e.preventDefault();
+      if (preview) { toast('This is a preview: signing in is switched off here'); return; }
       const f = new FormData(form);
       try { await api('POST', '/api/login', { profileId: p?.id, name: f.get('name'), password: f.get('password') }); if (!/^#\/(party|pair)\//.test(location.hash)) location.hash = '#/'; location.reload(); }
       catch (err) { $('.err', form).textContent = err.message; $('[name=password]', form).select(); }
@@ -628,14 +630,17 @@ export function login(boot) {
     $('[data-back]')?.addEventListener('click', picker);
   };
   const picker = () => {
-    $('.login .box').innerHTML = String(html`<img class="brand" src="${logoUrl()}" alt=""><h1>Who's watching?</h1>
+    box().innerHTML = String(html`<h1 data-login-title></h1>
       <div class="who">${boot.profiles.map((p) => html`<button data-p="${p.id}"><div class="avatar" style="${avatarStyle(p)}">${p.avatar ? html`<img src="${p.avatar}" alt="">` : p.name[0].toUpperCase()}</div>${p.name}</button>`)}</div>
       <button class="linkbtn" data-pair>Sign in with your phone</button>`);
-    $('[data-pair]').onclick = () => more.pairScreen($('.login .box'), picker);
+    styleLogin();
+    $('[data-pair]').onclick = () => (preview ? toast('This is a preview') : more.pairScreen(box(), picker));
     for (const b of $$('.who button')) b.onclick = () => formFor(boot.profiles.find((p) => p.id === +b.dataset.p));
-    $('.who button')?.focus();
+    if (!preview) $('.who button')?.focus();
   };
-  app().innerHTML = '<div class="login"><div class="box"></div></div>';
+  // The logo sits outside the box, so it can go above it, inside its panel, in a corner, or nowhere.
+  app().innerHTML = String(html`<div class="login signin"><div class="stack"><img class="brand" src="${logoUrl()}" alt=""><div class="box"></div></div></div>`);
+  styleLogin();
   if (tiles) picker(); else formFor(null);
 }
 
