@@ -10,6 +10,19 @@ import { HttpError, safeJoin } from './http.js';
 export const pluginsDir = () => path.join(cfg.dataDir, 'plugins');
 const ID = /^[a-z0-9][a-z0-9-]{1,40}$/;
 
+export const RATING_FIELDS = ['list', 'source', 'value', 'votes', 'link', 'label', 'max'];
+export const SUBTITLE_FIELDS = ['list', 'language', 'release', 'download', 'hi', 'downloads'];
+const isUrl = (u) => typeof u === 'string' && /^https?:\/\//i.test(u);
+/** Services a plugin describes (ratings or subtitles): a name, an address with {placeholders}, and field paths. */
+function services(list, from, fields) {
+  return (Array.isArray(list) ? list : []).filter((x) => x && x.name && isUrl(x.url)).slice(0, 5).map((x) => ({
+    key: String(x.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40), name: String(x.name).slice(0, 60),
+    description: String(x.description || `From ${from}`).slice(0, 200), url: x.url,
+    headers: x.headers && typeof x.headers === 'object' ? x.headers : {},
+    ...Object.fromEntries(fields.map((f) => [f, String(x[f] ?? '').slice(0, 200)])),
+  }));
+}
+
 export async function listPlugins() {
   const enabled = await getSetting('plugins', {});
   let dirs = [];
@@ -30,10 +43,13 @@ export async function listPlugins() {
           key: String(l.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40), name: String(l.name).slice(0, 60), description: String(l.description || `From ${m.name || d.name}`).slice(0, 200),
           url: l.url, searchUrl: typeof l.searchUrl === 'string' && /^https?:\/\//i.test(l.searchUrl) ? l.searchUrl : '', result: String(l.result || ''), synced: String(l.synced || ''), plain: String(l.plain || ''),
           searchList: String(l.searchList || ''), searchTitle: String(l.searchTitle || ''), searchArtist: String(l.searchArtist || ''), headers: l.headers && typeof l.headers === 'object' ? l.headers : {} })),
+        // Ratings and subtitle services work the same way: an address to ask and where the answer sits.
+        ratings: services(c.ratings, m.name || d.name, RATING_FIELDS),
+        subtitles: services(c.subtitles, m.name || d.name, SUBTITLE_FIELDS),
         themes: (Array.isArray(c.themes) ? c.themes : []).filter((t) => t && t.name && typeof t.theme === 'object')
           .map((t) => ({ id: `${d.name}:${String(t.name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, name: String(t.name), description: String(t.description || `From ${m.name || d.name}`), theme: t.theme })),
       });
-    } catch (e) { out.push({ id: d.name, name: d.name, enabled: false, broken: `plugin.json: ${e.message}`, css: [], js: [], themes: [], lyrics: [] }); }
+    } catch (e) { out.push({ id: d.name, name: d.name, enabled: false, broken: `plugin.json: ${e.message}`, css: [], js: [], themes: [], lyrics: [], ratings: [], subtitles: [] }); }
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }

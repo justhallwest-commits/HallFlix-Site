@@ -19,6 +19,12 @@ export const cfg = {
   ffprobe: env.FFPROBE || 'ffprobe',
   hw: env.HALLFLIX_HW || 'auto', // auto | off
   lrclibBase: env.LRCLIB_BASE || 'https://lrclib.net', // the free synced-lyrics database
+  // Ratings and subtitle services (addresses can be changed for testing or a mirror).
+  omdbBase: env.OMDB_BASE || 'https://www.omdbapi.com',
+  mdblistBase: env.MDBLIST_BASE || 'https://api.mdblist.com',
+  opensubsBase: env.OPENSUBTITLES_BASE || 'https://api.opensubtitles.com/api/v1',
+  subdlBase: env.SUBDL_BASE || 'https://api.subdl.com/api/v1',
+  subdlFiles: env.SUBDL_FILES || 'https://dl.subdl.com',
   comicCacheGB: +(env.COMIC_CACHE_GB || 4), // room for unpacked CBR/CB7 comics; the ones read longest ago are cleared first
   version: '0.1.0',
 };

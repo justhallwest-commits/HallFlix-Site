@@ -142,10 +142,10 @@ async function startEntry(p, idx) {
   $('[data-act=episodes]', p.root).hidden = !(entry.kind === 'main' && entry.showId);
   p.chapters = []; for (const c of $$('.scrub .chap', p.root)) c.remove();
   for (const s of p.slots) s.video.playbackRate = entry.kind === 'main' ? p.speed : 1;
-  p.cues = []; p.subSel = null; $('.subs', p.root).textContent = '';
+  p.cues = []; p.subSel = null; $('.subs', p.root).textContent = ''; $('.subs', p.root).dataset.t = '';
   p.started = false;
   await play(p);
-  if (entry.kind === 'main') { emit('player:start', { itemId: entry.itemId, title: entry.title }); mediaSession(p, entry); loadThumbs(p, entry, 0); partyReady(p); loadChapters(p, entry); }
+  if (entry.kind === 'main') { emit('player:start', { itemId: entry.itemId, title: entry.title }); mediaSession(p, entry); loadThumbs(p, entry, 0); partyReady(p); loadChapters(p, entry); autoSubs(p, entry); }
   // Get the next item ready while this one plays.
   const upcoming = p.queue[idx + 1];
   if (upcoming) {
@@ -382,13 +382,83 @@ function updateBar(p) {
   checkMarks(p, now(p));
   if (p.cues.length) {
     const tt = now(p);
-    $('.subs', p.root).textContent = p.cues.filter((c) => tt >= c.a && tt <= c.z).map((c) => c.text).join('\n');
+    const off = subLook.offset || 0;
+    const text = p.cues.filter((c) => tt >= c.a + off && tt <= c.z + off).map((c) => c.text).join('\n');
+    const el = $('.subs', p.root);
+    if (el.dataset.t !== text) { el.dataset.t = text; el.innerHTML = text ? text.split('\n').map((l) => `<span>${esc(l)}</span>`).join('<br>') : ''; }
   }
 }
 function remainingPrerolls(p) {
   let left = Math.max(0, duration(p) - now(p));
   for (let i = p.idx + 1; i < p.queue.length; i++) if (p.queue[i].kind === 'preroll') left += p.queue[i].duration || 0;
   return left;
+}
+
+// ---------- subtitles: choosing, finding online, size, look and timing ----------
+const SUB_SIZES = [['s', 'Small'], ['m', 'Medium'], ['l', 'Large'], ['xl', 'Huge']];
+const SUB_STYLES = [['shadow', 'Outline'], ['box', 'Dark box'], ['yellow', 'Yellow']];
+const subLook = (() => { try { return { size: 'm', style: 'shadow', offset: 0, ...JSON.parse(localStorage.getItem('hf_sublook') || '{}'), offset: 0 }; } catch { return { size: 'm', style: 'shadow', offset: 0 }; } })();
+const saveSubLook = () => localStorageSet('hf_sublook', JSON.stringify({ size: subLook.size, style: subLook.style }));
+function applySubLook(p) {
+  const el = $('.subs', p.root);
+  if (!el) return;
+  el.dataset.size = subLook.size; el.dataset.style = subLook.style;
+}
+
+async function selectSub(p, id) {
+  p.subSel = id; p.cues = []; $('.subs', p.root).textContent = ''; $('.subs', p.root).dataset.t = '';
+  subLook.offset = 0; // timing is per video
+  const s = p.slots[p.active].entry.subs.find((x) => x.id === id);
+  if (!s) { p.subSel = null; return; }
+  try { p.cues = parseVtt(await (await fetch(s.url, { credentials: 'same-origin' })).text()); }
+  catch { toast('Could not load those subtitles'); p.subSel = null; }
+}
+
+const sameLang = (a, b) => { const two = (x) => ({ eng: 'en', spa: 'es', fre: 'fr', fra: 'fr', ger: 'de', deu: 'de', ita: 'it', por: 'pt', jpn: 'ja', kor: 'ko', chi: 'zh', zho: 'zh', rus: 'ru', dut: 'nl', nld: 'nl' }[String(x || '').toLowerCase()] || String(x || '').toLowerCase()).split('-')[0]; return !!a && !!b && two(a) === two(b); };
+/** Turn on subtitles in the language picked last time, finding some online first if the Studio allows it. */
+async function autoSubs(p, entry) {
+  applySubLook(p);
+  const want = localStorageGet('hf_sublang', '');
+  const pick = () => entry.subs.find((s) => want && sameLang(s.lang, want) && !/forced/i.test(s.label)) || entry.subs.find((s) => want && sameLang(s.lang, want));
+  let hit = pick();
+  if (!hit && state.boot?.media?.subtitles?.autoFetch && state.boot.media.subtitles.search) {
+    try {
+      const r = await api('POST', `/api/subtitles/${entry.itemId}/auto`);
+      if (r.track && !entry.subs.some((s) => s.id === r.track.id)) { entry.subs.push(r.track); if (!want) toast(`Found ${r.track.label} subtitles`); }
+    } catch { /* no luck */ }
+    hit = pick();
+  }
+  if (hit && !p.subSel && P === p && p.slots[p.active].entry === entry) await selectSub(p, hit.id);
+}
+
+async function searchSubs(p, entry) {
+  const box = () => $('.pmenu[data-kind=subsearch] .sub-results', p.root);
+  if (box()) box().innerHTML = '<div class="eps-load">Searching…</div>';
+  let d;
+  try { d = await api('GET', `/api/subtitles/${entry.itemId}/search?lang=${encodeURIComponent(p.subLang || '')}`); }
+  catch (e) { if (box()) box().innerHTML = String(html`<div class="eps-load">${e.message}</div>`); return; }
+  if (!box()) return;
+  box().innerHTML = String(d.results.length ? html`${d.results.slice(0, 30).map((x) => html`<button class="subhit" data-subtoken="${x.token}">
+      <span><b>${x.release || x.langName}</b><small>${[x.langName, x.provider, x.hi ? 'SDH' : '', x.ai ? 'Machine translated' : '', x.downloads ? `${x.downloads.toLocaleString()} downloads` : ''].filter(Boolean).join(' · ')}</small></span>
+      ${x.fits ? html`<em title="Made for this exact release">Fits</em>` : ''}</button>`)}`
+    : html`<div class="eps-load">Nothing found in ${p.subLang?.toUpperCase()}.${d.errors?.length ? html`<br><small>${d.errors.join(' · ')}</small>` : ''}</div>`);
+  $('button', box())?.focus();
+}
+
+async function downloadSub(p, btn) {
+  const entry = p.slots[p.active].entry;
+  btn.disabled = true;
+  const label = $('small', btn);
+  const was = label.textContent;
+  label.textContent = 'Downloading…';
+  try {
+    const { track } = await api('POST', `/api/subtitles/${entry.itemId}/download`, { token: btn.dataset.subtoken });
+    if (!entry.subs.some((s) => s.id === track.id)) entry.subs.push(track);
+    $('.pmenu', p.root)?.remove();
+    localStorageSet('hf_sublang', track.lang || '');
+    await selectSub(p, track.id);
+    toast(`${track.label} subtitles on`);
+  } catch (e) { btn.disabled = false; label.textContent = was; toast(e.message); }
 }
 
 function parseVtt(text) {
@@ -421,7 +491,18 @@ function menu(p, kind) {
     const sel = p.audioSel ?? entry.audioIndex ?? 0;
     body = html`<h4>Audio</h4>${entry.audio.map((a) => html`<button data-audio="${a.index}" class="${a.index === sel ? 'on' : ''}">${a.label}</button>`)}`;
   } else if (kind === 'subs') {
-    body = html`<h4>Subtitles</h4><button data-sub="" class="${p.subSel ? '' : 'on'}">Off</button>${entry.subs.map((s) => html`<button data-sub="${s.id}" class="${p.subSel === s.id ? 'on' : ''}">${s.label}</button>`)}`;
+    const online = state.boot?.media?.subtitles?.search;
+    body = html`<h4>Subtitles</h4><button data-sub="" class="${p.subSel ? '' : 'on'}">Off</button>${entry.subs.map((s) => html`<button data-sub="${s.id}" class="${p.subSel === s.id ? 'on' : ''}">${s.label}</button>`)}
+      ${online ? html`<button data-menu="subsearch">Find subtitles online…<span style="opacity:.6">›</span></button>` : ''}
+      <h4>Size</h4><div class="prow">${SUB_SIZES.map(([k, n]) => html`<button data-subsize="${k}" class="${subLook.size === k ? 'on' : ''}">${n}</button>`)}</div>
+      <h4>Look</h4><div class="prow">${SUB_STYLES.map(([k, n]) => html`<button data-substyle="${k}" class="${subLook.style === k ? 'on' : ''}">${n}</button>`)}</div>
+      ${p.subSel ? html`<h4>Timing</h4><div class="prow sync"><button data-subshift="-0.5" aria-label="Show subtitles earlier">− 0.5s</button><button data-subshift="0" class="now">${subLook.offset ? `${subLook.offset > 0 ? '+' : ''}${subLook.offset.toFixed(1)}s` : 'In sync'}</button><button data-subshift="0.5" aria-label="Show subtitles later">+ 0.5s</button></div>` : ''}`;
+  } else if (kind === 'subsearch') {
+    const langs = state.boot?.media?.subtitles?.languages || ['en'];
+    p.subLang ||= langs[0];
+    body = html`<h4>Find subtitles</h4><div class="prow">${langs.map((l) => html`<button data-sublang="${l}" class="${p.subLang === l ? 'on' : ''}">${l.toUpperCase()}</button>`)}</div>
+      <div class="sub-results"><div class="eps-load">Searching…</div></div><button data-menu="subs">Back</button>`;
+    searchSubs(p, entry);
   } else if (kind === 'episodes') {
     body = html`<h4>Episodes</h4><div class="eps-load">Loading…</div>`;
     api('GET', `/api/items/${entry.showId}`).then((d) => {
@@ -570,15 +651,30 @@ export async function openPlayer(itemId, opts = {}) {
         return;
       }
       if (m.dataset.menu) { $('.pmenu', root).remove(); menu(p, m.dataset.menu); return; }
+      if (m.dataset.subsize || m.dataset.substyle) {
+        if (m.dataset.subsize) subLook.size = m.dataset.subsize; else subLook.style = m.dataset.substyle;
+        saveSubLook(); applySubLook(p);
+        for (const b of $$(m.dataset.subsize ? '[data-subsize]' : '[data-substyle]', root)) b.classList.toggle('on', b === m);
+        return;
+      }
+      if (m.dataset.subshift != null) {
+        const d = +m.dataset.subshift;
+        subLook.offset = d ? Math.max(-30, Math.min(30, Math.round(((subLook.offset || 0) + d) * 10) / 10)) : 0;
+        saveSubLook();
+        $('.sync .now', root).textContent = subLook.offset ? `${subLook.offset > 0 ? '+' : ''}${subLook.offset.toFixed(1)}s` : 'In sync';
+        return;
+      }
+      if (m.dataset.sublang) { p.subLang = m.dataset.sublang; for (const b of $$('[data-sublang]', root)) b.classList.toggle('on', b === m); searchSubs(p, p.slots[p.active].entry); return; }
+      if (m.dataset.subtoken) { await downloadSub(p, m); return; }
       if (m.dataset.ep) { $('.pmenu', root).remove(); if (+m.dataset.ep !== p.slots[p.active].entry.itemId) { report(p); history.replaceState(null, '', `#/watch/${+m.dataset.ep}`); openPlayer(+m.dataset.ep); } return; }
       $('.pmenu', root)?.remove();
       if (m.dataset.mark) { await mark(p, m.dataset.mark); return; }
       if (m.dataset.audio != null) { p.audioSel = +m.dataset.audio; await reloadAt(p); }
       else if (m.dataset.q) { p.quality = m.dataset.q; await reloadAt(p); }
       else if (m.dataset.sub != null) {
-        p.subSel = m.dataset.sub || null; p.cues = []; $('.subs', root).textContent = '';
-        const s = p.slots[p.active].entry.subs.find((x) => x.id === p.subSel);
-        if (s) { try { p.cues = parseVtt(await (await fetch(s.url, { credentials: 'same-origin' })).text()); } catch { toast('Could not load those subtitles'); } }
+        const s = p.slots[p.active].entry.subs.find((x) => x.id === m.dataset.sub);
+        localStorageSet('hf_sublang', s ? s.lang || 'und' : ''); // the next video starts with the same language, or with none
+        await selectSub(p, m.dataset.sub || null);
       }
       return;
     }

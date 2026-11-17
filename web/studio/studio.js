@@ -25,7 +25,7 @@ const mins = (s) => (s >= 60 ? `${Math.round(s / 60)} min` : `${Math.round(s || 
 
 const PAGES = [
   ['overview', 'Overview'], ['libraries', 'Libraries'], ['artwork', 'Artwork'], ['metadata', 'Metadata'], ['home', 'Home screen'], ['collections', 'Collections'],
-  ['look', 'Look and feel'], ['seasons', 'Seasons'], ['prerolls', 'Pre-rolls'], ['guard', 'Parental controls'], ['profiles', 'Profiles'], ['lyrics', 'Lyrics'], ['plugins', 'Plugins'], ['settings', 'Settings'],
+  ['look', 'Look and feel'], ['seasons', 'Seasons'], ['prerolls', 'Pre-rolls'], ['guard', 'Parental controls'], ['profiles', 'Profiles'], ['lyrics', 'Lyrics'], ['ratings', 'Ratings'], ['subtitles', 'Subtitles'], ['plugins', 'Plugins'], ['settings', 'Settings'],
 ];
 let timer = null; // the current page's refresh timer, cleared on every page change
 
@@ -740,6 +740,211 @@ pages.lyrics = async (main) => {
     if (b.matches('[data-again]')) { await api('DELETE', '/api/studio/lyrics/cache?missing=1').catch(fail); toast('Songs with no lyrics will be looked up again'); L = await api('GET', '/api/studio/lyrics'); draw(); return; }
     if (b.matches('[data-clear]')) return confirmBox('Forget the lyrics found online?', 'Each song is looked up again the next time it plays. Lyrics chosen by hand, and files on the NAS, stay.', 'Forget them', async () => { await api('DELETE', '/api/studio/lyrics/cache'); L = await api('GET', '/api/studio/lyrics'); draw(); });
   };
+};
+
+// ---------- ratings and subtitles ----------
+// Both are lists of services tried from the top: built-in ones that need a free key, your own JSON services, and
+// services that plugins add. servicePage() draws the list; each page adds its own settings and test.
+const KINDS = { builtin: 'Built in', custom: 'Your own', plugin: 'Plugin' };
+function servicePage(main, o) {
+  let D, dirty = false;
+  const load = async () => { D = await api('GET', o.url); };
+  const save = async () => {
+    try { D = { ...D, ...(await api('PUT', o.url, o.body(D))) }; dirty = false; toast('Saved'); draw(); }
+    catch (e) { fail(e); }
+  };
+  const keyRow = (p) => (p.kind !== 'builtin' && p.kind !== 'custom') || (!p.needsKey && p.kind === 'builtin') ? '' : html`<div class="keys">
+      <input type="password" data-k="apiKey" autocomplete="off" spellcheck="false" placeholder="${p.apiKeySet ? 'Key saved: type to replace it' : p.kind === 'custom' ? 'Key for {key} in the address (optional)' : 'API key'}" value="${p.apiKey || ''}">
+      ${p.login ? html`<input type="text" data-k="username" autocomplete="off" placeholder="Account name (optional)" value="${p.username || ''}"><input type="password" data-k="password" autocomplete="off" placeholder="${p.passwordSet ? 'Password saved' : 'Password (optional)'}" value="">` : ''}
+      ${p.keyUrl ? html`<a class="btn sm" href="${p.keyUrl}" target="_blank" rel="noopener">Get a free key ↗</a>` : ''}
+      ${p.apiKeySet ? html`<button class="btn sm" data-clearkey>Forget key</button>` : ''}</div>`;
+  const editor = (p) => {
+    const v = p ? clone(p) : { id: `custom:${Date.now().toString(36)}`, name: '', url: '', headers: {}, enabled: true, ...o.blank };
+    const hdr = Object.entries(v.headers || {}).map(([k, x]) => `${k}: ${x}`).join('\n');
+    const d = dialog(p ? `Edit ${p.name}` : o.addTitle, html`${o.editorHelp}${text(v, 'name', 'Name', o.namePh)}${text(v, 'url', 'Address', o.urlPh)}
+      ${o.fields.map(([k, label, ph]) => text(v, k, label, ph))}
+      <label class="f block"><span>Headers (optional)</span><textarea data-hdr rows="3" placeholder="Authorization: Bearer abc123" style="width:100%">${hdr}</textarea></label>`,
+    { wide: true, onOk: async (el) => {
+      if (!v.name.trim() || !/^https?:\/\//i.test(v.url.trim())) { toast('Give it a name and an address starting with https://'); return false; }
+      v.headers = Object.fromEntries($('[data-hdr]', el).value.split('\n').map((l) => l.split(/:(.*)/s).map((x) => (x || '').trim())).filter(([k, x]) => k && x));
+      const i = D.providers.findIndex((x) => x.id === v.id);
+      if (i >= 0) D.providers[i] = { ...v, kind: 'custom' }; else D.providers.push({ ...v, kind: 'custom' });
+      await save();
+    } });
+    bind(d.el, v, () => {});
+  };
+  const draw = () => {
+    main.innerHTML = String(html`${head(o.title, o.intro, html`<button class="btn primary" data-save ${dirty ? '' : 'disabled'}>Save</button>`)}
+      ${o.settings(D)}
+      <div class="card"><h2>${o.listTitle}</h2><p class="muted small" style="margin-bottom:6px">${o.listHelp}</p>
+        ${D.providers.map((p, i) => html`<div class="row svc" data-i="${i}"><label class="check" style="margin:0"><input type="checkbox" data-on ${p.enabled ? 'checked' : ''} aria-label="Use ${p.name}"></label>
+          <div class="grow"><b>${p.name} <span class="pill ${p.kind === 'builtin' ? 'live' : ''}">${KINDS[p.kind] || p.kind}${p.plugin ? `: ${p.plugin}` : ''}</span>
+            ${p.needsKey && !p.apiKeySet && !p.apiKey ? html` <span class="pill bad">Needs a key</span>` : ''}</b><span>${p.description || p.url || ''}</span>${keyRow(p)}</div>
+          <div class="tools"><button class="btn sm" data-up ${i ? '' : 'disabled'} aria-label="Move up">↑</button><button class="btn sm" data-down ${i < D.providers.length - 1 ? '' : 'disabled'} aria-label="Move down">↓</button>
+            <button class="btn sm" data-try>Test</button>${p.kind === 'custom' ? html`<button class="btn sm" data-edit>Edit</button><button class="btn sm danger" data-del>Remove</button>` : ''}</div></div>`)}
+        <div class="row"><button class="btn" data-add>${o.addTitle}</button><span class="muted small grow">${o.pluginHint}</span></div></div>
+      <div class="card"><h2>Try it</h2><p class="muted small">${o.testHelp}</p>${o.testForm}<div data-out></div></div>
+      ${o.stats(D)}`);
+  };
+  const test = async (only) => {
+    const out = $('[data-out]', main);
+    if (dirty) { toast('Save first, so the test uses what you typed'); return; }
+    const b = { ...o.testBody(main), only };
+    if (b === null) return;
+    out.innerHTML = '<p class="muted" style="margin-top:12px">Asking…</p>';
+    try {
+      const r = await api('POST', `${o.url}/test`, b);
+      out.innerHTML = String(html`<div style="margin-top:12px">${r.title ? html`<p class="muted small">Searching for ${r.title}</p>` : ''}${r.results.map((x) => html`<div class="row"><div class="grow"><b>${x.name} ${x.found ? html`<span class="pill ok">${o.foundText(x)}</span>` : x.error ? html`<span class="pill bad">${x.error === 'No key yet' || x.error === 'Switched off' ? x.error : 'Error'}</span>` : html`<span class="pill">Nothing found</span>`}${x.enabled ? '' : html` <span class="pill">Off</span>`}</b>
+        <span>${x.error && !/^(No key yet|Switched off)$/.test(x.error) ? x.error : o.detail(x)}</span></div><span class="muted small">${x.ms != null ? `${x.ms} ms` : ''}</span></div>`)}</div>`);
+    } catch (e) { out.innerHTML = String(html`<p class="muted" style="margin-top:12px">${e.message}</p>`); }
+  };
+  const mark = () => { dirty = true; const b = $('[data-save]', main); if (b) b.disabled = false; };
+  main.oninput = (e) => {
+    const k = e.target.dataset.k;
+    if (k) { D.providers[+e.target.closest('[data-i]').dataset.i][k] = e.target.value; mark(); }
+  };
+  main.onchange = (e) => {
+    if (e.target.matches('[data-on]')) { D.providers[+e.target.closest('[data-i]').dataset.i].enabled = e.target.checked; mark(); return; }
+    if (o.onChange(D, e)) mark();
+  };
+  main.onclick = async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const row = b.closest('[data-i]'), i = row ? +row.dataset.i : -1;
+    if (b.matches('[data-save]')) return save();
+    if (b.matches('[data-add]')) return editor(null);
+    if (b.matches('[data-edit]')) return editor(D.providers[i]);
+    if (b.matches('[data-clearkey]')) { Object.assign(D.providers[i], { apiKey: '', apiKeyClear: true, apiKeySet: false }); mark(); draw(); return; }
+    if (b.matches('[data-del]')) return confirmBox(`Remove ${D.providers[i].name}?`, o.removeNote, 'Remove', async () => { D.providers.splice(i, 1); await save(); });
+    if (b.matches('[data-up]') || b.matches('[data-down]')) { const j = i + (b.matches('[data-up]') ? -1 : 1); [D.providers[i], D.providers[j]] = [D.providers[j], D.providers[i]]; mark(); draw(); return; }
+    if (b.matches('[data-try]')) return test(D.providers[i].id);
+    if (b.matches('[data-test]')) return test();
+    if (await o.onClick?.(b, D, { reload: async () => { await load(); draw(); } })) return;
+  };
+  return load().then(draw);
+}
+
+pages.ratings = async (main) => {
+  const SRC = (D) => Object.entries(D.sources || {});
+  let poll = null;
+  await servicePage(main, {
+    url: '/api/studio/ratings', title: 'Ratings',
+    intro: 'Scores from IMDb, Rotten Tomatoes, Metacritic, Letterboxd and more, on each title’s page and as a badge on its card. TMDb’s score is always there; the others need a free key from one of the services below.',
+    body: (D) => ({ providers: D.providers, show: D.show, badge: D.badge, autoFetch: D.autoFetch }),
+    settings: (D) => html`<div class="card"><h2>What to show</h2>
+      <label class="check"><input type="checkbox" data-auto ${D.autoFetch ? 'checked' : ''}> Look ratings up when someone opens a title (kept for two weeks)</label>
+      <label class="f"><span>Badge on cards</span><select data-badge>${[['auto', 'The first rating in the list below'], ['none', 'No badge'], ...SRC(D).map(([k, x]) => [k, x.label])].map(([v, n]) => html`<option value="${v}" ${D.badge === v ? 'selected' : ''}>${n}</option>`)}</select></label>
+      <p class="muted small" style="margin:10px 0 4px">On the title page, in this order (untick to hide):</p>
+      <div class="srcs">${[...D.show, ...SRC(D).map(([k]) => k).filter((k) => !D.show.includes(k))].map((k) => html`<span class="src ${D.show.includes(k) ? 'on' : ''}" data-src="${k}">
+        <label><input type="checkbox" data-show ${D.show.includes(k) ? 'checked' : ''}> ${D.sources[k]?.label || k}</label>
+        <button class="btn sm" data-srcup aria-label="Earlier">←</button><button class="btn sm" data-srcdown aria-label="Later">→</button></span>`)}</div></div>`,
+    listTitle: 'Rating services', listHelp: 'Asked from the top. For each kind of rating, the first service that has it wins.',
+    addTitle: 'Add a ratings service', namePh: 'My ratings service', urlPh: 'https://ratings.example.com/title/{imdb}?key={key}',
+    editorHelp: html`<p class="muted small" style="margin-bottom:10px">Any web service that answers with JSON works. In the address, use <code>{imdb}</code> (tt1234567), <code>{tmdb}</code>, <code>{type}</code> (movie or tv), <code>{title}</code>, <code>{year}</code> and <code>{key}</code>.
+      If the answer has a list of ratings, say where the list is and which fields hold the name and the score; names like IMDb, Rotten Tomatoes, Metacritic and Letterboxd are recognised. For a single score, leave the list empty and say where the score is.</p>`,
+    blank: { list: 'ratings', source: 'source', value: 'value', votes: '', link: '', label: '', max: '' },
+    fields: [['list', 'List of ratings is in', 'ratings (empty for a single score)'], ['source', 'Name field', 'source'], ['value', 'Score field', 'value'], ['votes', 'Votes field (optional)', 'votes'], ['link', 'Link field (optional)', 'url'], ['label', 'Name, for a single score', 'Douban'], ['max', 'Best possible score, for a single score', '10']],
+    pluginHint: 'Plugins can add services too: see “Ratings” in the plugin guide.', removeNote: 'Ratings it already found stay until they are looked up again.',
+    testHelp: 'Asks every service about one title, to check keys and new services.',
+    testForm: html`<div class="imgrow" style="margin-top:10px;flex-wrap:wrap"><input type="text" data-tt placeholder="Title, like Arrival" style="flex:2;min-width:160px"><input data-ty type="number" placeholder="Year" style="width:100px">
+      <select data-tk><option value="movie">Movie</option><option value="show">Show</option></select><button class="btn primary" data-test>Try it</button></div>`,
+    testBody: (m) => ({ title: $('[data-tt]', m).value.trim() || 'Arrival', year: +$('[data-ty]', m).value || ($('[data-tt]', m).value.trim() ? null : 2016), kind: $('[data-tk]', m).value }),
+    foundText: (x) => `${x.ratings.length} rating${x.ratings.length === 1 ? '' : 's'}`, detail: (x) => (x.ratings || []).join(' · '),
+    stats: (D) => { const c = D.counts || {}, j = D.job || {}; return html`<div class="card"><h2>Your library</h2>
+      <p>${c.found || 0} of ${c.titles || 0} movies and shows have ratings${c.missing ? `, ${c.missing} with none found` : ''}.</p>
+      ${j.running ? html`<p class="muted" data-job>Looking up ${j.done} of ${j.total}…</p>` : j.finished ? html`<p class="muted small">Last run: ${j.found} found, ${j.errors} errors, ${j.done} looked up.</p>` : ''}
+      <div class="tools" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${j.running ? html`<button class="btn" data-stop>Stop</button>` : html`<button class="btn" data-fill>Look up titles without ratings</button><button class="btn" data-fillall>Refresh every title</button>`}
+        <button class="btn danger" data-clear>Forget all ratings</button></div>
+      <p class="muted small">Free keys allow about 1,000 lookups a day, so a big library fills in over a few days. Titles are also looked up as people open them.</p></div>`; },
+    onChange: (D, e) => {
+      if (e.target.matches('[data-auto]')) { D.autoFetch = e.target.checked; return true; }
+      if (e.target.matches('[data-badge]')) { D.badge = e.target.value; return true; }
+      if (e.target.matches('[data-show]')) {
+        const k = e.target.closest('[data-src]').dataset.src;
+        D.show = e.target.checked ? [...D.show.filter((x) => x !== k), k] : D.show.filter((x) => x !== k);
+        e.target.closest('.src').classList.toggle('on', e.target.checked);
+        return true;
+      }
+      return false;
+    },
+    onClick: async (b, D, { reload }) => {
+      const src = b.closest('[data-src]')?.dataset.src;
+      if (src && (b.matches('[data-srcup]') || b.matches('[data-srcdown]'))) {
+        if (!D.show.includes(src)) return true;
+        const i = D.show.indexOf(src), j = i + (b.matches('[data-srcup]') ? -1 : 1);
+        if (j < 0 || j >= D.show.length) return true;
+        [D.show[i], D.show[j]] = [D.show[j], D.show[i]];
+        const box = b.closest('.srcs'), el = b.closest('.src');
+        if (j < i) box.insertBefore(el, el.previousElementSibling); else box.insertBefore(el.nextElementSibling, el);
+        $('[data-save]', main).disabled = false;
+        return true;
+      }
+      const run = async (body) => {
+        await api('POST', '/api/studio/ratings/refresh', body).catch(fail);
+        await reload();
+        clearInterval(poll);
+        poll = timer = setInterval(async () => { if (!main.isConnected) return clearInterval(poll); const d = await api('GET', '/api/studio/ratings').catch(() => null); if (!d) return; const el = $('[data-job]', main); if (d.job.running && el) el.textContent = `Looking up ${d.job.done} of ${d.job.total}…`; else { clearInterval(poll); reload(); } }, 2500);
+      };
+      if (b.matches('[data-fill]')) { await run({}); return true; }
+      if (b.matches('[data-fillall]')) { await run({ all: true }); return true; }
+      if (b.matches('[data-stop]')) { await api('POST', '/api/studio/ratings/refresh', { stop: true }).catch(fail); setTimeout(reload, 600); return true; }
+      if (b.matches('[data-clear]')) { confirmBox('Forget all ratings?', 'They are looked up again as people open titles, or when you fill them in here.', 'Forget them', async () => { await api('DELETE', '/api/studio/ratings/cache'); await reload(); }); return true; }
+      return false;
+    },
+  });
+};
+
+pages.subtitles = async (main) => {
+  await servicePage(main, {
+    url: '/api/studio/subtitles', title: 'Subtitles',
+    intro: 'Subtitles inside the video file and next to it (Movie.en.srt) always show up. For anything missing, viewers can pick “Find subtitles online” in the player, and HallFlix can fetch them by itself in your first language.',
+    body: (D) => ({ providers: D.providers, languages: D.languages, autoFetch: D.autoFetch, saveBeside: D.saveBeside, hi: D.hi }),
+    settings: (D) => html`<div class="card"><h2>Languages and fetching</h2>
+      <p class="muted small" style="margin-bottom:6px">Your languages, first choice first (up to six). Searches look for these.</p>
+      <div class="srcs">${D.languages.map((l, i) => html`<span class="src on" data-lang="${l}">${(D.langs.find((x) => x[0] === l) || [l, l])[1]}<button class="btn sm" data-langup ${i ? '' : 'disabled'} aria-label="Earlier">←</button><button class="btn sm danger" data-langdel aria-label="Remove">✕</button></span>`)}
+        ${D.languages.length < 6 ? html`<select data-langadd><option value="">Add a language…</option>${D.langs.filter(([k]) => !D.languages.includes(k)).map(([k, n]) => html`<option value="${k}">${n}</option>`)}</select>` : ''}</div>
+      <label class="check"><input type="checkbox" data-auto ${D.autoFetch ? 'checked' : ''}> When a video has nothing in ${(D.langs.find((x) => x[0] === D.languages[0]) || ['', 'your first language'])[1]}, fetch the best match as it starts (viewers who had subtitles on get them right away)</label>
+      <label class="check"><input type="checkbox" data-beside ${D.saveBeside ? 'checked' : ''}> Save subtitles found online next to the video as .srt files</label>
+      <p class="muted small">Saving next to the video needs write access to your media folder (drop <code>:ro</code> from the media line in the compose file); otherwise they’re kept in HallFlix’s data folder. Files already there are never overwritten.</p>
+      <label class="f"><span>Subtitles for deaf and hard of hearing (SDH)</span><select data-hi>${[['either', 'No preference'], ['prefer', 'Prefer them'], ['avoid', 'Avoid them']].map(([v, n]) => html`<option value="${v}" ${D.hi === v ? 'selected' : ''}>${n}</option>`)}</select></label></div>`,
+    listTitle: 'Subtitle services', listHelp: 'Searched together; results are ranked by your languages, how well they fit the exact video file, and how popular they are.',
+    addTitle: 'Add a subtitle service', namePh: 'My subtitle service', urlPh: 'https://subs.example.com/search?tmdb={tmdb}&season={season}&episode={episode}&lang={lang}',
+    editorHelp: html`<p class="muted small" style="margin-bottom:10px">Any web service that answers a search with a JSON list of subtitles works. In the address, use <code>{tmdb}</code>, <code>{imdb}</code>, <code>{type}</code> (movie or tv), <code>{title}</code>, <code>{year}</code>,
+      <code>{season}</code>, <code>{episode}</code>, <code>{lang}</code> (like en,es), <code>{query}</code>, <code>{file}</code> and <code>{key}</code>. Each result needs a download address (an .srt, .ass or .vtt file, or a .zip of them).</p>`,
+    blank: { list: 'results', language: 'language', release: 'release', download: 'url', hi: 'hi', downloads: 'downloads' },
+    fields: [['list', 'Results are in', 'results (empty if the answer is a list)'], ['download', 'Download address field', 'url'], ['language', 'Language field', 'language'], ['release', 'Release name field', 'release'], ['hi', 'SDH field (optional)', 'hi'], ['downloads', 'Download count field (optional)', 'downloads']],
+    pluginHint: 'Plugins can add services too: see “Subtitles” in the plugin guide.', removeNote: 'Subtitles already downloaded stay.',
+    testHelp: 'Searches every service for the most recently added movie or episode, to check keys and new services. Nothing is downloaded.',
+    testForm: html`<div class="imgrow" style="margin-top:10px"><button class="btn primary" data-test>Try it</button></div>`,
+    testBody: () => ({}),
+    foundText: (x) => `${x.found} found`, detail: (x) => (x.sample || []).join(' · '),
+    stats: (D) => html`<div class="card"><h2>Downloaded so far</h2><p>${D.counts?.downloaded || 0} subtitle files for ${D.counts?.titles || 0} videos, kept in HallFlix’s data folder.</p></div>`,
+    onChange: (D, e) => {
+      if (e.target.matches('[data-auto]')) { D.autoFetch = e.target.checked; return true; }
+      if (e.target.matches('[data-beside]')) { D.saveBeside = e.target.checked; return true; }
+      if (e.target.matches('[data-hi]')) { D.hi = e.target.value; return true; }
+      if (e.target.matches('[data-langadd]') && e.target.value) { D.languages.push(e.target.value); redraw(D); return true; }
+      return false;
+    },
+    onClick: async (b, D) => {
+      const l = b.closest('[data-lang]')?.dataset.lang;
+      if (!l) return false;
+      const i = D.languages.indexOf(l);
+      if (b.matches('[data-langdel]')) { if (D.languages.length > 1) D.languages.splice(i, 1); else toast('Keep at least one language'); }
+      if (b.matches('[data-langup]') && i > 0) [D.languages[i - 1], D.languages[i]] = [D.languages[i], D.languages[i - 1]];
+      redraw(D);
+      $('[data-save]', main).disabled = false;
+      return true;
+    },
+  });
+  // The language chips redraw on their own, so the rest of the page (and anything typed in it) stays as it is.
+  function redraw(D) {
+    const card = $('.srcs', main).closest('.card');
+    const tmp = document.createElement('div');
+    tmp.innerHTML = String(html`<div class="srcs">${D.languages.map((l, i) => html`<span class="src on" data-lang="${l}">${(D.langs.find((x) => x[0] === l) || [l, l])[1]}<button class="btn sm" data-langup ${i ? '' : 'disabled'} aria-label="Earlier">←</button><button class="btn sm danger" data-langdel aria-label="Remove">✕</button></span>`)}
+      ${D.languages.length < 6 ? html`<select data-langadd><option value="">Add a language…</option>${D.langs.filter(([k]) => !D.languages.includes(k)).map(([k, n]) => html`<option value="${k}">${n}</option>`)}</select>` : ''}</div>`);
+    $('.srcs', card).replaceWith(tmp.firstElementChild);
+  }
 };
 
 // ---------- plugins ----------

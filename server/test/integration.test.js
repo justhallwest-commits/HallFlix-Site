@@ -963,3 +963,172 @@ test('music: lyrics from files and services, search, timing, the front page, rad
     stub.close();
   }
 });
+
+test('movies and shows: library front page, filters, ratings from services, and subtitles found online', async () => {
+  const http = await import('node:http');
+  const calls = [];
+  const stub = http.createServer((req, res) => {
+    const u = new URL(req.url, 'http://x'), sp = u.searchParams;
+    calls.push(`${req.method} ${u.pathname}`);
+    const send = (code, body, type = 'application/json') => { res.writeHead(code, { 'Content-Type': type }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
+    // OMDb: IMDb, Rotten Tomatoes and Metacritic for Night Drive (tt0000101).
+    if (u.pathname === '/omdb/') {
+      if (sp.get('apikey') !== 'omdb-key') return send(401, { Response: 'False', Error: 'Invalid API key!' });
+      if (sp.get('i') === 'tt0000101') return send(200, { Response: 'True', imdbID: 'tt0000101', imdbRating: '7.7', imdbVotes: '416,247', Metascore: '67',
+        Ratings: [{ Source: 'Internet Movie Database', Value: '7.7/10' }, { Source: 'Rotten Tomatoes', Value: '83%' }, { Source: 'Metacritic', Value: '67/100' }] });
+      return send(200, { Response: 'False', Error: 'Movie not found!' });
+    }
+    // MDBList: adds Letterboxd and the Popcornmeter, and gives IMDb too (OMDb is asked first, so its IMDb wins).
+    if (u.pathname === '/mdb/tmdb/movie/101') return sp.get('apikey') === 'mdb-key' ? send(200, { ids: { imdb: 'tt0000101' }, ratings: [
+      { source: 'imdb', value: 7.9, score: 79, votes: 400000 }, { source: 'letterboxd', value: 3.6, score: 72 }, { source: 'popcorn', value: 88, score: 88 }, { source: 'tmdb', value: 74, score: 74 }, { source: 'metacriticuser', value: null }] }) : send(403, { error: 'Invalid API key' });
+    if (u.pathname.startsWith('/mdb/')) return send(404, {});
+    if (u.pathname === '/myratings/tt0000101') return send(200, { data: { score: '4.5' } });
+    // OpenSubtitles: search by TMDb id, sign in, download.
+    if (u.pathname === '/os/subtitles') {
+      assert.equal(req.headers['api-key'], 'os-key');
+      if (sp.get('tmdb_id') === '102') return send(200, { data: [
+        { attributes: { language: 'en', release: 'The.Long.Signal.2021.720p.WEB.h264-OTHER', download_count: 900, hearing_impaired: false, files: [{ file_id: 11 }] } },
+        { attributes: { language: 'en', release: 'The.Long.Signal.2021.1080p.BluRay.x264-GRP', download_count: 50, hearing_impaired: true, files: [{ file_id: 12 }] } },
+        { attributes: { language: 'fr', release: 'The.Long.Signal.2021.FRENCH', download_count: 5000, files: [{ file_id: 13 }] } }] });
+      if (sp.get('parent_tmdb_id') === '55') return send(200, { data: [{ attributes: { language: 'en', release: `Harbor.Lights.S0${sp.get('season_number')}E0${sp.get('episode_number')}`, download_count: 3, files: [{ file_id: 21 }] } }] });
+      return send(200, { data: [] });
+    }
+    if (u.pathname === '/os/login') { const b = []; req.on('data', (c) => b.push(c)); req.on('end', () => { const j = JSON.parse(Buffer.concat(b)); send(j.password === 'pw' ? 200 : 401, j.password === 'pw' ? { token: 'tok123' } : { message: 'bad login' }); }); return; }
+    if (u.pathname === '/os/download') {
+      assert.equal(req.headers.authorization, 'Bearer tok123', 'downloads use the sign-in');
+      const b = []; req.on('data', (c) => b.push(c));
+      req.on('end', () => send(200, { link: `http://${req.headers.host}/files/${JSON.parse(Buffer.concat(b)).file_id}.srt`, remaining: 99 }));
+      return;
+    }
+    // A Windows-1252 subtitle file, the way many old ones are.
+    if (u.pathname === '/files/12.srt') return send(200, Buffer.from('1\r\n00:00:02,000 --> 00:00:05,000\r\nCaf\xe9 signal, loud and clear.\r\n', 'latin1'), 'application/x-subrip');
+    if (u.pathname === '/files/21.srt') return send(200, '1\n00:00:01,000 --> 00:00:03,000\nThe harbor lights come on.\n', 'application/x-subrip');
+    // SubDL: a zip with a whole season in it.
+    if (u.pathname === '/subdl/subtitles') return send(200, sp.get('api_key') === 'subdl-key' && sp.get('tmdb_id') === '55'
+      ? { status: true, subtitles: [{ release_name: 'Harbor.Lights.S01.WEB', lang: 'EN', url: '/subtitle/55-1.zip', hi: false, season: 1, full_season: true }] } : { status: true, subtitles: [] });
+    if (u.pathname === '/subdlfiles/subtitle/55-1.zip') return send(200, zip({ 'Harbor.Lights.S01E01.srt': '1\n00:00:01,000 --> 00:00:02,000\nEpisode one\n', 'Harbor.Lights.S01E02.srt': '1\n00:00:01,000 --> 00:00:02,000\nEpisode two\n' }), 'application/zip');
+    send(404, {});
+  });
+  await new Promise((r) => stub.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${stub.address().port}`;
+  const keep = { ...hf.cfg };
+  const created = [];
+  Object.assign(hf.cfg, { omdbBase: `${base}/omdb`, mdblistBase: `${base}/mdb`, opensubsBase: `${base}/os`, subdlBase: `${base}/subdl`, subdlFiles: `${base}/subdlfiles`, ratingsDelayMs: 0 });
+  try {
+    // Its own small libraries, since earlier tests remove and delete some of the shared ones.
+    const mk = (...p) => { const f = path.join(media, 'MT', ...p); fs.mkdirSync(path.dirname(f), { recursive: true }); return f; };
+    const clip = mk('clip.mp4');
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=24:duration=2', '-f', 'lavfi', '-i', 'sine=d=2', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', clip]);
+    for (const f of ['Movies/Night Drive (2019)/Night Drive (2019).mp4', 'Movies/The.Long.Signal.2021.1080p.BluRay.x264-GRP.mp4', 'Movies/Deep Field (2020) [tmdbid-777]/deep.field.mp4',
+      'Shows/Harbor Lights (2018)/Season 01/Harbor.Lights.S01E01.mp4', 'Shows/Harbor Lights (2018)/Season 01/Harbor.Lights.S01E02.mp4', 'Shows/Harbor Lights (2018)/Season 02/Harbor.Lights.S02E01.mp4']) fs.linkSync(clip, mk(f));
+    fs.rmSync(clip);
+    const movies = await hf.api('POST', '/api/studio/libraries', { name: 'MT Movies', kind: 'movies', path: path.join(media, 'MT', 'Movies') });
+    const showsLib = await hf.api('POST', '/api/studio/libraries', { name: 'MT Shows', kind: 'shows', path: path.join(media, 'MT', 'Shows') });
+    created.push(movies.id, showsLib.id);
+    await hf.scan.idle();
+    const items = Object.fromEntries((await hf.api('GET', `/api/library/${movies.id}?sort=title`)).items.map((x) => [x.title, x]));
+    const harbor = (await hf.api('GET', `/api/library/${showsLib.id}`)).items[0];
+    items.eps = (await hf.api('GET', `/api/items/${harbor.id}`)).seasons.flatMap((x) => x.episodes);
+    assert.equal(items.eps.length, 3);
+
+    // ----- the library front page and Browse filters
+    const front = await hf.api('GET', `/api/videos/${movies.id}`);
+    assert.ok(front.total === 3 && front.spotlight.length >= 1);
+    assert.ok(front.rows.some((r) => r.id === 'recent'), 'recently added row');
+    const all = await hf.api('GET', `/api/library/${movies.id}?sort=title`);
+    assert.ok(all.facets.decades.includes(2010) && all.facets.decades.includes(2020));
+    assert.ok(all.facets.certs.includes('R') && all.facets.letters.includes('N'));
+    assert.deepEqual((await hf.api('GET', `/api/library/${movies.id}?decade=2010`)).items.map((x) => x.title), ['Night Drive']);
+    assert.deepEqual((await hf.api('GET', `/api/library/${movies.id}?cert=PG`)).items.map((x) => x.title), ['Deep Field']);
+    assert.deepEqual((await hf.api('GET', `/api/library/${movies.id}?letter=N`)).items.map((x) => x.title), ['Night Drive']);
+    const nd = items['Night Drive'].id;
+    await hf.api('POST', '/api/watched', { itemId: nd, watched: true });
+    assert.ok((await hf.api('GET', `/api/library/${movies.id}?status=watched`)).items.some((x) => x.id === nd));
+    assert.ok(!(await hf.api('GET', `/api/library/${movies.id}?status=unwatched`)).items.some((x) => x.id === nd));
+    const filtered = await hf.api('GET', `/api/library/${movies.id}?status=watched&decade=2010`);
+    assert.equal(filtered.total, filtered.items.length, 'the count matches the filters');
+    await hf.api('POST', '/api/watched', { itemId: nd, watched: false });
+    assert.ok((await hf.api('GET', `/api/videos/${showsLib.id}`)).total >= 1);
+
+    // ----- ratings: TMDb alone, then OMDb, MDBList and your own service
+    let r = await hf.api('GET', `/api/ratings/${nd}`);
+    assert.deepEqual(r.ratings.map((x) => [x.source, x.display]), [['tmdb', '7.4']], 'without keys, TMDb’s score');
+    let st = await hf.api('GET', '/api/studio/ratings');
+    assert.deepEqual(st.providers.map((p) => p.id), ['tmdb', 'omdb', 'mdblist']);
+    st.providers.find((p) => p.id === 'omdb').apiKey = 'omdb-key';
+    st.providers.find((p) => p.id === 'mdblist').apiKey = 'mdb-key';
+    st.providers.push({ id: 'custom:mine', name: 'Douban', url: `${base}/myratings/{imdb}`, list: '', value: 'data.score', max: '5', label: 'Douban' });
+    st = await hf.api('PUT', '/api/studio/ratings', { ...st, show: ['imdb', 'rt', 'rtAudience', 'metacritic', 'letterboxd', 'tmdb'] });
+    assert.equal(st.providers.find((p) => p.id === 'omdb').apiKey, '', 'keys are never sent back');
+    assert.equal(st.providers.find((p) => p.id === 'omdb').apiKeySet, true);
+    await hf.api('PUT', '/api/studio/ratings', { ...st, providers: st.providers.map((p) => ({ ...p, apiKey: '' })) });
+    assert.equal((await hf.api('GET', '/api/studio/ratings')).providers.find((p) => p.id === 'omdb').apiKeySet, true, 'a blank key keeps the saved one');
+    const test1 = await hf.api('POST', '/api/studio/ratings/test', { title: 'Night Drive', year: 2019 });
+    assert.equal(test1.results.find((x) => x.id === 'omdb').found, false, 'no TMDb id typed in, so OMDb looks up by title and finds nothing');
+    await hf.api('DELETE', '/api/studio/ratings/cache');
+    r = await hf.api('GET', `/api/ratings/${nd}`);
+    assert.deepEqual(r.ratings.map((x) => [x.source, x.display, x.from]), [['imdb', '7.7', 'OMDb'], ['rt', '83%', 'OMDb'], ['rtAudience', '88%', 'MDBList'], ['metacritic', '67', 'OMDb'], ['letterboxd', '3.6', 'MDBList'], ['tmdb', '7.4', 'TMDb'], ['x-custom-mine', '4.5', 'Douban']], 'your own services come after the chosen ones');
+    assert.equal(r.ratings.at(-1).label, 'Douban');
+    assert.equal(r.ratings[0].votes, 416247);
+    assert.equal(r.imdb, 'tt0000101');
+    assert.equal(r.ratings[0].url, 'https://www.imdb.com/title/tt0000101/');
+    const card = (await hf.api('GET', `/api/library/${movies.id}?letter=N`)).items[0];
+    assert.deepEqual(card.ratings.imdb, [7.7, 10], 'cards carry a short copy for the badge');
+    assert.deepEqual(card.ratings['x-custom-mine'], [4.5, 5]);
+    const before = calls.filter((c) => c.startsWith('GET /omdb')).length;
+    await hf.api('GET', `/api/ratings/${items.eps[0].id}`); // an episode asks for its show
+    await hf.api('GET', `/api/ratings/${nd}`);
+    assert.equal(calls.filter((c) => c.startsWith('GET /omdb')).length, before + 1, 'kept, so only the show was asked');
+    const boot = await hf.api('GET', '/api/boot');
+    assert.equal(boot.media.ratings.badge, 'auto');
+    const job = await hf.api('POST', '/api/studio/ratings/refresh', {});
+    assert.ok(job.job.total >= 0);
+    for (let i = 0; i < 50 && (await hf.api('GET', '/api/studio/ratings')).job.running; i++) await new Promise((ok) => setTimeout(ok, 100));
+    assert.ok((await hf.api('GET', '/api/studio/ratings')).counts.found >= 1);
+
+    // ----- subtitles: OpenSubtitles (signed in) for a movie, SubDL's season zip for an episode
+    let s = await hf.api('GET', '/api/studio/subtitles');
+    assert.deepEqual(s.providers.map((p) => p.id), ['opensubtitles', 'subdl']);
+    assert.equal((await hf.api('GET', '/api/boot')).media.subtitles.search, false, 'no keys: no online search');
+    s.providers.find((p) => p.id === 'opensubtitles').apiKey = 'os-key';
+    Object.assign(s.providers.find((p) => p.id === 'opensubtitles'), { username: 'jus', password: 'pw' });
+    s.providers.find((p) => p.id === 'subdl').apiKey = 'subdl-key';
+    s = await hf.api('PUT', '/api/studio/subtitles', { ...s, languages: ['en', 'fr'] });
+    assert.equal(s.providers[0].password, '');
+    assert.equal((await hf.api('GET', '/api/boot')).media.subtitles.search, true);
+    const ls = items['The Long Signal'].id;
+    const found = await hf.api('GET', `/api/subtitles/${ls}/search`);
+    assert.deepEqual(found.results.map((x) => [x.lang, x.fits]), [['en', true], ['en', false], ['fr', false]], 'English first, the one for this exact release on top');
+    assert.ok(found.results.every((x) => x.token && !x.ref && !x.url), 'the browser only gets tokens');
+    assert.equal((await hf.api('POST', `/api/subtitles/${ls}/download`, { token: 'made-up' }, { raw: true })).status, 400);
+    const { track } = await hf.api('POST', `/api/subtitles/${ls}/download`, { token: found.results[0].token });
+    assert.match(track.id, /^d\d+$/);
+    assert.equal(track.label, 'English (SDH) · OpenSubtitles');
+    const vtt = await (await hf.api('GET', track.url, null, { raw: true })).text();
+    assert.match(vtt, /^WEBVTT/); assert.match(vtt, /Café signal, loud and clear\./, 'old encodings come out right');
+    const { queue } = await hf.api('POST', '/api/play', { itemId: ls, caps: browser });
+    assert.ok(queue.at(-1).subs.some((x) => x.id === track.id), 'the new track plays like any other');
+    assert.ok((await hf.api('GET', `/api/items/${ls}`)).media.found.length === 1);
+    const ep = items.eps[0].id;
+    const epFound = await hf.api('GET', `/api/subtitles/${ep}/search`);
+    assert.deepEqual(epFound.results.map((x) => x.provider).sort(), ['OpenSubtitles', 'SubDL']);
+    const fromZip = await hf.api('POST', `/api/subtitles/${ep}/download`, { token: epFound.results.find((x) => x.provider === 'SubDL').token });
+    assert.match(await (await hf.api('GET', fromZip.track.url, null, { raw: true })).text(), /Episode one/, 'the right episode out of the season zip');
+    const t = await hf.api('POST', '/api/studio/subtitles/test', { itemId: ls });
+    assert.deepEqual(t.results.map((x) => [x.id, x.found]), [['opensubtitles', 3], ['subdl', 0]]);
+    // Fetching by itself: off by default, and only when there's nothing in the first language.
+    assert.equal((await hf.api('POST', `/api/subtitles/${items.eps[1].id}/auto`)).track, null);
+    await hf.api('PUT', '/api/studio/subtitles', { ...s, autoFetch: true });
+    assert.equal((await hf.api('POST', `/api/subtitles/${ls}/auto`)).have, true, 'The Long Signal already has English');
+    const auto = await hf.api('POST', `/api/subtitles/${items.eps[1].id}/auto`);
+    assert.ok(auto.track, 'found one for the second episode');
+    await hf.api('DELETE', `/api/subtitles/${ls}/${track.id}`);
+    assert.ok(!(await hf.api('POST', '/api/play', { itemId: ls, caps: browser })).queue.at(-1).subs.some((x) => x.id === track.id));
+  } finally {
+    Object.assign(hf.cfg, keep);
+    for (const id of created) await hf.api('DELETE', `/api/studio/libraries/${id}`);
+    await hf.api('PUT', '/api/studio/ratings', { providers: [], autoFetch: true });
+    await hf.api('PUT', '/api/studio/subtitles', { providers: [], languages: ['en'] });
+    stub.close();
+  }
+});

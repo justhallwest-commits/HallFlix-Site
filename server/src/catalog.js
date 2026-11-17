@@ -18,6 +18,8 @@ export const FROM = `from items i left join items s on s.id = i.show_id
   left join progress p on p.item_id = i.id and p.profile_id = $1`;
 
 // The kind of item each library type lists, and how many children a row has (issues in a series, albums by an artist).
+// "Top rated": IMDb's score once it has been looked up (it's what most people know), otherwise TMDb's.
+export const RATED = `coalesce((i.extra->'ratings'->'imdb'->>0)::real, i.score)`;
 export const MAIN_KIND = { movies: 'movie', shows: 'show', books: 'book', comics: 'series', music: 'album' };
 export const COUNT = `(select count(*)::int from items c where c.parent_id = i.id and i.kind in ('series','artist','album')) as child_count`;
 
@@ -37,6 +39,7 @@ export function card(r) {
     progress: r.position_s != null ? { position: r.position_s, duration: r.duration_s || r.runtime_s || 0, watched: !!r.watched } : undefined,
     author: r.author || undefined, pages: r.pages ?? undefined, number: r.extra?.number ?? undefined, count: r.child_count ?? undefined,
     read: r.read_count ?? undefined, reading: r.reading_count ?? undefined, publisher: r.kind === 'series' || r.kind === 'comic' ? r.studios?.[0] || undefined : undefined,
+    ratings: (r.kind === 'movie' || r.kind === 'show') && r.extra?.ratings && Object.keys(r.extra.ratings).length ? r.extra.ratings : undefined,
     track: r.kind === 'track' ? r.episode_no : undefined, disc: r.kind === 'track' ? r.season_no : undefined,
   };
 }
@@ -52,7 +55,7 @@ function mediaInfo(r) {
   };
 }
 
-async function continueRow(pid) {
+export async function continueRow(pid) {
   const inProgress = await q(
     `select ${SEL}, p.updated_at as touched ${FROM}
      where p.profile_id = $1 and not p.watched and p.position_s > 20 and i.kind in ('movie','episode')
@@ -166,7 +169,7 @@ export function routes(r) {
     const view = lib.kind === 'music' ? (['artists', 'songs'].includes(query.view) ? query.view : 'albums') : null;
     const kind = view === 'artists' ? 'artist' : view === 'songs' ? 'track' : MAIN_KIND[lib.kind];
     const sorts = {
-      title: 'i.sort_title asc', added: 'i.added_at desc', year: 'i.year desc nulls last, i.sort_title', score: 'i.score desc nulls last, i.sort_title',
+      title: 'i.sort_title asc', added: 'i.added_at desc', year: 'i.year desc nulls last, i.sort_title', score: `${RATED} desc nulls last, i.sort_title`,
       author: 'lower(i.author) asc nulls last, i.sort_title', artist: 'lower(i.author) asc nulls last, i.year, i.sort_title',
     };
     let order = sorts[query.sort] || sorts.title;
@@ -174,6 +177,37 @@ export function routes(r) {
     const args = [profile.id, lib.id, kind];
     let where = 'i.library_id = $2 and i.kind = $3';
     if (query.genre) { args.push(query.genre); where += ` and $${args.length} = any(i.genres)`; }
+    // Movies and shows: by decade, age rating, first letter, and whether this profile has watched them.
+    let facets;
+    if (kind === 'movie' || kind === 'show') {
+      const pid = Number(profile.id);
+      sorts.runtime = 'i.runtime_s asc nulls last, i.sort_title';
+      sorts.longest = 'i.runtime_s desc nulls last, i.sort_title';
+      sorts.released = 'i.premiered desc nulls last, i.sort_title';
+      sorts.unseen = `${kind === 'movie' ? `exists (select 1 from progress px where px.item_id = i.id and px.profile_id = ${pid} and px.watched)` : 'false'}, i.added_at desc`;
+      order = sorts[query.sort] || sorts.title;
+      if (/^\d{4}$/.test(query.decade || '')) { args.push(+query.decade); where += ` and i.year between $${args.length} and $${args.length} + 9`; }
+      if (query.cert) { args.push(String(query.cert)); where += ` and coalesce(i.rating, 'Not rated') = $${args.length}`; }
+      if (/^[A-Z#]$/.test(query.letter || '')) {
+        if (query.letter === '#') where += ` and i.sort_title !~* '^[a-z]'`;
+        else { args.push(query.letter); where += ` and upper(left(i.sort_title, 1)) = $${args.length}`; }
+      }
+      const watched = kind === 'movie' ? `exists (select 1 from progress px where px.item_id = i.id and px.profile_id = ${pid} and px.watched)`
+        : `not exists (select 1 from items e left join progress px on px.item_id = e.id and px.profile_id = ${pid} where e.show_id = i.id and e.kind = 'episode' and not coalesce(px.watched, false))`;
+      const begun = kind === 'movie' ? `exists (select 1 from progress px where px.item_id = i.id and px.profile_id = ${pid} and px.position_s > 0)`
+        : `exists (select 1 from progress px join items e on e.id = px.item_id where e.show_id = i.id and px.profile_id = ${pid})`;
+      if (query.status === 'unwatched') where += ` and not ${watched} and not ${begun}`;
+      if (query.status === 'inprogress') where += ` and ${begun} and not ${watched}`;
+      if (query.status === 'watched') where += ` and ${watched}`;
+      if (!+query.offset) {
+        const base = [lib.id, kind];
+        facets = {
+          decades: (await q(`select (year / 10) * 10 as d from items where library_id=$1 and kind=$2 and year is not null group by 1 order by 1 desc`, base)).map((x) => x.d),
+          certs: (await q(`select coalesce(rating, 'Not rated') as c, count(*)::int as n from items where library_id=$1 and kind=$2 group by 1 order by n desc`, base)).map((x) => x.c),
+          letters: (await q(`select case when sort_title ~* '^[a-z]' then upper(left(sort_title, 1)) else '#' end as l from items where library_id=$1 and kind=$2 group by 1 order by 1`, base)).map((x) => x.l),
+        };
+      }
+    }
     // Comics: how much of each series this profile has read, and filters by read status and publisher.
     let extraSel = '';
     if (kind === 'series') {
@@ -191,14 +225,14 @@ export function routes(r) {
       order = sorts[query.sort] || sorts.title;
     }
     if (hidden?.size) { args.push([...hidden.keys()]); where += ` and not (i.id = any($${args.length}::bigint[]))`; } // pages and counts stay right
-    const total = (await q1(`select count(*)::int as n from items i where ${where.replace(/\$(\d)/g, (_, n) => `$${n - 1}`)}`, args.slice(1))).n;
+    const total = (await q1(`select count(*)::int as n from items i where ${where.replace(/\$(\d+)/g, (_, n) => `$${n - 1}`)}`, args.slice(1))).n;
     const limit = Math.min(+query.limit || 60, kind === 'track' ? 500 : 200), offset = +query.offset || 0;
     const items = await q(`select ${SEL}, ${COUNT}${extraSel}, al.title as album_title, al.poster as album_poster ${FROM} left join items al on al.id = i.parent_id and i.kind = 'track'
       where ${where} order by ${order}, i.id limit ${limit} offset ${offset}`, args);
     const genres = await q(`select g, count(*)::int as n from items i, unnest(i.genres) g where i.library_id=$1 and i.kind=$2 group by g having count(*) > 0 order by g`, [lib.id, kind === 'track' || kind === 'artist' ? 'album' : kind]);
     const publishers = kind === 'series' ? (await q(`select p, count(*)::int as n from items i, unnest(i.studios) p where i.library_id=$1 and i.kind='series' group by p order by n desc, p`, [lib.id])).map((x) => x.p) : undefined;
     return {
-      library: lib, view, total, genres: kind === 'artist' ? [] : genres.map((g) => g.g), publishers,
+      library: lib, view, total, genres: kind === 'artist' ? [] : genres.map((g) => g.g), publishers, facets,
       items: items.map((x) => (x.kind === 'track' ? { ...card(x), album: x.album_title, albumId: x.parent_id, artistId: x.show_id || undefined, poster: img(x.album_poster, 'w342'), codec: x.extra?.codec, container: x.container } : card(x))),
     };
   });
@@ -215,6 +249,7 @@ export function routes(r) {
       people: (row.people || []).map((x) => ({ name: x.name, role: x.role, photo: img(x.photo, 'w185') })),
       trailer: row.trailer, inList: !!(await q1('select 1 from mylist where profile_id=$1 and item_id=$2', [pid, row.id])), focus,
     };
+    out.premiered = row.premiered || null;
     if (row.kind === 'movie') { out.media = mediaInfo(row); out.playId = row.id; }
     if (row.kind === 'show') {
       const eps = await q(`select ${SEL} ${FROM} where i.show_id = $2 and i.kind = 'episode' order by i.season_no, i.episode_no`, [pid, row.id]);
@@ -243,6 +278,7 @@ export function routes(r) {
        order by cardinality(array(select unnest(i.genres) intersect select unnest($4::text[]))) desc, i.score desc nulls last limit 12`,
       [pid, row.kind, row.id, row.genres || []]);
     out.similar = similar.map(card);
+    if (out.media && out.playId) out.media.found = (await q('select lang, label from subtitles where item_id=$1 order by id', [out.playId])).map((x) => ({ lang: x.lang, title: x.label }));
     return out;
   });
 

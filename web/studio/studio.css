@@ -249,3 +249,15 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 .pf-who:hover, .pf-who:focus-visible { border-color: var(--cyan); outline: none; }
 .pf-who .avatar { overflow: hidden; }
 @media (max-width: 560px) { .pf-pick { grid-template-columns: 1fr; } }
+
+/* Ratings and subtitles pages */
+.row.svc { align-items: flex-start; }
+.row.svc .grow span { white-space: normal; }
+.keys { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.keys input { flex: 1 1 180px; min-width: 0; }
+.srcs { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; align-items: center; }
+.src { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 10px; border-radius: 99px; border: 1px solid var(--line); background: var(--panel2); opacity: 0.6; }
+.src.on { opacity: 1; border-color: rgba(53, 208, 208, 0.5); }
+.src label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; }
+.src .btn.sm { padding: 0 7px; height: 24px; min-width: 0; }
+.srcs select { width: auto; flex: 0 0 auto; }
