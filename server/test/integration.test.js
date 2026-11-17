@@ -833,3 +833,116 @@ test('profiles: pictures, editing your own, and the admin tools', async () => {
   assert.equal((await hf.api('GET', '/api/home')).$status, 200, 'the admin stays signed in');
   await hf.api('DELETE', `/api/studio/profiles/${kid.id}`);
 });
+
+test('music: lyrics from files and services, search, timing, the front page, radio and likes', async () => {
+  const http = await import('node:http');
+  const mk = (...p) => { const f = path.join(media, ...p); fs.mkdirSync(path.dirname(f), { recursive: true }); return f; };
+  const tone = (out, meta) => execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=f=330:d=3', ...Object.entries(meta).flatMap(([k, v]) => ['-metadata', `${k}=${v}`]), out]);
+  tone(mk('Tunes', 'Alba', 'First Light', '01 Song One.mp3'), { title: 'Song One', artist: 'Alba', album: 'First Light', track: '1', genre: 'Pop' });
+  fs.writeFileSync(mk('Tunes', 'Alba', 'First Light', '01 Song One.lrc'), '[ar:Alba]\n[00:00.50]One a\n[00:01.00]One b\n[00:01.50]One c\n');
+  tone(mk('Tunes', 'Alba', 'First Light', '02 Song Two.mp3'), { title: 'Song Two', artist: 'Alba', album: 'First Light', track: '2', genre: 'Pop' });
+  tone(mk('Tunes', 'Alba', 'First Light', '03 Song Three.mp3'), { title: 'Song Three', artist: 'Alba', album: 'First Light', track: '3', genre: 'Pop' });
+  tone(mk('Tunes', 'Bex', 'Blue Hours', '01 Song Four.mp3'), { title: 'Song Four', artist: 'Bex', album: 'Blue Hours', track: '1', genre: 'Jazz' });
+  // A stand-in for LRCLIB, a "custom" JSON lyrics service and a plugin's service.
+  const hits = { get: 0 };
+  const stub = http.createServer((req, res) => {
+    const u = new URL(req.url, 'http://x'), sp = u.searchParams;
+    const send = (code, body, type = 'application/json') => { res.writeHead(code, { 'Content-Type': type }); res.end(typeof body === 'string' ? body : JSON.stringify(body)); };
+    if (u.pathname === '/lrclib/api/get') {
+      hits.get++;
+      assert.match(req.headers['user-agent'], /^HallFlix\//, 'LRCLIB asks for a User-Agent');
+      if (sp.get('track_name') === 'Song Two' && sp.get('artist_name') === 'Alba') return send(200, { trackName: 'Song Two', duration: 3, syncedLyrics: '[00:01.00]Two a\n[00:02.00]Two b\n[00:02.50]Two c', plainLyrics: 'Two a\nTwo b' });
+      return send(404, { message: 'not found' });
+    }
+    if (u.pathname === '/lrclib/api/search') {
+      if (/four/i.test(sp.get('q') || '')) return send(200, [{ trackName: 'Song Four', artistName: 'Bex', albumName: 'Blue Hours', duration: 3, syncedLyrics: '[00:00.50]Four a\n[00:01.00]Four b\n[00:01.50]Four c' }]);
+      return send(200, []);
+    }
+    if (u.pathname === '/custom') return sp.get('title') === 'Song Three' ? send(200, { data: { text: 'Plain three\nsecond line' } }) : send(404, {});
+    if (u.pathname.startsWith('/plugin/')) return decodeURIComponent(u.pathname).endsWith('/Plugin Song') ? send(200, '[00:01.00]P a\n[00:02.00]P b\n[00:03.00]P c', 'text/plain') : send(404, 'no');
+    send(404, {});
+  });
+  await new Promise((r) => stub.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${stub.address().port}`;
+  const keepBase = hf.cfg.lrclibBase;
+  hf.cfg.lrclibBase = `${base}/lrclib`;
+  const plugin = await hf.api('POST', '/api/studio/plugins', zip({ 'plugin.json': JSON.stringify({ id: 'test-lyrics', name: 'Test Lyrics', contributes: { lyrics: [{ name: 'Test Plugin Lyrics', url: `${base}/plugin/{artist}/{title}` }] } }) }));
+  assert.equal(plugin.id, 'test-lyrics');
+  try {
+    const lib = await hf.api('POST', '/api/studio/libraries', { name: 'Tunes', kind: 'music', path: path.join(media, 'Tunes') });
+    await hf.scan.idle();
+    const songs = (await hf.api('GET', `/api/library/${lib.id}?view=songs&sort=title`)).items;
+    const id = Object.fromEntries(songs.map((t) => [t.title, t.id]));
+    assert.ok(songs.every((t) => t.artistId && t.albumId), 'songs know their artist and album');
+
+    // From the NAS first; then LRCLIB, asked once and remembered.
+    let l = await hf.api('GET', `/api/lyrics/${id['Song One']}`);
+    assert.deepEqual([l.source, l.synced.map((x) => x.text)], ['A .lrc file on the NAS', ['One a', 'One b', 'One c']]);
+    l = await hf.api('GET', `/api/lyrics/${id['Song Two']}`);
+    assert.deepEqual([l.source, l.synced.length, l.synced[0]], ['LRCLIB', 3, { t: 1, text: 'Two a' }]);
+    const before = hits.get;
+    await hf.api('GET', `/api/lyrics/${id['Song Two']}`);
+    assert.equal(hits.get, before, 'found lyrics are kept');
+    // Nothing anywhere yet: remembered as missing, until a new service is added and the missing are looked at again.
+    assert.equal((await hf.api('GET', `/api/lyrics/${id['Song Three']}`)).missing, true);
+    let st = await hf.api('GET', '/api/studio/lyrics');
+    assert.deepEqual(st.providers.map((p) => [p.name, p.kind, p.enabled]), [['LRCLIB', 'builtin', true], ['Test Plugin Lyrics', 'plugin', true]]);
+    st = await hf.api('PUT', '/api/studio/lyrics', { autoFetch: true, providers: [...st.providers, { id: 'custom:mine', name: 'My Lyrics', url: `${base}/custom?artist={artist}&title={title}`, result: 'data', plain: 'text' }] });
+    assert.deepEqual(st.providers.map((p) => p.name), ['LRCLIB', 'Test Plugin Lyrics', 'My Lyrics']);
+    assert.equal((await hf.api('PUT', '/api/studio/lyrics', { providers: [{ id: 'custom:bad', name: 'Bad', url: 'ftp://nope' }] })).$status, 400);
+    assert.equal((await hf.api('GET', `/api/lyrics/${id['Song Three']}`)).missing, true, 'still remembered as missing');
+    await hf.api('DELETE', '/api/studio/lyrics/cache?missing=1');
+    l = await hf.api('GET', `/api/lyrics/${id['Song Three']}`);
+    assert.deepEqual([l.source, l.plain], ['My Lyrics', 'Plain three\nsecond line']);
+    // The Studio's test asks one service with one song.
+    const tried = await hf.api('POST', '/api/studio/lyrics/test', { artist: 'Anyone', title: 'Plugin Song', only: 'plugin:test-lyrics:test-plugin-lyrics' });
+    assert.deepEqual(tried.results.map((x) => [x.name, x.found, x.synced, x.lines]), [['Test Plugin Lyrics', true, true, 3]]);
+
+    // "Not right?": search, choose a result, nudge the timing, paste, and go back to automatic.
+    assert.equal((await hf.api('GET', `/api/lyrics/${id['Song Four']}`)).missing, true);
+    const found = await hf.api('GET', `/api/lyrics/${id['Song Four']}/search?q=bex four`);
+    assert.deepEqual(found.results.map((x) => [x.provider, x.title, !!x.synced]), [['LRCLIB', 'Song Four', true]]);
+    l = await hf.api('POST', `/api/lyrics/${id['Song Four']}`, { lrc: found.results[0].synced, source: 'LRCLIB' });
+    assert.deepEqual([l.chosen, l.source, l.synced.map((x) => x.text)], [true, 'LRCLIB', ['Four a', 'Four b', 'Four c']]);
+    assert.equal((await hf.api('PUT', `/api/lyrics/${id['Song Four']}/offset`, { offset: 1.54 })).offset, 1.5);
+    assert.equal((await hf.api('GET', `/api/lyrics/${id['Song Four']}`)).offset, 1.5);
+    l = await hf.api('POST', `/api/lyrics/${id['Song Four']}`, { plain: 'Typed by hand' });
+    assert.deepEqual([l.plain, l.source, l.offset], ['Typed by hand', 'Added by hand', 1.5]);
+    assert.equal((await hf.api('POST', `/api/lyrics/${id['Song Four']}`, { plain: '   ' })).$status, 400);
+    assert.equal((await hf.api('DELETE', `/api/lyrics/${id['Song Four']}`)).missing, true);
+    // A chosen song's lyrics win over a .lrc file; deleting the choice brings the file back.
+    await hf.api('POST', `/api/lyrics/${id['Song One']}`, { plain: 'Mine instead' });
+    assert.equal((await hf.api('GET', `/api/lyrics/${id['Song One']}`)).plain, 'Mine instead');
+    assert.equal((await hf.api('DELETE', `/api/lyrics/${id['Song One']}`)).source, 'A .lrc file on the NAS');
+
+    // The music front page, radio and likes.
+    for (const t of ['Song One', 'Song Two', 'Song One']) { await hf.api('POST', '/api/progress', { itemId: id[t] }); }
+    const sql = (await import('../src/db.js')).q;
+    await sql(`update plays set played_at = played_at - interval '1 minute' * id`); // so the dedupe window doesn't merge them
+    await hf.api('POST', '/api/progress', { itemId: id['Song One'] });
+    const home = await hf.api('GET', `/api/music/${lib.id}`);
+    assert.deepEqual([home.totals.albums, home.totals.artists, home.totals.songs], [2, 2, 4]);
+    assert.deepEqual(home.top.map((t) => t.title), ['Song One', 'Song Two']);
+    assert.deepEqual(home.jumpBack.map((a) => a.title), ['First Light']);
+    assert.deepEqual(home.genres.map((g) => g.name).sort(), ['Jazz', 'Pop']);
+    assert.deepEqual(home.something.map((a) => a.title), ['Blue Hours'], 'albums never played');
+    const radio = await hf.api('GET', `/api/radio?seed=track:${id['Song Two']}`);
+    assert.equal(radio.tracks[0].title, 'Song Two');
+    assert.equal(new Set(radio.tracks.map((t) => t.id)).size, radio.tracks.length, 'no song twice');
+    assert.deepEqual((await hf.api('GET', `/api/radio?seed=genre:Jazz&library=${lib.id}`)).tracks.map((t) => t.title), ['Song Four']);
+    assert.equal((await hf.api('GET', `/api/radio?seed=artist:${songs.find((t) => t.title === 'Song Four').artistId}`)).title, 'Bex radio');
+    await hf.api('POST', '/api/mylist', { itemId: id['Song Three'], on: true });
+    assert.deepEqual(await hf.api('GET', '/api/music/liked/ids').then((x) => Array.from(x)), [id['Song Three']]);
+    assert.deepEqual((await hf.api('GET', '/api/music/liked/songs')).tracks.map((t) => t.title), ['Song Three']);
+    assert.ok(!((await hf.api('GET', '/api/home')).rows.find((r) => r.id === 'mylist')?.items || []).some((x) => x.kind === 'track'), 'liked songs stay off My List on Home');
+    const pl = await hf.api('POST', '/api/music/queue-to-playlist', { name: 'From the queue', ids: [id['Song Two'], id['Song One']] });
+    assert.deepEqual((await hf.api('GET', `/api/playlists/${pl.id}`)).tracks.map((t) => t.title), ['Song Two', 'Song One']);
+    await hf.api('DELETE', `/api/playlists/${pl.id}`);
+    await hf.api('DELETE', `/api/studio/libraries/${lib.id}`);
+  } finally {
+    hf.cfg.lrclibBase = keepBase;
+    await hf.api('DELETE', '/api/studio/plugins/test-lyrics');
+    await hf.api('PUT', '/api/studio/lyrics', { providers: [], autoFetch: true });
+    stub.close();
+  }
+});

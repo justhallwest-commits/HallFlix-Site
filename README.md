@@ -12,7 +12,13 @@ A self-hosted media service with its own server, web app and design Studio. It r
   - **Metadata:** find titles across every library and edit many at once, with a preview, locks that survive rescans, a genre/tag/studio
     manager, CSV export and import, and undo.
   - **Parental controls:** rule sets that hide titles from chosen profiles by tag, genre or rating, enforced by the server in every app.
-- **Books, comics and music:** an EPUB and PDF reader, a music player that keeps playing while you browse, and a comics section built like the big comic apps:
+- **Music:** a Listen now page (quick tiles, jump back in, new albums, your top songs, genre mixes, artists, rediscover), song,
+  artist and genre radio, Liked songs, a queue you can reorder (play next, add to queue, drag to move), volume and a sleep timer.
+  Now Playing takes its colours from the album art and has time-synced lyrics that sweep across each line (word by word with
+  enhanced LRC), full-screen lyrics, timing adjustment, and "Not right?" to search for or paste other lyrics.
+  - **Lyrics services:** files on the NAS first, then LRCLIB (built in), any JSON lyrics API added in **Studio → Lyrics**, and
+    services from plugins, in the order you set. What they find is kept, and can be saved beside the songs as .lrc files.
+- **Books and comics:** an EPUB and PDF reader, and a comics section built like the big comic apps:
   - **Comic reader:** one page, two-page spreads (cover alone, double-page art on its own, spine shadow), a vertical scroll for webtoons (picked
     automatically for tall pages), and panel by panel; manga order; zoom (double-tap, pinch, + and −); a thumbnail strip and page grid; jump back;
     time left; brightness, background and night warmth; settings kept per series; previous and next issue.

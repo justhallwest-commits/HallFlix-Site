@@ -23,6 +23,8 @@ import * as art from './art.js';
 import * as prerollsMod from './prerolls.js';
 import * as archive from './archive.js';
 import * as profilesMod from './profiles.js';
+import * as lyricsMod from './lyrics.js';
+import * as musicMod from './music.js';
 import { IMAGE_EXT } from './names.js';
 
 const open = { auth: false };
@@ -91,6 +93,8 @@ guard.routes(r);
 art.routes(r);
 prerollsMod.routes(r);
 profilesMod.routes(r);
+lyricsMod.routes(r);
+musicMod.routes(r);
 
 // TMDb artwork, fetched once and then served from the NAS.
 const SIZES = new Set(['w185', 'w300', 'w342', 'w500', 'w780', 'w1280', 'original']);

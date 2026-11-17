@@ -147,16 +147,6 @@ setInterval(() => {
 }, 5e3).unref();
 const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-function lrc(text) {
-  const out = [];
-  for (const line of text.replace(/\r/g, '').split('\n')) {
-    const stamps = [...line.matchAll(/\[(\d+):(\d+(?:[.:]\d+)?)\]/g)];
-    const words = line.replace(/\[[^\]]*\]/g, '').trim();
-    for (const m of stamps) out.push({ t: +m[1] * 60 + parseFloat(m[2].replace(':', '.')), text: words });
-  }
-  return out.sort((a, b) => a.t - b.t);
-}
-
 export function routes(r) {
   // ----- the personal hub -----
   r.get('/api/me', async ({ profile }) => {
@@ -166,7 +156,7 @@ export function routes(r) {
     if (cont.length) rows.push({ id: 'continue', title: 'Continue watching', shape: 'wide', items: cont.map(card) });
     const reading = await q(`select ${SEL} ${FROM} where p.profile_id=$1 and not p.watched and p.position_s > 0 and i.kind in ('book','comic') order by p.updated_at desc limit 24`, [pid]);
     if (reading.length) rows.push({ id: 'reading', title: 'Continue reading', items: reading.map(card) });
-    const mine = await q(`select ${SEL}, ${COUNT} ${FROM} join mylist m on m.item_id = i.id and m.profile_id = $1 order by m.added_at desc limit 60`, [pid]);
+    const mine = await q(`select ${SEL}, ${COUNT} ${FROM} join mylist m on m.item_id = i.id and m.profile_id = $1 where i.kind <> 'track' order by m.added_at desc limit 60`, [pid]);
     if (mine.length) rows.push({ id: 'mylist', title: 'My List', items: mine.map(card) });
     const albums = await q(
       `select ${SEL}, ${COUNT} ${FROM} join (select t.parent_id, max(pp.updated_at) as last from progress pp join items t on t.id = pp.item_id where pp.profile_id=$1 and t.kind='track' group by 1) x on x.parent_id = i.id
@@ -207,24 +197,7 @@ export function routes(r) {
     return { chapters };
   });
 
-  // ----- lyrics: a .lrc or .txt beside the song, or lyrics stored in its tags -----
-  r.get('/api/lyrics/:id', async ({ params }) => {
-    const item = await q1(`select path from items where id=$1 and kind='track'`, [params.id]);
-    if (!item?.path) throw new HttpError(404, 'Not found');
-    const stem = item.path.slice(0, -path.extname(item.path).length);
-    for (const ext of ['.lrc', '.LRC']) {
-      try { const lines = lrc(await fs.promises.readFile(stem + ext, 'utf8')); if (lines.length) return { synced: lines }; } catch { /* next */ }
-    }
-    try { const text = (await fs.promises.readFile(`${stem}.txt`, 'utf8')).trim(); if (text) return { plain: text.slice(0, 20000) }; } catch { /* next */ }
-    try {
-      const { stdout } = await exec(cfg.ffprobe, ['-v', 'error', '-show_entries', 'format_tags:stream_tags', '-of', 'json', item.path], { timeout: 30e3, maxBuffer: 4e6 });
-      const j = JSON.parse(stdout);
-      const tags = Object.assign({}, ...(j.streams || []).map((s) => s.tags || {}), j.format?.tags || {});
-      const key = Object.keys(tags).find((k) => /^(lyrics|unsyncedlyrics|uslt)(-|$)/i.test(k));
-      if (key && tags[key].trim()) { const text = tags[key].trim(); const lines = lrc(text); return lines.length > 2 ? { synced: lines } : { plain: text.slice(0, 20000) }; }
-    } catch { /* none */ }
-    return {};
-  });
+  // (Lyrics live in lyrics.js.)
 
   // ----- playlists -----
   const mine = async (profile, id) => { const p = await q1('select * from playlists where id=$1 and profile_id=$2', [id, profile.id]); if (!p) throw new HttpError(404, 'Playlist not found'); return p; };
@@ -241,7 +214,7 @@ export function routes(r) {
     const p = await mine(profile, params.id);
     const tracks = await q(`select ${SEL}, al.title as album_title, al.poster as album_poster ${FROM} join playlist_items pi on pi.item_id = i.id and pi.playlist_id = $2
       join items al on al.id = i.parent_id order by pi.position, pi.added_at`, [profile.id, p.id]);
-    return { id: p.id, name: p.name, tracks: tracks.map((t) => ({ ...card(t), album: t.album_title, albumId: t.parent_id, poster: img(t.album_poster, 'w342'), codec: t.extra?.codec, container: t.container })) };
+    return { id: p.id, name: p.name, tracks: tracks.map((t) => ({ ...card(t), album: t.album_title, albumId: t.parent_id, artistId: t.show_id || undefined, poster: img(t.album_poster, 'w342'), codec: t.extra?.codec, container: t.container })) };
   });
   r.post('/api/playlists/:id/tracks', async ({ profile, req, params }) => {
     const p = await mine(profile, params.id);

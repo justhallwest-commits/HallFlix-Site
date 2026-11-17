@@ -114,7 +114,7 @@ function startHero(list) {
   if (list.length > 1) heroTimer = setInterval(() => { if (feel.trailerPlaying() && (hero.beats = (hero.beats || 0) + 1) < 5) return; hero.beats = 0; if (!hero.matches(':hover') && !hero.contains(document.activeElement) && !document.hidden && !$('#overlay').childElementCount && $('#player').hidden && !$('.surprise')) show(i + 1); }, 9000);
 }
 
-function syncArrows(row) {
+export function syncArrows(row) {
   const sc = $('.scroller', row);
   if (!sc) return;
   $('.arrow.l', row).hidden = sc.scrollLeft < 10;
@@ -205,7 +205,7 @@ export async function show(name, arg) {
     else if (name === 'person') { setNav(''); applyLook(state.look, null); await more.person(view(), decodeURIComponent(arg || '')); }
     else if (name === 'remote') { setNav(''); applyLook(state.look, null); await more.remote(view()); }
     else if (name === 'pair') { setNav(''); applyLook(state.look, null); await more.pairApprove(view(), arg || ''); }
-    else if (name === 'playlist') { setNav(''); applyLook(state.look, null); await media.playlist(view(), +arg); }
+    else if (name === 'playlist') { setNav(''); applyLook(state.look, null); await media.playlist(view(), arg === 'liked' ? 'liked' : +arg); }
     else if (name === 'search') await search(decodeURIComponent(arg || ''));
     else if (name === 'list') await myList();
     else if (name === 'timeline') { setNav('timeline'); applyLook(state.look, null); await browse.timeline(view(), arg); }

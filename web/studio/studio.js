@@ -25,7 +25,7 @@ const mins = (s) => (s >= 60 ? `${Math.round(s / 60)} min` : `${Math.round(s || 
 
 const PAGES = [
   ['overview', 'Overview'], ['libraries', 'Libraries'], ['artwork', 'Artwork'], ['metadata', 'Metadata'], ['home', 'Home screen'], ['collections', 'Collections'],
-  ['look', 'Look and feel'], ['seasons', 'Seasons'], ['prerolls', 'Pre-rolls'], ['guard', 'Parental controls'], ['profiles', 'Profiles'], ['plugins', 'Plugins'], ['settings', 'Settings'],
+  ['look', 'Look and feel'], ['seasons', 'Seasons'], ['prerolls', 'Pre-rolls'], ['guard', 'Parental controls'], ['profiles', 'Profiles'], ['lyrics', 'Lyrics'], ['plugins', 'Plugins'], ['settings', 'Settings'],
 ];
 let timer = null; // the current page's refresh timer, cleared on every page change
 
@@ -572,6 +572,94 @@ pages.profiles = async (main) => {
     };
   };
   await draw();
+};
+
+// ---------- lyrics ----------
+// Where lyrics come from: files on the NAS first, then the services here, in this order. LRCLIB is built in; any JSON
+// lyrics API can be added by its address and where the lyrics sit in its answer; plugins can add services too.
+pages.lyrics = async (main) => {
+  let L = await api('GET', '/api/studio/lyrics');
+  let dirty = false;
+  const KIND = { builtin: 'Built in', custom: 'Your own', plugin: 'Plugin' };
+  const save = async () => {
+    try { L = { ...L, ...(await api('PUT', '/api/studio/lyrics', { providers: L.providers, autoFetch: L.autoFetch, saveLrc: L.saveLrc })) }; dirty = false; toast('Saved'); draw(); }
+    catch (e) { fail(e); }
+  };
+  const editor = (p) => {
+    const v = p ? JSON.parse(JSON.stringify(p)) : { id: `custom:${Date.now().toString(36)}`, name: '', url: '', synced: 'syncedLyrics', plain: 'plainLyrics', result: '', searchUrl: '', searchList: '', headers: {}, enabled: true };
+    const hdr = Object.entries(v.headers || {}).map(([k, x]) => `${k}: ${x}`).join('\n');
+    const d = dialog(p ? `Edit ${p.name}` : 'Add a lyrics service', html`<p class="muted small" style="margin-bottom:10px">Any web service that answers with JSON (or plain LRC text) works. Put
+        <code>{artist}</code>, <code>{title}</code>, <code>{album}</code> and <code>{duration}</code> (seconds) in the address where the song goes.</p>
+      ${text(v, 'name', 'Name', 'My lyrics service')}
+      ${text(v, 'url', 'Address', 'https://lyrics.example.com/get?artist={artist}&title={title}&duration={duration}')}
+      ${text(v, 'result', 'Answer is inside', 'Leave empty, or a path like data or results.0')}
+      ${text(v, 'synced', 'Synced lyrics field', 'syncedLyrics')}
+      ${text(v, 'plain', 'Plain lyrics field', 'plainLyrics')}
+      <details style="margin-top:8px"><summary class="muted">Search and sign-in (optional)</summary>
+        ${text(v, 'searchUrl', 'Search address', 'https://lyrics.example.com/search?q={query}')}
+        ${text(v, 'searchList', 'Results are in', 'Leave empty if the answer is a list')}
+        <label class="f block"><span>Headers</span><textarea data-hdr rows="3" placeholder="Authorization: Bearer abc123" style="width:100%">${hdr}</textarea></label></details>`,
+    { wide: true, onOk: async (el) => {
+      if (!v.name.trim() || !/^https?:\/\//i.test(v.url.trim())) { toast('Give it a name and an address starting with https://'); return false; }
+      v.headers = Object.fromEntries($('[data-hdr]', el).value.split('\n').map((l) => l.split(/:(.*)/s).map((x) => (x || '').trim())).filter(([k, x]) => k && x));
+      const i = L.providers.findIndex((x) => x.id === v.id);
+      if (i >= 0) L.providers[i] = { ...v, kind: 'custom' }; else L.providers.push({ ...v, kind: 'custom' });
+      await save();
+    } });
+    bind(d.el, v, () => {});
+  };
+  const draw = () => {
+    const c = L.counts || {};
+    main.innerHTML = String(html`${head('Lyrics', 'Lyrics come from the NAS first: a .lrc or .txt file with the same name as the song, or the song’s own tags. If there are none, HallFlix asks the services below, in order, and keeps what it finds.',
+      html`<button class="btn primary" data-save ${dirty ? '' : 'disabled'}>Save</button>`)}
+      <div class="card"><h2>Looking songs up</h2>
+        <label class="check"><input type="checkbox" data-auto ${L.autoFetch ? 'checked' : ''}> Look up lyrics online when a song has none on the NAS</label>
+        <label class="check"><input type="checkbox" data-savelrc ${L.saveLrc ? 'checked' : ''}> Save lyrics found online next to the songs as .lrc files</label>
+        <p class="muted small">Saving needs write access to your media folder (drop <code>:ro</code> from the media line in the compose file). Existing files are never overwritten, except by lyrics someone chose by hand.</p></div>
+      <div class="card"><h2>Lyrics services</h2><p class="muted small" style="margin-bottom:6px">Tried from the top. Turn one off to skip it; use the arrows to change the order.</p>
+        ${L.providers.map((p, i) => html`<div class="row" data-i="${i}"><label class="check" style="margin:0"><input type="checkbox" data-on ${p.enabled ? 'checked' : ''} aria-label="Use ${p.name}"></label>
+          <div class="grow"><b>${p.name} <span class="pill ${p.kind === 'builtin' ? 'live' : ''}">${KIND[p.kind] || p.kind}${p.plugin ? `: ${p.plugin}` : ''}</span></b><span>${p.description || p.url || ''}</span></div>
+          <div class="tools"><button class="btn sm" data-up ${i ? '' : 'disabled'} aria-label="Move up">↑</button><button class="btn sm" data-down ${i < L.providers.length - 1 ? '' : 'disabled'} aria-label="Move down">↓</button>
+            <button class="btn sm" data-try>Test</button>${p.kind === 'custom' ? html`<button class="btn sm" data-edit>Edit</button><button class="btn sm danger" data-del>Remove</button>` : ''}</div></div>`)}
+        <div class="row"><button class="btn" data-add>Add a lyrics service</button><span class="muted small grow">Plugins can add services too: see “Lyrics” in the plugin guide.</span></div></div>
+      <div class="card"><h2>Try a song</h2><p class="muted small">Asks every service for one song, to check they are set up right.</p>
+        <div class="imgrow" style="margin-top:10px;flex-wrap:wrap"><input type="text" data-ta placeholder="Artist" style="flex:1;min-width:140px"><input type="text" data-tt placeholder="Song title" style="flex:1;min-width:140px"><input type="text" data-tl placeholder="Album (optional)" style="flex:1;min-width:140px"><input data-td type="number" placeholder="Seconds" style="width:110px"><button class="btn primary" data-test>Try it</button></div>
+        <div data-out></div></div>
+      <div class="card"><h2>What HallFlix has found</h2><p>${c.found || 0} songs with lyrics from online services (${c.synced || 0} time-synced), ${c.chosen || 0} chosen by hand, ${c.missing || 0} with none found yet.</p>
+        <div class="tools" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-again>Look again for songs with none</button><button class="btn danger" data-clear>Forget everything found online</button></div></div>`);
+  };
+  const test = async (only) => {
+    const out = $('[data-out]', main);
+    const b = { artist: $('[data-ta]', main).value, title: $('[data-tt]', main).value, album: $('[data-tl]', main).value, duration: +$('[data-td]', main).value || 0, only };
+    if (!b.artist || !b.title) { toast('Type an artist and a song title first'); $('[data-ta]', main).focus(); return; }
+    out.innerHTML = '<p class="muted" style="margin-top:12px">Asking…</p>';
+    try {
+      const { results } = await api('POST', '/api/studio/lyrics/test', b);
+      out.innerHTML = String(html`<div style="margin-top:12px">${results.map((x) => html`<div class="row"><div class="grow"><b>${x.name} ${x.found ? html`<span class="pill ok">${x.synced ? `Synced · ${x.lines} lines` : 'Plain'}</span>` : x.error ? html`<span class="pill bad">Error</span>` : html`<span class="pill">Nothing found</span>`}${x.enabled ? '' : html` <span class="pill">Off</span>`}</b>
+        <span>${x.error || x.preview || ''}</span></div><span class="muted small">${x.ms} ms</span></div>`)}</div>`);
+    } catch (e) { out.innerHTML = String(html`<p class="muted" style="margin-top:12px">${e.message}</p>`); }
+  };
+  draw();
+  main.onchange = (e) => {
+    if (e.target.matches('[data-auto]')) { L.autoFetch = e.target.checked; dirty = true; }
+    if (e.target.matches('[data-savelrc]')) { L.saveLrc = e.target.checked; dirty = true; }
+    if (e.target.matches('[data-on]')) { L.providers[+e.target.closest('[data-i]').dataset.i].enabled = e.target.checked; dirty = true; }
+    $('[data-save]', main).disabled = !dirty;
+  };
+  main.onclick = async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const row = b.closest('[data-i]'), i = row ? +row.dataset.i : -1;
+    if (b.matches('[data-save]')) return save();
+    if (b.matches('[data-add]')) return editor(null);
+    if (b.matches('[data-edit]')) return editor(L.providers[i]);
+    if (b.matches('[data-del]')) return confirmBox(`Remove ${L.providers[i].name}?`, 'Lyrics it already found stay.', 'Remove', async () => { L.providers.splice(i, 1); await save(); });
+    if (b.matches('[data-up]') || b.matches('[data-down]')) { const j = i + (b.matches('[data-up]') ? -1 : 1); [L.providers[i], L.providers[j]] = [L.providers[j], L.providers[i]]; dirty = true; draw(); return; }
+    if (b.matches('[data-try]')) { $('[data-ta]', main).focus(); if ($('[data-ta]', main).value && $('[data-tt]', main).value) test(L.providers[i].id); else toast('Type an artist and a song below, then press Test again'); return; }
+    if (b.matches('[data-test]')) return test();
+    if (b.matches('[data-again]')) { await api('DELETE', '/api/studio/lyrics/cache?missing=1').catch(fail); toast('Songs with no lyrics will be looked up again'); L = await api('GET', '/api/studio/lyrics'); draw(); return; }
+    if (b.matches('[data-clear]')) return confirmBox('Forget the lyrics found online?', 'Each song is looked up again the next time it plays. Lyrics chosen by hand, and files on the NAS, stay.', 'Forget them', async () => { await api('DELETE', '/api/studio/lyrics/cache'); L = await api('GET', '/api/studio/lyrics'); draw(); });
+  };
 };
 
 // ---------- plugins ----------

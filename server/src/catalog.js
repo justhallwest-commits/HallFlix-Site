@@ -90,7 +90,7 @@ export function routes(r) {
     if (reading.length) sec.reading.push({ id: 'reading', title: 'Continue reading', items: reading.map(card) });
     const cont = await continueRow(pid);
     if (cont.length) sec.continue.push({ id: 'continue', title: `Continue watching for ${profile.name}`, shape: 'wide', items: cont });
-    const mine = await q(`select ${SEL} ${FROM} join mylist m on m.item_id = i.id and m.profile_id = $1 order by m.added_at desc limit 30`, [pid]);
+    const mine = await q(`select ${SEL} ${FROM} join mylist m on m.item_id = i.id and m.profile_id = $1 where i.kind <> 'track' order by m.added_at desc limit 30`, [pid]);
     if (mine.length) sec.mylist.push({ id: 'mylist', title: 'My List', items: mine.map(card) });
     for (const l of libs) {
       const kind = MAIN_KIND[l.kind];
@@ -199,7 +199,7 @@ export function routes(r) {
     const publishers = kind === 'series' ? (await q(`select p, count(*)::int as n from items i, unnest(i.studios) p where i.library_id=$1 and i.kind='series' group by p order by n desc, p`, [lib.id])).map((x) => x.p) : undefined;
     return {
       library: lib, view, total, genres: kind === 'artist' ? [] : genres.map((g) => g.g), publishers,
-      items: items.map((x) => (x.kind === 'track' ? { ...card(x), album: x.album_title, albumId: x.parent_id, poster: img(x.album_poster, 'w342'), codec: x.extra?.codec, container: x.container } : card(x))),
+      items: items.map((x) => (x.kind === 'track' ? { ...card(x), album: x.album_title, albumId: x.parent_id, artistId: x.show_id || undefined, poster: img(x.album_poster, 'w342'), codec: x.extra?.codec, container: x.container } : card(x))),
     };
   });
 
@@ -322,6 +322,9 @@ export function routes(r) {
     const it = await q1(`select id, kind, runtime_s from items where id=$1`, [itemId]);
     if (it?.kind === 'track') { // a played song: remembered for Recently played
       await q(`insert into progress (profile_id, item_id, position_s, watched, updated_at) values ($1,$2,0,true,now()) on conflict (profile_id, item_id) do update set updated_at=now()`, [profile.id, itemId]);
+      // One play, for Most played (the same song started twice within half a minute counts once).
+      await q(`insert into plays (profile_id, item_id) select $1, $2 where not exists
+               (select 1 from plays where profile_id=$1 and item_id=$2 and played_at > now() - interval '30 seconds')`, [profile.id, itemId]);
       return { ok: true };
     }
     if (!it || !['movie', 'episode', 'book', 'comic'].includes(it.kind)) return { ok: true };
@@ -358,8 +361,8 @@ export function routes(r) {
 }
 
 // ---------- books, comics and music ----------
-const trackCard = (t) => ({ ...card(t), album: t.album_title, albumId: t.parent_id, poster: img(t.album_poster, 'w342'), codec: t.extra?.codec, container: t.container });
-const TRACKS = (where) => `select ${SEL}, al.title as album_title, al.poster as album_poster ${FROM} join items al on al.id = i.parent_id where ${where}`;
+export const trackCard = (t) => ({ ...card(t), album: t.album_title, albumId: t.parent_id, artistId: t.show_id || undefined, poster: img(t.album_poster, 'w342'), codec: t.extra?.codec, container: t.container });
+export const TRACKS = (where) => `select ${SEL}, al.title as album_title, al.poster as album_poster ${FROM} join items al on al.id = i.parent_id where ${where}`;
 
 async function shelfItem(pid, row) {
   let focus = null;

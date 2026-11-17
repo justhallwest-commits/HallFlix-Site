@@ -1,0 +1,16 @@
+{
+  "id": "lyrics-ovh",
+  "name": "Lyrics.ovh",
+  "version": "1.0.0",
+  "description": "Adds lyrics.ovh as a lyrics service (plain lyrics, no sign-up).",
+  "contributes": {
+    "lyrics": [
+      {
+        "name": "Lyrics.ovh",
+        "description": "Plain lyrics from api.lyrics.ovh, a free service with no key.",
+        "url": "https://api.lyrics.ovh/v1/{artist}/{title}",
+        "plain": "lyrics"
+      }
+    ]
+  }
+}

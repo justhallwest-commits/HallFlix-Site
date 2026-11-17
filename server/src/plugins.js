@@ -25,10 +25,15 @@ export async function listPlugins() {
         id: d.name, name: String(m.name || d.name), version: String(m.version || ''), description: String(m.description || ''),
         author: String(m.author || ''), enabled: enabled[d.name] !== false,
         css: files(c.css), js: files(c.js),
+        // Lyrics services, described rather than coded: the server asks them (see docs/PLUGINS.md).
+        lyrics: (Array.isArray(c.lyrics) ? c.lyrics : []).filter((l) => l && typeof l.url === 'string' && /^https?:\/\//i.test(l.url) && l.name).slice(0, 5).map((l) => ({
+          key: String(l.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40), name: String(l.name).slice(0, 60), description: String(l.description || `From ${m.name || d.name}`).slice(0, 200),
+          url: l.url, searchUrl: typeof l.searchUrl === 'string' && /^https?:\/\//i.test(l.searchUrl) ? l.searchUrl : '', result: String(l.result || ''), synced: String(l.synced || ''), plain: String(l.plain || ''),
+          searchList: String(l.searchList || ''), searchTitle: String(l.searchTitle || ''), searchArtist: String(l.searchArtist || ''), headers: l.headers && typeof l.headers === 'object' ? l.headers : {} })),
         themes: (Array.isArray(c.themes) ? c.themes : []).filter((t) => t && t.name && typeof t.theme === 'object')
           .map((t) => ({ id: `${d.name}:${String(t.name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, name: String(t.name), description: String(t.description || `From ${m.name || d.name}`), theme: t.theme })),
       });
-    } catch (e) { out.push({ id: d.name, name: d.name, enabled: false, broken: `plugin.json: ${e.message}`, css: [], js: [], themes: [] }); }
+    } catch (e) { out.push({ id: d.name, name: d.name, enabled: false, broken: `plugin.json: ${e.message}`, css: [], js: [], themes: [], lyrics: [] }); }
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }

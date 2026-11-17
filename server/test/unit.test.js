@@ -148,3 +148,11 @@ test('archives: image sizes from the first bytes, literal names for bsdtar', asy
   assert.equal(imageSize(Buffer.from('hello there, not an image at all')), null);
   assert.equal(literal('Page [01]*?.jpg'), 'Page \\[01\\]\\*\\?.jpg');
 });
+
+test('lyrics: LRC with offsets, repeated stamps and word timing', async () => {
+  const { parseLrc } = await import('../src/lyrics.js');
+  const out = parseLrc('[ti:Song]\n[offset:+500]\n[00:01.00]Hello there\n[00:03.50]<00:03.50>Word <00:04.00>by <00:04.50>word\n[00:05.00][00:09.00]Chorus\nno stamp here');
+  assert.deepEqual(out.map((l) => [l.t, l.text]), [[0.5, 'Hello there'], [3, 'Word by word'], [4.5, 'Chorus'], [8.5, 'Chorus']]);
+  assert.deepEqual(out[1].words.map((w) => [w.t, w.text]), [[3, 'Word '], [3.5, 'by '], [4, 'word']]);
+  assert.deepEqual(parseLrc('[01:02.5]x').map((l) => l.t), [62.5]);
+});

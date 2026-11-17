@@ -192,11 +192,13 @@ export async function reapplyEdits(libraryId) {
   const rows = await q(`select id, edits from items where library_id=$1 and edits <> '{}'::jsonb`, [libraryId]);
   for (const r of rows) {
     const sets = [], vals = [];
+    let extra = 'extra'; // several locked extra.* fields nest into one assignment (a column can only be set once)
     for (const [k, v] of Object.entries(r.edits)) {
-      if (k.startsWith('extra.')) { vals.push(JSON.stringify(v)); sets.push(`extra = jsonb_set(extra, '{${k.slice(6).replace(/[^\w]/g, '')}}', $${vals.length}::jsonb)`); continue; }
+      if (k.startsWith('extra.')) { vals.push(JSON.stringify(v)); extra = `jsonb_set(${extra}, '{${k.slice(6).replace(/[^\w]/g, '')}}', $${vals.length}::jsonb)`; continue; }
       if (!FIELDS[k] && !['poster', 'backdrop', 'logo'].includes(k)) continue;
       vals.push(v); sets.push(`${k}=$${vals.length}`);
     }
+    if (extra !== 'extra') sets.push(`extra = ${extra}`);
     if (!sets.length) continue;
     vals.push(r.id);
     await q(`update items set ${sets.join(', ')} where id=$${vals.length}`, vals);
