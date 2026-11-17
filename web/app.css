@@ -1494,8 +1494,20 @@ a.rating:hover { background: rgba(var(--text-rgb), 0.12); transform: translateY(
   display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start; text-align: left; box-sizing: border-box; }
 .login.signin[data-layout="split"][data-x="left"] .stack { left: 0; }
 .login.signin[data-layout="split"][data-x="right"] .stack { right: 0; }
-.login.signin[data-layout="split"][data-divider="yes"][data-x="left"] .stack { border-right: 6px solid rgba(var(--text-rgb), 0.12); }
-.login.signin[data-layout="split"][data-divider="yes"][data-x="right"] .stack { border-left: 6px solid rgba(var(--text-rgb), 0.12); }
+.login.signin[data-layout="split"][data-edge="line"][data-x="left"] .stack { border-right: 6px solid rgba(var(--text-rgb), 0.12); }
+.login.signin[data-layout="split"][data-edge="line"][data-x="right"] .stack { border-left: 6px solid rgba(var(--text-rgb), 0.12); }
+.login.signin[data-layout="split"] .stack { -webkit-backdrop-filter: blur(var(--side-blur, 0px)); backdrop-filter: blur(var(--side-blur, 0px)); }
+/* A soft edge: the panel's shade (and its frost) fade out over the picture. */
+.login.signin .side-fade { display: none; }
+.login.signin[data-layout="split"][data-edge="fade"] .side-fade { display: block; position: fixed; top: 0; bottom: 0; z-index: 1; pointer-events: none; width: var(--fade-w, 18vw);
+  -webkit-backdrop-filter: blur(var(--side-blur, 0px)); backdrop-filter: blur(var(--side-blur, 0px)); }
+.login.signin[data-layout="split"][data-edge="fade"][data-x="left"] .side-fade { left: clamp(320px, var(--side-w, 33vw), 100vw);
+  background: linear-gradient(to right, rgba(var(--side-rgb, var(--bg-rgb)), var(--side-op, 0.96)), rgba(var(--side-rgb, var(--bg-rgb)), 0));
+  -webkit-mask-image: linear-gradient(to right, #000, transparent); mask-image: linear-gradient(to right, #000, transparent); }
+.login.signin[data-layout="split"][data-edge="fade"][data-x="right"] .side-fade { right: clamp(320px, var(--side-w, 33vw), 100vw);
+  background: linear-gradient(to left, rgba(var(--side-rgb, var(--bg-rgb)), var(--side-op, 0.96)), rgba(var(--side-rgb, var(--bg-rgb)), 0));
+  -webkit-mask-image: linear-gradient(to left, #000, transparent); mask-image: linear-gradient(to left, #000, transparent); }
+@media (max-width: 560px) { .login.signin .side-fade { display: none !important; } }
 .login.signin[data-layout="split"][data-y="middle"] .stack { justify-content: center; }
 .login.signin[data-layout="split"][data-y="bottom"] .stack { justify-content: flex-end; }
 .login.signin[data-layout="split"] .box { width: 100%; text-align: left; }

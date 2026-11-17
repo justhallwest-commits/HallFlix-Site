@@ -17,7 +17,7 @@ export const DEFAULT_THEME = {
   login: { image: '', dim: 0.45, blur: 0, logo: '', logoPlace: 'above', logoSize: 150, x: 'center', y: 'middle', panel: 'none', panelOpacity: 0.72, panelBlur: 18,
     darkWhere: 'none', dark: 0.5, blurWhere: 'all', focusBlur: 0, title: '',
     // Layout: a floating box, or a full-height side panel with the picture beside it.
-    layout: 'floating', side: 'left', sideWidth: 33, sideColor: '', sideOpacity: 0.96, divider: true,
+    layout: 'floating', side: 'left', sideWidth: 33, sideColor: '', sideOpacity: 0.96, divider: true, sidePicture: 'beside', sideBlur: 0, sideEdge: '', fadeWidth: 18,
     // Profile tiles, the other ways to sign in, and a note at the bottom.
     tileShape: 'theme', tileMotion: true, tileSize: 132, tileColumns: 0, buttons: 'links', manualButton: true, manualLabel: '', phoneLabel: '', footer: '', footerLink: '' },
   logo: { image: '', height: 46 },

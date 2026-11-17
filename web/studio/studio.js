@@ -380,10 +380,14 @@ function signinCards(theme) {
   const split = L.layout === 'split';
   return html`<div class="card"><h2>Layout</h2>${choose(theme, 'login.layout', 'Layout', [['floating', 'A box over the picture'], ['split', 'A side panel, with the picture beside it']])}
       ${split ? html`${choose(theme, 'login.side', 'Panel side', [['left', 'Left'], ['right', 'Right']])}${range(theme, 'login.sideWidth', 'Panel width (% of the screen)', 20, 70, 1, 33)}
-        ${color(theme, 'login.sideColor', 'Panel colour (empty uses the theme background)')}${range(theme, 'login.sideOpacity', 'Panel strength', 0.2, 1, 0.02, 0.96)}
-        ${check(theme, 'login.divider', 'Edge line between the panel and the picture')}
+        ${choose(theme, 'login.sidePicture', 'Picture', [['beside', 'Beside the panel'], ['behind', 'Full screen, behind the panel']])}
+        ${color(theme, 'login.sideColor', 'Panel colour (empty uses the theme background)')}${range(theme, 'login.sideOpacity', 'Panel shade (0 = see-through, 1 = solid)', 0, 1, 0.02, 0.96)}
+        ${range(theme, 'login.sideBlur', 'Frost (blur the picture behind the panel)', 0, 40, 1, 0)}
+        ${choose(theme, 'login.sideEdge', 'Panel edge', [['line', 'A line'], ['none', 'Straight, no line'], ['fade', 'Soft fade into the picture']])}
+        ${(L.sideEdge || (L.divider === false ? 'none' : 'line')) === 'fade' ? range(theme, 'login.fadeWidth', 'Fade width (% of the screen)', 4, 45, 1, 18) : ''}
+        <p class="muted small">To see the picture through the panel, choose “Full screen, behind the panel” and lower the shade; add frost to blur it so the sign-in area stays easy to read.</p>
         ${choose(theme, 'login.y', 'Content in the panel', [['top', 'At the top'], ['middle', 'In the middle'], ['bottom', 'At the bottom']])}
-        <p class="muted small">The picture fills the space beside the panel. On phones the panel covers the screen.</p>` : ''}</div>
+        <p class="muted small">On phones the panel covers the screen.</p>` : ''}</div>
     <div class="card"><h2>Background</h2>${image(theme, 'login.image', 'Sign-in background picture or video')}
       ${range(theme, 'login.dim', 'Darken the whole screen', 0, 0.95, 0.05)}${range(theme, 'login.blur', 'Blur the whole picture', 0, 30, 1)}</div>
     <div class="card"><h2>Logo</h2>${choose(theme, 'login.logoPlace', 'Where', LOGO_PLACES)}${range(theme, 'login.logoSize', 'Size (pixels tall)', 40, 340, 5)}
