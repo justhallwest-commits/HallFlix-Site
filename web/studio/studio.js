@@ -540,11 +540,12 @@ function ago(t) {
 const faceStyle = (p) => `background:${p.color ? `linear-gradient(135deg, ${p.color}, color-mix(in srgb, ${p.color} 55%, #000))` : 'linear-gradient(135deg, var(--violet), var(--cyan))'}`;
 const face = (p, big = false) => html`<span class="avatar ${big ? 'xl' : ''}" style="${faceStyle(p)}">${p.avatar ? html`<img src="${p.avatar}" alt="">` : (p.name || '?')[0].toUpperCase()}</span>`;
 pages.profiles = async (main) => {
-  const { editAvatar, saveAvatar } = await import('/js/avatar.js');
-  let me = null;
+  const { editAvatar, saveAvatar, addToGallery } = await import('/js/avatar.js');
+  let me = null, list = [], gallery = [];
   try { me = (await api('GET', '/api/boot')).profile; } catch { /* fine */ }
   const draw = async () => {
-    const [list, guard] = await Promise.all([api('GET', '/api/studio/profiles'), api('GET', '/api/studio/guard').catch(() => ({ rules: [] }))]);
+    let guard;
+    [list, guard, gallery] = await Promise.all([api('GET', '/api/studio/profiles'), api('GET', '/api/studio/guard').catch(() => ({ rules: [] })), api('GET', '/api/avatars').catch(() => [])]);
     const rulesFor = (id) => (guard.rules || []).filter((r) => r.enabled !== false && (r.profiles || []).includes(id)).map((r) => r.name);
     main.innerHTML = String(html`${head('Profiles', 'Everyone who watches gets a profile with their own picture, history, list and sign-in. Click a profile to change anything about it.', html`<button class="btn primary" data-new>Add a profile</button>`)}
       <div class="pf-grid">${list.map((p) => {
@@ -554,11 +555,17 @@ pages.profiles = async (main) => {
           <span class="pf-tags">${p.admin ? html`<span class="pill live">Admin</span>` : html`<span class="pill">Viewer</span>`}${rules.length ? html`<span class="pill bad" title="${rules.join(', ')}">Parental controls</span>` : ''}</span>
           <span class="muted small">${ago(p.seen)}${p.devices ? ` · ${p.devices} device${p.devices === 1 ? '' : 's'}` : ''}</span>
           <span class="muted small">${p.watched} watched · ${p.read} read</span></button>`;
-      })}<button class="pf-tile pf-add" data-new><span class="avatar xl">+</span><b>Add a profile</b><span class="muted small">For someone else who watches</span></button></div>`);
+      })}<button class="pf-tile pf-add" data-new><span class="avatar xl">+</span><b>Add a profile</b><span class="muted small">For someone else who watches</span></button></div>
+      <div class="card pf-gallery"><div class="pf-ghead"><div><h2>Picture gallery</h2><p class="muted small">Add pictures once, then give them to anyone: drag a picture onto a profile above, or click it and choose who gets it.
+        You can also drop a picture from your computer straight onto a profile. Pictures are cut to a square from the middle; use “Add one and frame it” to choose the part yourself.</p></div>
+        <div class="tools"><button class="btn primary" data-gadd>Add pictures</button><button class="btn" data-gframe>Add one and frame it</button><input type="file" accept="image/*" multiple hidden data-gin></div></div>
+        <div class="pf-gdrop" data-gdrop>${gallery.length ? gallery.map((g) => html`<div class="pf-g" draggable="true" data-g="${g.name}"><button data-guse="${g.name}" aria-label="Give this picture to a profile"><img src="${g.url}" alt="" loading="lazy" draggable="false"></button>
+          <button class="pf-gx" data-gdel="${g.name}" aria-label="Remove from the gallery" title="Remove from the gallery">✕</button></div>`)
+        : html`<p class="muted">No pictures yet. Drop some here, or press “Add pictures”. You can pick several at once.</p>`}</div><p class="muted small" data-gnote></p></div>`);
     const form = (p) => {
       const v = { id: p?.id, name: p?.name || '', admin: !!p?.admin, color: p?.color || '', password: '' };
       let pic = null; // a picture chosen before saving: { blob } or { remove: true }
-      const preview = () => (pic?.blob ? { ...v, avatar: URL.createObjectURL(pic.blob) } : pic?.remove ? { ...v, avatar: null } : { ...v, avatar: p?.avatar });
+      const preview = () => (pic?.blob ? { ...v, avatar: URL.createObjectURL(pic.blob) } : pic?.gallery ? { ...v, avatar: `/uploads/avatar-gallery/${pic.gallery}` } : pic?.remove ? { ...v, avatar: null } : { ...v, avatar: p?.avatar });
       const rules = p ? rulesFor(p.id) : [];
       const body = () => html`<div class="pf-form"><div class="pf-left"><button class="pf-face" data-pic aria-label="Change the picture">${face(preview(), true)}<span>Change picture</span></button>
           ${preview().avatar ? html`<button class="btn sm" data-nopic>Remove picture</button>` : ''}</div>
@@ -583,7 +590,7 @@ pages.profiles = async (main) => {
         const t = e.target;
         const sw = t.closest('[data-sw]');
         if (sw) { v.color = v.color === sw.dataset.sw ? '' : sw.dataset.sw; redraw(); return; }
-        if (t.closest('[data-pic]')) { const res = await editAvatar({ profile: preview(), title: `A picture for ${v.name || 'this profile'}` }); if (res) { pic = res; redraw(); } return; }
+        if (t.closest('[data-pic]')) { const res = await editAvatar({ profile: preview(), title: `A picture for ${v.name || 'this profile'}`, manage: true }); if (res) { pic = res; redraw(); } return; }
         if (t.closest('[data-nopic]')) { pic = { remove: true }; redraw(); return; }
         if (t.closest('[data-x]')) { d.close(); return; }
         if (t.closest('[data-signout]')) { await api('POST', `/api/studio/profiles/${p.id}/signout`).then(() => toast(`${p.name} is signed out everywhere${p.id === me?.id ? ' else' : ''}`), fail); d.close(); draw(); return; }
@@ -591,10 +598,57 @@ pages.profiles = async (main) => {
         if (t.closest('[data-del]')) { d.close(); confirmBox(`Delete ${p.name}?`, 'Their watch history, list and playlists are deleted too.', 'Delete', async () => { await api('DELETE', `/api/studio/profiles/${p.id}`); draw(); }); }
       });
     };
-    main.onclick = (e) => {
+    main.onclick = async (e) => {
       if (e.target.closest('[data-new]')) return form(null);
+      if (e.target.closest('[data-gadd]')) return $('[data-gin]', main).click();
+      if (e.target.closest('[data-gframe]')) { const res = await editAvatar({ title: 'Add a picture to the gallery' }); if (res?.blob) { await addToGallery(res.blob).then(() => toast('Added to the gallery'), fail); draw(); } return; }
+      const del = e.target.closest('[data-gdel]');
+      if (del) { await api('DELETE', `/api/studio/avatars/${del.dataset.gdel}`).catch(fail); toast('Removed from the gallery. Profiles using it keep their picture.'); draw(); return; }
+      const use = e.target.closest('[data-guse]');
+      if (use) {
+        const name = use.dataset.guse, g = gallery.find((x) => x.name === name);
+        const d = dialog('Who gets this picture?', html`<div class="pf-pick"><img class="pf-pickimg" src="${g.url}" alt=""><div class="pf-pickwho">${list.map((p) => html`<button class="pf-who" data-to="${p.id}">${face(p)}<b>${p.name}</b></button>`)}</div></div>`, { ok: '' });
+        d.el.addEventListener('click', async (ev) => { const b = ev.target.closest('[data-to]'); if (!b) return; d.close(); await give(+b.dataset.to, { gallery: name }); });
+        return;
+      }
       const t = e.target.closest('[data-edit]');
       if (t) form(list.find((x) => x.id === +t.dataset.edit));
+    };
+    const give = async (id, res) => {
+      const p = list.find((x) => x.id === id);
+      try { await saveAvatar(id, res); toast(`New picture for ${p?.name || 'that profile'}`); } catch (err) { fail(err); }
+      draw();
+    };
+    const upload = async (files) => {
+      const pics = [...files].filter((f) => /^image\//.test(f.type));
+      if (!pics.length) return;
+      const note = $('[data-gnote]', main);
+      let k = 0, bad = 0;
+      for (const f of pics) { note.textContent = `Adding ${++k} of ${pics.length}…`; try { await addToGallery(f); } catch { bad++; } }
+      toast(bad ? `Added ${pics.length - bad}, ${bad} could not be read` : `Added ${pics.length} picture${pics.length === 1 ? '' : 's'} to the gallery`);
+      draw();
+    };
+    $('[data-gin]', main).onchange = (e) => upload(e.target.files);
+    // Drag a gallery picture, or a file from the computer, onto a profile; or files onto the gallery.
+    main.ondragstart = (e) => { const g = e.target.closest?.('[data-g]'); if (g) { e.dataTransfer.setData('application/x-hallflix-avatar', g.dataset.g); e.dataTransfer.effectAllowed = 'copy'; } };
+    main.ondragover = (e) => {
+      const zone = e.target.closest?.('[data-edit], [data-gdrop]');
+      for (const z of $$('.drop-on', main)) if (z !== zone) z.classList.remove('drop-on');
+      if (!zone) return;
+      if (zone.matches('[data-gdrop]') && !e.dataTransfer.types.includes('Files')) return;
+      e.preventDefault(); zone.classList.add('drop-on');
+    };
+    main.ondragleave = (e) => { const zone = e.target.closest?.('.drop-on'); if (zone && !zone.contains(e.relatedTarget)) zone.classList.remove('drop-on'); };
+    main.ondrop = async (e) => {
+      const zone = e.target.closest?.('[data-edit], [data-gdrop]');
+      for (const z of $$('.drop-on', main)) z.classList.remove('drop-on');
+      if (!zone) return;
+      e.preventDefault();
+      if (zone.matches('[data-gdrop]')) return upload(e.dataTransfer.files);
+      const name = e.dataTransfer.getData('application/x-hallflix-avatar');
+      const file = [...e.dataTransfer.files].find((f) => /^image\//.test(f.type));
+      if (name) give(+zone.dataset.edit, { gallery: name });
+      else if (file) give(+zone.dataset.edit, { blob: file });
     };
   };
   await draw();

@@ -85,7 +85,7 @@ function drawChar(size, glyph, [a, b], seed) {
 const toBlob = (canvas) => new Promise((res) => canvas.toBlob((b) => res(b), 'image/jpeg', 0.92));
 
 let styled = false;
-export function editAvatar({ profile = {}, title } = {}) {
+export function editAvatar({ profile = {}, title, manage = false } = {}) {
   if (!styled) { const st = document.createElement('style'); st.textContent = CSS; document.head.append(st); styled = true; }
   return new Promise((resolve) => {
     const prior = document.activeElement;
@@ -93,7 +93,9 @@ export function editAvatar({ profile = {}, title } = {}) {
     m.className = 'av-modal';
     m.innerHTML = `<div class="av-box" role="dialog" aria-modal="true" aria-label="Profile picture">
       <div class="av-head"><h2>${esc(title || `A picture for ${profile.name || 'this profile'}`)}</h2><button class="av-btn av-x" data-x aria-label="Close">${ICON.x}</button></div>
-      <div class="av-tabs" role="tablist"><button class="on" data-tab="upload">Upload</button><button data-tab="chars">Characters</button><button data-tab="lib">From your library</button></div>
+      <div class="av-tabs" role="tablist"><button data-tab="gallery">Gallery</button><button class="on" data-tab="upload">Upload</button><button data-tab="chars">Characters</button><button data-tab="lib">From your library</button></div>
+      <section data-pane="gallery" hidden><div class="av-grid" data-gal></div>
+        ${manage ? `<div class="av-foot"><button class="av-btn" data-galadd>${ICON.up} Add pictures to the gallery</button><input type="file" accept="image/*" multiple hidden data-galin><span class="av-note" data-galnote></span></div>` : ''}</section>
       <section data-pane="upload"><div class="av-drop"><p>Drop a picture here, or paste one.<br>Any shape is fine: you can frame it next.</p>
         <div class="row"><button class="av-btn primary" data-file>${ICON.up} Choose a picture</button><button class="av-btn" data-camera>${ICON.cam} Take a photo</button></div>
         <input type="file" accept="image/*" hidden data-in><input type="file" accept="image/*" capture="user" hidden data-cam></div></section>
@@ -121,8 +123,28 @@ export function editAvatar({ profile = {}, title } = {}) {
       $('[data-mainfoot]').hidden = p === 'crop';
       err('');
       if (p === 'chars' && !$('[data-chars]').childElementCount) drawChars();
+      if (p === 'gallery') drawGallery();
       if (p === 'lib') setTimeout(() => $('[data-q]').focus(), 30);
     };
+
+    // ----- the gallery
+    let gal = [];
+    const drawGallery = () => {
+      $('[data-gal]').innerHTML = gal.length ? gal.map((g) => `<button data-galpick="${esc(g.name)}" aria-label="Use this picture"><img alt="" loading="lazy" src="${esc(g.url)}"></button>`).join('')
+        : `<p class="av-note" style="grid-column:1/-1">No pictures in the gallery yet.${manage ? ' Add some below, or in Studio → Profiles.' : ' An admin can add some in the Studio.'}</p>`;
+    };
+    const loadGallery = async () => { try { gal = await (await fetch('/api/avatars', { credentials: 'same-origin' })).json(); } catch { gal = []; } };
+    if (manage) {
+      $('[data-galin]').addEventListener('change', async (e) => {
+        const files = [...e.target.files]; e.target.value = '';
+        const note = $('[data-galnote]');
+        let k = 0;
+        for (const f of files) { note.textContent = `Adding ${++k} of ${files.length}…`; try { await addToGallery(f); } catch (err) { err && (note.textContent = err.message); } }
+        note.textContent = files.length ? `Added ${files.length}` : '';
+        await loadGallery(); drawGallery();
+      });
+    }
+    loadGallery().then(() => { if (gal.length || manage) show('gallery'); else show('upload'); $('.av-tabs [data-tab=gallery]').hidden = !gal.length && !manage; });
 
     // ----- characters
     let shift = Math.floor(Math.random() * PAIRS.length);
@@ -225,6 +247,8 @@ export function editAvatar({ profile = {}, title } = {}) {
       if (t.closest('[data-file]')) return $('[data-in]').click();
       if (t.closest('[data-camera]')) return $('[data-cam]').click();
       if (t.closest('[data-shuffle]')) { shift = (shift + 1) % PAIRS.length; return drawChars(); }
+      if (t.closest('[data-galadd]')) return $('[data-galin]').click();
+      const gp = t.closest('[data-galpick]'); if (gp) return done({ gallery: gp.dataset.galpick });
       const ch = t.closest('[data-char]');
       if (ch) { const i = +ch.dataset.char; return done({ blob: await toBlob(drawChar(512, CHARS[i], PAIRS[(i + shift) % PAIRS.length], i + 7)) }); }
       const art = t.closest('[data-art-src]'); if (art) return crop(art.dataset.artSrc);
@@ -243,9 +267,23 @@ export function editAvatar({ profile = {}, title } = {}) {
 /** Save the result of editAvatar() for a profile. Returns the updated profile. */
 export async function saveAvatar(profileId, result) {
   if (!result) return null;
+  if (result.gallery) {
+    const r = await fetch(`/api/profiles/${profileId}/avatar/gallery`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: result.gallery }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'The picture could not be saved');
+    return d;
+  }
   const res = await fetch(`/api/profiles/${profileId}/avatar`, result.remove ? { method: 'DELETE', credentials: 'same-origin' }
     : { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream' }, body: result.blob });
   const d = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(d.error || 'The picture could not be saved');
+  return d;
+}
+
+/** Add a picture (a File or Blob) to the shared gallery. Admins only. */
+export async function addToGallery(file) {
+  const res = await fetch('/api/studio/avatars', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream' }, body: file });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || 'That picture could not be added');
   return d;
 }

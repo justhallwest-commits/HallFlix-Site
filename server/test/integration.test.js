@@ -810,6 +810,14 @@ test('profiles: pictures, editing your own, and the admin tools', async () => {
   assert.deepEqual(imageSize(Buffer.from(await (await fetch(hf.base + p.avatar)).arrayBuffer())), [512, 512]);
   assert.equal((await up(kid.id, Buffer.from('not a picture at all, just words'))).status, 400);
   assert.equal((await hf.api('GET', '/api/boot')).profile.avatar, me.avatar, 'only that profile changed');
+  // The picture gallery: added once by an admin, given to anyone.
+  const g1 = await (await fetch(`${hf.base}/api/studio/avatars`, { method: 'POST', headers: { Cookie: admin }, body: pic })).json();
+  assert.match(g1.name, /^g-[0-9a-f]{12}\.jpg$/);
+  assert.deepEqual(imageSize(Buffer.from(await (await fetch(hf.base + g1.url)).arrayBuffer())), [512, 512]);
+  assert.deepEqual((await hf.api('GET', '/api/avatars')).map((g) => g.name), [g1.name]);
+  const given = await hf.api('POST', `/api/profiles/${me.id}/avatar/gallery`, { name: g1.name });
+  assert.match(given.avatar, new RegExp(`^/uploads/avatars/${me.id}-`), 'a copy, not the gallery file');
+  assert.equal((await hf.api('POST', `/api/profiles/${me.id}/avatar/gallery`, { name: '../../etc/passwd' })).$status, 404);
   // Signed in as the kid: their own picture, name and colour, but nobody else's, and no Studio.
   // (A session made directly: an earlier test has already tripped the sign-in limiter for this address.)
   const { q: sql } = await import('../src/db.js');
@@ -818,10 +826,19 @@ test('profiles: pictures, editing your own, and the admin tools', async () => {
   const kidCookie = `hf_token=${token}`;
   hf.setCookie(kidCookie);
   assert.equal((await up(me.id, pic, kidCookie)).status, 403);
+  assert.equal((await hf.api('GET', '/api/avatars')).length, 1, 'everyone can see the gallery');
+  assert.equal((await hf.api('POST', `/api/profiles/${me.id}/avatar/gallery`, { name: g1.name })).$status, 403, "but not change someone else's picture");
+  assert.match((await hf.api('POST', `/api/profiles/${kid.id}/avatar/gallery`, { name: g1.name })).avatar, /^\/uploads\/avatars\//);
+  assert.equal((await fetch(`${hf.base}/api/studio/avatars`, { method: 'POST', headers: { Cookie: kidCookie }, body: pic })).status, 403, 'only admins add to the gallery');
   assert.deepEqual(await hf.api('PUT', '/api/profiles/me', { name: 'Pic Kid 2', color: '#ff4d7e' }).then((x) => [x.name, x.color]), ['Pic Kid 2', '#ff4d7e']);
   assert.equal((await hf.api('PUT', '/api/profiles/me', { name: me.name })).$status, 400, 'names stay unique');
   assert.equal((await hf.api('DELETE', `/api/profiles/${kid.id}/avatar`)).avatar, null);
   assert.equal(fs.existsSync(path.join(hf.cfg.dataDir, 'uploads', 'avatars', path.basename(p.avatar))), false, 'the old picture is cleaned up');
+  hf.setCookie(admin);
+  await hf.api('DELETE', `/api/studio/avatars/${g1.name}`);
+  assert.deepEqual(await hf.api('GET', '/api/avatars').then((x) => Array.from(x)), []);
+  assert.equal((await fetch(hf.base + (await hf.api('GET', '/api/boot')).profile.avatar)).status, 200, 'a profile keeps a picture removed from the gallery');
+  hf.setCookie(kidCookie);
   assert.equal((await hf.api('GET', '/api/studio/profiles')).$status, 403);
   // Back as the admin: when each profile was active and on how many devices; sign the kid out everywhere; clear history.
   hf.setCookie(admin);
