@@ -223,3 +223,4 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 .pf-danger { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
 .pf-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 640px) { .pf-form { grid-template-columns: 1fr; } }
+.row .grow .pill { display: inline-block; margin-left: 6px; vertical-align: 1px; }

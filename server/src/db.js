@@ -85,6 +85,13 @@ const MIGRATIONS = [
      item_id bigint references items on delete set null, rule text, played_at timestamptz not null default now());
    create index preroll_plays_profile on preroll_plays (profile_id, played_at desc);
    create index preroll_plays_clip on preroll_plays (clip_id);`,
+  // 7: lyrics found online (or chosen by hand), and every song played, for Most played and On repeat.
+  `create table lyrics (item_id bigint primary key references items on delete cascade, source text, synced jsonb, plain text,
+     offset_s real not null default 0, missing boolean not null default false, chosen boolean not null default false, fetched_at timestamptz not null default now());
+   create table plays (id bigserial primary key, profile_id int not null references profiles on delete cascade, item_id bigint not null references items on delete cascade,
+     played_at timestamptz not null default now());
+   create index plays_profile on plays (profile_id, played_at desc);
+   create index plays_item on plays (item_id);`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {

@@ -6,7 +6,7 @@ import { initNav } from './nav.js';
 import { effects, startEffect } from './effects.js';
 import { initFeel } from './feel.js';
 import { openReader, closeReader, readerOpen } from './reader.js';
-import { initMusic } from './music.js';
+import { initMusic, lyricsProviders } from './music.js';
 import { initMore } from './more.js';
 
 // What plugins can use. See docs/PLUGINS.md.
@@ -18,6 +18,8 @@ window.HallFlix = {
   registerEffect(name, def) { effects[name] = def; if (state.look?.theme?.effect === name) { startEffect('none'); startEffect(name); } },
   addHomeRow(def) { views.extraRows.push(def); views.markStale(); },
   navigate(hash) { location.hash = hash; },
+  /** A lyrics service in the browser: { name, find(track) } resolving to { synced: "LRC text" | [{ t, text }], plain }. See docs/PLUGINS.md. */
+  addLyricsProvider(p) { if (p && typeof p.find === 'function') lyricsProviders.push({ name: String(p.name || 'Plugin'), find: p.find }); },
 };
 
 let baseHash = null;
