@@ -268,3 +268,18 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 .posgrid button i { width: 14px; height: 10px; border-radius: 2px; border: 2px solid currentColor; opacity: 0.45; color: var(--text, #fff); }
 .posgrid button.on { border-color: #35d0d0; background: rgba(53, 208, 208, 0.18); }
 .posgrid button.on i { opacity: 1; background: currentColor; }
+
+/* Sounds: one row per sound with a test button, volume, off, and upload */
+.sfx { margin-top: 6px; }
+.sfx-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.sfx-row:first-child { border-top: 0; }
+.sfx-row .grow { flex: 1; min-width: 160px; }
+.sfx-row .grow b { display: block; }
+.sfx-row .grow span { color: var(--muted); font-size: 12.5px; display: block; }
+.sfx-row .sfx-play { width: 34px; padding: 0; justify-content: center; }
+.sfx-row .sfx-vol input { width: 110px; }
+.sfx-row .check { margin: 0; font-size: 13px; }
+/* Sign-in music: the song list */
+.tracks { margin: 6px 0 10px; }
+.track input[type=text] { flex: 1; min-width: 0; }
+.row-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }

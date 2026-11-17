@@ -9,6 +9,12 @@ export const DEFAULT_THEME = {
   fonts: { display: 'Outfit', body: 'Inter' },
   radius: 10, // card corner, px
   glow: 0.7, // 0 = flat, 1 = full neon
+  glowStyle: 'natural', // neon | natural | ambient: a sharp neon halo, soft light that falls off and is cast downward, or light that only spills underneath
+  focusRing: 'glow', // glow | line | aurora: how a card in focus is outlined
+  atmosphere: 'none', // none | aurora | leak | both: a slow living light behind the whole app
+  pointerLight: false, // a soft light follows the pointer across the background
+  // Library tiles on Home: flat, tilting, or layered 3D (picture, covers and name at different depths, a sheen and a thick edge).
+  tiles3d: { style: 'layered', depth: 0.6, thickness: 6, shine: true, video: true, sway: true },
   texture: 'none', // none | grain | scanlines | grid | vignette
   cardShape: 'poster', // poster | wide
   heroHeight: 80, // % of the screen height
@@ -19,13 +25,17 @@ export const DEFAULT_THEME = {
     // Layout: a floating box, or a full-height side panel with the picture beside it.
     layout: 'floating', side: 'left', sideWidth: 33, sideColor: '', sideOpacity: 0.96, divider: true, sidePicture: 'beside', sideBlur: 0, sideEdge: '', fadeWidth: 18,
     // Profile tiles, the other ways to sign in, and a note at the bottom.
+    // Music on the sign-in page: uploaded songs, played in order or shuffled, faded in, with a button to pause.
+    music: { enabled: false, tracks: [], volume: 0.5, shuffle: false, fade: 3, button: 'corner', showTitle: true },
     tileShape: 'theme', tileMotion: true, tileSize: 132, tileColumns: 0, buttons: 'links', manualButton: true, manualLabel: '', phoneLabel: '', footer: '', footerLink: '' },
   logo: { image: '', height: 46 },
   effect: 'none', // none | snow | embers | hearts | leaves | confetti | stars | bats
   artColor: true, // the accent follows the artwork in focus
   heroMotion: 'trailer', // none | pan | trailer: what the spotlight does after a moment
   depth: true, // posters tilt toward the pointer
-  sounds: 'off', // off | soft | arcade: navigation sounds
+  sounds: 'off', // off | soft | arcade | cinema | glass | scifi | custom: the navigation sound pack ("custom" = only uploaded sounds)
+  // Each sound can be swapped for an uploaded file, given its own volume, or switched off.
+  soundFx: { volume: 0.8, events: {} },
   previews: true, // a card held in focus opens a larger preview
   glass: true, // translucent controls that pick up the picture behind them
   screensaver: 'tv', // off | tv | all: drifting backdrops after a few idle minutes
@@ -41,7 +51,7 @@ export const PRESETS = [
   P('Neon Marquee', 'Cyan and violet neon on deep indigo, drawn from the HallFlix logo', {}),
   P('Midnight Cinema', 'Navy and warm gold, like a late showing', {
     colors: { bg: '#070b16', surface: '#111a2e', text: '#f5efe0', muted: '#9aa3b8', accent: '#e8b84a', accent2: '#c7772e' },
-    fonts: { display: 'Bebas Neue', body: 'Inter' }, glow: 0.25, radius: 6, texture: 'vignette' }),
+    fonts: { display: 'Bebas Neue', body: 'Inter' }, glow: 0.25, radius: 6, texture: 'vignette', glowStyle: 'ambient' }),
   P('Classic Red', 'Black with a bold red accent', {
     colors: { bg: '#0b0b0b', surface: '#181818', text: '#ffffff', muted: '#b3b3b3', accent: '#e50914', accent2: '#b20710' },
     fonts: { display: 'Bebas Neue', body: 'Inter' }, glow: 0, radius: 4 }),
@@ -50,7 +60,7 @@ export const PRESETS = [
     fonts: { display: 'Outfit', body: 'Inter' }, glow: 0.15, radius: 12, cardShape: 'wide' }),
   P('Sunset VHS', 'Purple dusk, orange glow and scanlines', {
     colors: { bg: '#140a1f', surface: '#22123a', text: '#fff1e6', muted: '#c9a9c8', accent: '#ff7a3d', accent2: '#ff3d8b' },
-    fonts: { display: 'Audiowide', body: 'Inter' }, glow: 0.9, radius: 2, texture: 'scanlines' }),
+    fonts: { display: 'Audiowide', body: 'Inter' }, glow: 0.9, glowStyle: 'neon', radius: 2, texture: 'scanlines', atmosphere: 'leak' }),
   P('Daylight', 'A light, airy look', {
     colors: { bg: '#f4f5f8', surface: '#ffffff', text: '#14151a', muted: '#5d6272', accent: '#2a6df4', accent2: '#7a3df4' },
     fonts: { display: 'Outfit', body: 'Inter' }, glow: 0, radius: 14 }),
@@ -75,7 +85,11 @@ export const OPTIONS = {
   cardShapes: ['poster', 'wide'],
   interfaces: ['futuristic', 'classic'],
   heroMotions: ['none', 'pan', 'trailer'],
-  sounds: ['off', 'soft', 'arcade'],
+  sounds: ['off', 'soft', 'arcade', 'cinema', 'glass', 'scifi', 'custom'],
+  glowStyles: ['neon', 'natural', 'ambient'],
+  focusRings: ['glow', 'line', 'aurora'],
+  atmospheres: ['none', 'aurora', 'leak', 'both'],
+  tileStyles: ['flat', 'tilt', 'layered'],
   screensavers: ['off', 'tv', 'all'],
 };
 

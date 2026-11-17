@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { cfg } from './config.js';
 import { q, q1, getSetting, setSetting } from './db.js';
 import { HttpError, readJson, readBody } from './http.js';
@@ -11,6 +12,8 @@ import * as tmdb from './tmdb.js';
 import * as look from './look.js';
 import * as plugins from './plugins.js';
 import { IMAGE_EXT, isVideo } from './names.js';
+
+const AUDIO_EXT = ['mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac'];
 import { img } from './catalog.js';
 
 const admin = { admin: true };
@@ -149,10 +152,11 @@ export function routes(r) {
   }, admin);
   r.delete('/api/studio/seasons/:id', async ({ params }) => { await q('delete from seasons where id=$1', [params.id]); return { ok: true }; }, admin);
 
-  // Upload an image (or a short looping video) for backgrounds and logos. The body is the raw file.
+  // Upload an image (or a short looping video) for backgrounds and logos, or a sound or song for the sound effects and
+  // sign-in music. The body is the raw file.
   r.post('/api/studio/upload', async ({ req, query }) => {
     const e = path.extname(String(query.name || '')).slice(1).toLowerCase();
-    if (![...IMAGE_EXT, 'mp4', 'webm'].includes(e)) throw new HttpError(400, 'Upload a JPG, PNG, WebP, GIF, MP4 or WebM file');
+    if (![...IMAGE_EXT, 'mp4', 'webm', ...AUDIO_EXT].includes(e)) throw new HttpError(400, 'Upload a picture (JPG, PNG, WebP, GIF), a video (MP4, WebM) or a sound (MP3, M4A, OGG, WAV, FLAC)');
     const buf = await readBody(req, 250e6);
     if (!buf.length) throw new HttpError(400, 'Empty file');
     const name = `${crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16)}.${e}`;
@@ -160,6 +164,38 @@ export function routes(r) {
     await fs.promises.mkdir(dir, { recursive: true });
     await fs.promises.writeFile(path.join(dir, name), buf);
     return { url: `/uploads/${name}` };
+  }, admin);
+  // Songs from the music library, for the sign-in music: find them, then copy one beside the other uploads so the
+  // sign-in page (which has no session yet) can play it. Formats a browser can't play are converted to MP3 once.
+  r.get('/api/studio/songs', async ({ query }) => {
+    const like = `%${String(query.q || '').trim().replace(/[%_\\]/g, '\\$&')}%`;
+    const rows = await q(`select t.id, t.title, coalesce(t.author, ar.title) as artist, al.title as album, t.runtime_s from items t
+        left join items al on al.id = t.parent_id left join items ar on ar.id = t.show_id
+      where t.kind = 'track' and (t.title ilike $1 or t.author ilike $1 or al.title ilike $1 or ar.title ilike $1)
+      order by (t.title ilike $1) desc, t.sort_title limit 30`, [like]);
+    return { songs: rows.map((x) => ({ id: +x.id, title: x.title, artist: x.artist || '', album: x.album || '', seconds: Math.round(x.runtime_s || 0) })) };
+  }, admin);
+  r.post('/api/studio/songs/:id/use', async ({ params }) => {
+    const t = await q1(`select t.id, t.title, t.path, t.mtime, coalesce(t.author, ar.title) as artist from items t left join items ar on ar.id = t.show_id where t.id = $1 and t.kind = 'track'`, [params.id]);
+    if (!t?.path) throw new HttpError(404, 'That song is not in the music library');
+    const src = path.extname(t.path).slice(1).toLowerCase();
+    const plays = ['mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac'].includes(src);
+    const ext = plays ? src : 'mp3';
+    const name = `song-${crypto.createHash('sha1').update(`${t.path}:${t.mtime}`).digest('hex').slice(0, 16)}.${ext}`;
+    const dir = path.join(cfg.dataDir, 'uploads'), out = path.join(dir, name);
+    await fs.promises.mkdir(dir, { recursive: true });
+    if (!fs.existsSync(out)) {
+      if (plays) await fs.promises.copyFile(t.path, out);
+      else {
+        await new Promise((resolve, reject) => {
+          const ff = spawn(cfg.ffmpeg || 'ffmpeg', ['-v', 'error', '-y', '-i', t.path, '-vn', '-c:a', 'libmp3lame', '-b:a', '192k', `${out}.part.mp3`]);
+          ff.on('error', reject);
+          ff.on('close', (code) => (code === 0 ? resolve() : reject(new HttpError(500, 'The song could not be converted'))));
+        });
+        await fs.promises.rename(`${out}.part.mp3`, out);
+      }
+    }
+    return { url: `/uploads/${name}`, name: [t.artist, t.title].filter(Boolean).join(' – ') };
   }, admin);
   // Use a picture that already lives on the NAS.
   r.post('/api/studio/pick', async ({ req }) => {

@@ -278,6 +278,21 @@ test('looks: theme, library looks, seasons, uploads', async () => {
   assert.deepEqual(b.look.libraries[lib.movies.id], { background: up.url, accent: '#8a2be2' });
   await hf.api('POST', '/api/studio/seasons', { ...saved, enabled: false });
   assert.equal((await hf.api('GET', '/api/boot')).look.theme.colors.accent, '#ff00aa');
+  // Sounds and sign-in music: audio uploads are served as audio, and the new look settings come with sensible defaults.
+  const snd = await hf.api('POST', '/api/studio/upload?name=whoosh.mp3', Buffer.from('ID3fake-mp3-bytes'));
+  assert.match(snd.url, /^\/uploads\/[a-f0-9]{16}\.mp3$/);
+  assert.equal((await fetch(hf.base + snd.url)).headers.get('content-type'), 'audio/mpeg');
+  const d = (await hf.api('GET', '/api/studio/look')).defaults;
+  assert.deepEqual([d.glowStyle, d.focusRing, d.atmosphere, d.tiles3d.style, d.soundFx.volume, d.login.music.enabled], ['natural', 'glow', 'none', 'layered', 0.8, false]);
+  const cur = (await hf.api('GET', '/api/studio/look')).theme;
+  await hf.api('PUT', '/api/studio/theme', { theme: { ...cur, sounds: 'glass', soundFx: { volume: 0.5, events: { select: { url: snd.url, volume: 1.2 } } },
+    login: { ...(cur.login || {}), music: { enabled: true, tracks: [{ url: snd.url, name: 'Theme' }], volume: 0.4 } } } });
+  b = await hf.api('GET', '/api/boot');
+  assert.deepEqual([b.look.theme.sounds, b.look.theme.soundFx.events.select.url, b.look.theme.login.music.tracks[0].name, b.look.theme.login.music.shuffle], ['glass', snd.url, 'Theme', false]);
+  const signedOut = await (await fetch(`${hf.base}/api/boot`)).json();
+  assert.equal(signedOut.look.theme.login.music.tracks[0].url, snd.url, 'the sign-in page gets its music before anyone signs in');
+  assert.equal((await fetch(hf.base + snd.url)).status, 200, 'and can play it without a session');
+  await hf.api('PUT', '/api/studio/theme', { theme: cur });
   const picked = await hf.api('POST', '/api/studio/pick', { path: path.join(media, 'Movies', 'Night Drive (2019)', 'poster.jpg') });
   assert.equal((await fetch(hf.base + picked.url)).status, 200);
   assert.equal((await hf.api('POST', '/api/studio/pick', { path: '/etc/passwd' })).$status, 400);
@@ -737,6 +752,16 @@ test('books, comics and music: scanning, reading and listening', async () => {
   assert.deepEqual(artists.items.map((a) => [a.title, a.count]), [['Nova Lines', 1], ['Quartet', 1], ['Unknown artist', 1]]);
   const nova = await hf.api('GET', `/api/items/${artists.items[0].id}`);
   assert.deepEqual([nova.albums.map((a) => a.title), nova.tracks.map((t) => t.title)], [['Night Drive'], ['Neon Rain', 'Afterglow']]);
+  // Songs from the library can become sign-in music: found by artist, then copied beside the uploads.
+  const libSongs = (await hf.api('GET', '/api/studio/songs?q=nova')).songs;
+  assert.deepEqual(libSongs.map((x) => [x.title, x.artist, x.album]).sort(), [['Afterglow', 'Nova Lines', 'Night Drive'], ['Neon Rain', 'Nova Lines', 'Night Drive']]);
+  const used = await hf.api('POST', `/api/studio/songs/${libSongs[0].id}/use`);
+  assert.match(used.url, /^\/uploads\/song-[a-f0-9]{16}\.mp3$/);
+  assert.equal(used.name, `Nova Lines – ${libSongs[0].title}`);
+  assert.equal((await fetch(hf.base + used.url)).headers.get('content-type'), 'audio/mpeg');
+  const flac = (await hf.api('GET', '/api/studio/songs?q=allegro')).songs[0];
+  assert.match((await hf.api('POST', `/api/studio/songs/${flac.id}/use`)).url, /\.flac$/);
+  assert.equal((await hf.api('POST', '/api/studio/songs/999999/use')).$status, 404);
   const songs = await hf.api('GET', `/api/library/${libs.music.id}?view=songs`);
   assert.equal(songs.total, 5);
   const alac = songs.items.find((t) => t.codec === 'alac');

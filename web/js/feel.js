@@ -1,7 +1,8 @@
 // How HallFlix feels: colour drawn from the artwork in focus, depth on posters, the living spotlight,
 // navigation sounds, and the open animation. Everything here is optional polish: it switches itself off on
 // TVs and for people who ask for reduced motion, and never runs during playback.
-import { $, state, themeNow, applyLook } from './core.js';
+import { $, state, themeNow, applyLook, on } from './core.js';
+import { playSound, preload } from './sounds.js';
 
 const tv = () => document.body.classList.contains('tv');
 const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -98,10 +99,21 @@ addEventListener('scroll', () => { if (scrollY > innerHeight * 0.6) stopTrailer(
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopTrailer(); });
 
 // ---------- depth: posters lean toward the pointer ----------
-let leaning = null;
+let leaning = null, slab = null;
+const tileStyle = () => theme().tiles3d?.style || 'layered';
 function lean(e) {
-  if (tv() || calm() || theme().depth === false || e.pointerType === 'touch') return;
-  const card = e.target.closest?.('.card, .lib-tile, .coll-card');
+  if (tv() || calm() || e.pointerType === 'touch') return;
+  // Layered tiles: the slab around the tile takes the pointer's place, and the CSS moves each layer by its own depth.
+  const s = tileStyle() === 'layered' ? e.target.closest?.('.tile-slab') : null;
+  if (slab && slab !== s) { slab.style.removeProperty('--tx'); slab.style.removeProperty('--ty'); slab = null; }
+  if (s) {
+    const r = s.getBoundingClientRect();
+    s.style.setProperty('--tx', ((e.clientX - r.left) / r.width - 0.5).toFixed(3));
+    s.style.setProperty('--ty', ((e.clientY - r.top) / r.height - 0.5).toFixed(3));
+    slab = s;
+  }
+  if (theme().depth === false) return;
+  const card = e.target.closest?.(s || tileStyle() === 'flat' ? '.card, .coll-card' : '.card, .lib-tile, .coll-card');
   if (leaning && leaning !== card) { leaning.style.removeProperty('--rx'); leaning.style.removeProperty('--ry'); leaning = null; }
   if (!card) return;
   const r = card.getBoundingClientRect();
@@ -110,6 +122,42 @@ function lean(e) {
   card.style.setProperty('--ry', `${(x * max * 2).toFixed(2)}deg`);
   card.style.setProperty('--rx', `${(-y * max * 2).toFixed(2)}deg`);
   leaning = card;
+}
+
+// ---------- light that follows the pointer across the background ----------
+let lightQueued = false, lightAt = [0, 0];
+function moveLight(e) {
+  if (theme().pointerLight !== true || tv() || e.pointerType === 'touch') return;
+  lightAt = [e.clientX, e.clientY];
+  if (lightQueued) return;
+  lightQueued = true;
+  requestAnimationFrame(() => {
+    lightQueued = false;
+    const el = $('#atmos');
+    if (el) { el.style.setProperty('--px', `${lightAt[0]}px`); el.style.setProperty('--py', `${lightAt[1]}px`); }
+  });
+}
+
+// ---------- library tiles: a video plays on the tile while it is pointed at or in focus ----------
+function tileVideo(tile, play) {
+  const url = tile?.dataset.video;
+  if (!url || theme().tiles3d?.video === false || calm() || navigator.connection?.saveData) return;
+  const art = tile.querySelector('.tile-art');
+  let v = art?.querySelector('video');
+  if (play) {
+    if (!v) {
+      v = Object.assign(document.createElement('video'), { muted: true, loop: true, playsInline: true, preload: 'auto' });
+      v.setAttribute('aria-hidden', 'true');
+      v.src = url;
+      v.addEventListener('playing', () => tile.classList.add('video-on'));
+      art.prepend(v);
+    }
+    clearTimeout(v._stop);
+    v.play().catch(() => {});
+  } else if (v) {
+    tile.classList.remove('video-on');
+    v._stop = setTimeout(() => { v.pause(); }, 500);
+  }
 }
 
 // ---------- seamless open: the title page grows out of the poster that was chosen ----------
@@ -128,36 +176,19 @@ export function grow(sheet) {
 }
 
 // ---------- sounds ----------
-let ac = null, lastBlip = 0;
+// The pack and any uploaded sounds come from the look (Studio → Look and feel → Sounds); each viewer can still mute them.
 const muted = () => { try { return localStorage.getItem('hf_sounds') === '0'; } catch { return false; } };
 export const soundsOn = () => (theme().sounds || 'off') !== 'off' && !muted();
 export function setSounds(on) { try { localStorage.setItem('hf_sounds', on ? '1' : '0'); } catch { /* private mode */ } }
 export const soundsAvailable = () => (theme().sounds || 'off') !== 'off';
-function tone(freq, ms, { type = 'sine', gain = 0.05, to = null, delay = 0 } = {}) {
-  if (!ac) return;
-  const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
-  o.type = type; o.frequency.setValueAtTime(freq, t);
-  if (to) o.frequency.exponentialRampToValueAtTime(to, t + ms / 1000);
-  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + ms / 1000);
-  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + ms / 1000 + 0.02);
-}
 export function sound(name) {
-  if (!soundsOn() || !$('#player').hidden && name !== 'ident') return;
-  try { ac ||= new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch { return; }
-  const arcade = theme().sounds === 'arcade';
-  if (name === 'move') { const n = performance.now(); if (n - lastBlip < 55) return; lastBlip = n; tone(arcade ? 880 : 520, arcade ? 45 : 60, { type: arcade ? 'square' : 'sine', gain: arcade ? 0.025 : 0.035 }); }
-  else if (name === 'select') { tone(arcade ? 660 : 440, 90, { type: arcade ? 'square' : 'triangle', gain: 0.04, to: arcade ? 1320 : 700 }); }
-  else if (name === 'open') { tone(300, 220, { type: 'sine', gain: 0.045, to: 620 }); }
-  else if (name === 'back') { tone(520, 140, { type: 'sine', gain: 0.035, to: 260 }); }
+  if (!soundsOn() || (!$('#player').hidden && name !== 'ident')) return;
+  playSound(name, theme());
 }
-/** The ident's sound: a low swell and a bright two-note chime. Plays whenever the ident shows, unless muted. */
+/** The ident's sound: the built-in swell and chime, or the uploaded one. Plays whenever the ident shows, unless muted. */
 export function identSound() {
   if (muted()) return;
-  try { ac ||= new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch { return; }
-  tone(70, 1500, { type: 'sine', gain: 0.09, to: 140 });
-  tone(140, 1400, { type: 'triangle', gain: 0.03, to: 280 });
-  tone(784, 900, { type: 'sine', gain: 0.05, delay: 0.75 });
-  tone(1175, 1200, { type: 'sine', gain: 0.045, delay: 0.93 });
+  playSound('ident', theme());
 }
 
 // ---------- evening look ----------
@@ -171,6 +202,15 @@ function watchClock() {
 
 export function initFeel() {
   addEventListener('pointermove', lean, { passive: true });
+  addEventListener('pointermove', moveLight, { passive: true });
+  addEventListener('pointerover', (e) => {
+    const t = e.target.closest?.('.lib-tile[data-video]'), from = e.relatedTarget?.closest?.('.lib-tile[data-video]');
+    if (t !== from) { tileVideo(from, false); tileVideo(t, true); }
+  }, { passive: true });
+  addEventListener('focusin', (e) => tileVideo(e.target.closest?.('.lib-tile[data-video]'), true));
+  addEventListener('focusout', (e) => { const t = e.target.closest?.('.lib-tile[data-video]'); if (t && !t.matches(':hover')) tileVideo(t, false); });
+  on('toast', () => sound('toast'));
+  on('look', () => { if (soundsOn() || theme().soundFx?.events?.ident?.url) preload(theme()); });
   addEventListener('pointerdown', (e) => {
     const c = e.target.closest?.('.card[href^="#/title/"], .similar .card');
     origin = c ? c.getBoundingClientRect() : null;

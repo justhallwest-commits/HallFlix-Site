@@ -8,6 +8,7 @@ import * as comics from './comics.js';
 import * as profileEdit from './profile.js';
 import * as ratings from './ratings.js';
 import * as backdrop from './backdrop.js';
+import { startLoginMusic, fadeOutLoginMusic } from './loginmusic.js';
 
 export const extraRows = []; // rows added by plugins through HallFlix.addHomeRow()
 const app = () => $('#app');
@@ -91,12 +92,15 @@ function tilesHtml(list) {
     const style = [bg ? `--tile-bg:url("${String(bg).replace(/"/g, '%22')}")` : '', lk.accent ? `--tile-accent:${lk.accent}` : ''].filter(Boolean).join(';');
     const [one, many] = NOUN[l.kind] || ['title', 'titles'];
     const noun = l.count === 1 ? one : many;
-    return html`<a class="lib-tile" href="#/library/${l.id}" style="${style}" aria-label="${l.name}, ${l.count} ${noun}">
+    // A video plays on the tile while it is pointed at or in focus: the library's own tile video, or its background video.
+    const video = isVid(lk.tileVideo) ? lk.tileVideo : isVid(lk.background) ? lk.background : '';
+    // The slab carries the tile's thickness and 3D turn; the tile inside holds the layers that move at different depths.
+    return html`<div class="tile-slab"><a class="lib-tile" href="#/library/${l.id}" style="${style}" aria-label="${l.name}, ${l.count} ${noun}" ${video ? raw(`data-video="${esc(video)}"`) : ''}>
       <span class="tile-art"></span>
       ${coversHtml(l.posters, lk)}
       <span class="tile-text">${lk.logo ? html`<img class="tile-logo" src="${lk.logo}" alt="">` : html`<b class="tile-name">${l.name}</b>`}
         <span class="tile-count">${l.count} ${noun}${l.fresh ? html`<em>${l.fresh} new</em>` : ''}</span></span>
-      <span class="tile-sweep"></span></a>`;
+      <span class="tile-sweep"></span><span class="tile-shine"></span><span class="tile-ring"></span></a></div>`;
   })}</section>`;
 }
 
@@ -626,7 +630,13 @@ export function login(boot) {
       e.preventDefault();
       if (preview) { toast('This is a preview: signing in is switched off here'); return; }
       const f = new FormData(form);
-      try { await api('POST', '/api/login', { profileId: p?.id, name: f.get('name'), password: f.get('password') }); if (!/^#\/(party|pair)\//.test(location.hash)) location.hash = '#/'; location.reload(); }
+      try {
+        await api('POST', '/api/login', { profileId: p?.id, name: f.get('name'), password: f.get('password') });
+        feel.sound('signin');
+        await fadeOutLoginMusic(); // the sign-in music bows out before the app loads
+        if (!/^#\/(party|pair)\//.test(location.hash)) location.hash = '#/';
+        location.reload();
+      }
       catch (err) { $('.err', form).textContent = err.message; $('[name=password]', form).select(); }
     };
     $('[data-back]')?.addEventListener('click', picker);
@@ -646,6 +656,7 @@ export function login(boot) {
   app().innerHTML = String(html`<div class="login signin"><div class="side-fade" aria-hidden="true"></div><div class="stack"><img class="brand" src="${logoUrl()}" alt=""><div class="box"></div></div></div>`);
   styleLogin();
   if (tiles) picker(); else formFor(null);
+  startLoginMusic(themeNow(), { preview });
 }
 
 export function setup() {

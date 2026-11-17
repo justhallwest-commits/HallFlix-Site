@@ -1,6 +1,7 @@
 // HallFlix Studio: the admin panel. Every page here talks to /api/studio/* and needs an admin profile.
 import { $, $$, api, html, raw, toast } from '/js/core.js';
 import * as tools from './tools.js';
+import { EVENTS, PACK_NAMES, playSound } from '/js/sounds.js';
 
 const root = $('#studio');
 const clone = (o) => JSON.parse(JSON.stringify(o ?? {}));
@@ -84,24 +85,32 @@ function bind(el, obj, changed) {
     try {
       if (b.dataset.clear) set(obj, b.dataset.clear, '');
       else if (b.dataset.pick) { const f = await browse({ files: 'images' }); if (!f) return; set(obj, b.dataset.pick, (await api('POST', '/api/studio/pick', { path: f })).url); }
-      else { const url = await upload(); if (!url) return; set(obj, b.dataset.upload, url); }
+      else { const url = await upload(b.dataset.accept); if (!url) return; set(obj, b.dataset.upload, url); }
       changed(true);
     } catch (err) { fail(err); }
   });
 }
 
-function upload() {
+function upload(accept) {
+  return uploadFiles(accept).then((list) => list[0]?.url || null);
+}
+/** Ask for files and upload each one. Resolves to [{ url, name }] (empty when nothing was chosen). */
+function uploadFiles(accept = 'image/*,video/mp4,video/webm', multiple = false) {
   return new Promise((resolve, reject) => {
-    const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*,video/mp4,video/webm' });
+    const inp = Object.assign(document.createElement('input'), { type: 'file', accept, multiple });
     inp.onchange = async () => {
-      const f = inp.files[0];
-      if (!f) return resolve(null);
-      toast('Uploading…', 1500);
+      const files = [...inp.files];
+      if (!files.length) return resolve([]);
+      toast(files.length > 1 ? `Uploading ${files.length} files…` : 'Uploading…', 1500);
       try {
-        const res = await fetch(`/api/studio/upload?name=${encodeURIComponent(f.name)}`, { method: 'POST', body: f, credentials: 'same-origin' });
-        const d = await res.json();
-        if (!res.ok) throw new Error(d.error || 'Upload failed');
-        resolve(d.url);
+        const out = [];
+        for (const f of files) {
+          const res = await fetch(`/api/studio/upload?name=${encodeURIComponent(f.name)}`, { method: 'POST', body: f, credentials: 'same-origin' });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.error || 'Upload failed');
+          out.push({ url: d.url, name: f.name.replace(/\.[^.]+$/, '') });
+        }
+        resolve(out);
       } catch (e) { reject(e); }
     };
     inp.click();
@@ -374,6 +383,63 @@ const swatch = (t, d) => { const c = { ...d.colors, ...(t.colors || {}) }; retur
 const LOGO_PLACES = [['above', 'Above the sign-in box'], ['inside', 'Inside the box’s panel'], ['corner', 'Top-left corner'], ['hidden', 'Hidden']];
 const PANELS = [['none', 'No panel (floating)'], ['glass', 'Frosted glass'], ['solid', 'Solid']];
 const WHERE = [['all', 'Everywhere'], ['behind', 'Behind the box'], ['away', 'Around the box (spotlight)'], ['side', 'The box’s side of the screen']];
+const fileName = (u) => decodeURIComponent(String(u || '').split('/').pop());
+const GLOWS = [['natural', 'Natural: soft light that falls off and is cast downward'], ['neon', 'Neon: a sharp halo all around'], ['ambient', 'Ambient: light only spills underneath']];
+const RINGS = [['glow', 'A glow'], ['line', 'A crisp line'], ['aurora', 'A ring of light that travels around']];
+const ATMOS = [['none', 'Nothing'], ['aurora', 'Aurora: slow drifting colour'], ['leak', 'Film light leak: warm light from the corner'], ['both', 'Both']];
+const TILE_STYLES = [['layered', 'Layered 3D: picture, covers and name at different depths'], ['tilt', 'Tilt toward the pointer'], ['flat', 'Flat: lift a little']];
+/** Glow, focus outline, the living light behind the app, and the pointer's light. */
+const lightCard = (theme) => html`<div class="card"><h2>Glow and light</h2>
+  ${choose(theme, 'glowStyle', 'Glow style', GLOWS)}${range(theme, 'glow', 'Glow strength', 0, 1, 0.05)}
+  <p class="muted small">Natural light takes its colour from each poster's artwork when “Colour follows the artwork” is on, below.</p>
+  ${choose(theme, 'focusRing', 'Outline around a title in focus', RINGS)}
+  ${choose(theme, 'atmosphere', 'Living light behind the app', ATMOS)}
+  ${check(theme, 'pointerLight', 'A soft light follows the pointer across the background (computers)')}
+  <p class="muted small">The living light holds still on TVs and stops during playback, so it never slows a film down.</p></div>`;
+/** The library tiles on Home. */
+const tilesCard = (theme) => {
+  const style = theme.tiles3d?.style || 'layered';
+  return html`<div class="card"><h2>3D library tiles</h2>${choose(theme, 'tiles3d.style', 'Tiles on Home', TILE_STYLES)}
+    ${style === 'layered' ? html`${range(theme, 'tiles3d.depth', 'Depth (how far the layers move)', 0.1, 1, 0.05, 0.6)}${range(theme, 'tiles3d.thickness', 'Edge thickness (pixels)', 0, 16, 1, 6)}
+      ${check(theme, 'tiles3d.shine', 'A sheen slides across the tile as it turns')}${check(theme, 'tiles3d.sway', 'The tile in focus sways gently (TV remote and keyboard)')}` : ''}
+    ${check(theme, 'tiles3d.video', 'Play a library’s tile video while the tile is pointed at or in focus')}
+    <p class="muted small">Each library’s tab has a “Tile video” setting. A library with a background video plays that if it has no tile video.</p></div>`;
+};
+/** The sound pack, and each sound: test it, replace it with an upload, change its volume or switch it off. */
+const soundsCard = (theme) => {
+  const ev = theme.soundFx?.events || {};
+  return html`<div class="card" data-sounds><h2>Sounds</h2>
+    ${choose(theme, 'sounds', 'Sound pack', Object.entries(PACK_NAMES))}${range(theme, 'soundFx.volume', 'Volume of every sound', 0, 1, 0.05, 0.8)}
+    <p class="muted small">Press ▶ to hear a sound. Upload your own to replace any of them (MP3, M4A, OGG or WAV; short clips of under a second work best for moving and choosing). Everyone can still turn sounds off for themselves from their profile menu.</p>
+    <div class="sfx">${EVENTS.map(([k, name, desc]) => {
+      const e = ev[k] || {};
+      return html`<div class="sfx-row">
+        <button class="btn sm sfx-play" data-sfx-play="${k}" title="Play this sound" aria-label="Play ${name}">▶</button>
+        <div class="grow"><b>${name}</b><span>${e.url ? html`Your sound: ${e.name || fileName(e.url)}` : desc}</span></div>
+        <label class="sfx-vol" title="Volume"><input type="range" data-path="soundFx.events.${k}.volume" min="0" max="1.5" step="0.05" value="${e.volume ?? 1}"></label>
+        <label class="check"><input type="checkbox" data-path="soundFx.events.${k}.off" ${e.off ? 'checked' : ''}> Off</label>
+        <button class="btn sm" data-sfx-up="${k}">${e.url ? 'Replace' : 'Upload'}</button>
+        ${e.url ? html`<button class="btn sm danger" data-sfx-clear="${k}" title="Go back to the pack’s sound">✕</button>` : ''}</div>`;
+    })}</div></div>`;
+};
+/** Songs for the sign-in page: uploaded or taken from the music library, in order or shuffled. */
+const musicCard = (theme) => {
+  const m = theme.login?.music || {}, list = Array.isArray(m.tracks) ? m.tracks : [];
+  return html`<div class="card" data-music><h2>Music</h2>${check(theme, 'login.music.enabled', 'Play music on the sign-in page')}
+    <div class="tracks">${list.length ? list.map((t, i) => html`<div class="row track" data-trk="${i}">
+        <button class="btn sm" data-trk-play="${i}" title="Listen" aria-label="Listen">${studioSong.i === i && studioSong.a && !studioSong.a.paused ? '■' : '▶'}</button>
+        <input type="text" data-trk-name="${i}" value="${t.name || fileName(t.url)}" aria-label="Song name shown on the page">
+        <div class="tools">${i ? html`<button class="btn sm" data-trk-move="${i},-1" title="Move up">↑</button>` : ''}${i < list.length - 1 ? html`<button class="btn sm" data-trk-move="${i},1" title="Move down">↓</button>` : ''}
+          <button class="btn sm danger" data-trk-del="${i}" title="Remove">✕</button></div></div>`)
+      : html`<p class="muted small">No songs yet. Upload some, or pick songs from your music library.</p>`}</div>
+    <div class="row-btns"><button class="btn sm" data-trk-add>Upload songs</button><button class="btn sm" data-trk-lib>From the music library</button></div>
+    ${range(theme, 'login.music.volume', 'Volume', 0, 1, 0.05, 0.5)}${range(theme, 'login.music.fade', 'Fade in (seconds)', 0, 10, 0.5, 3)}
+    ${check(theme, 'login.music.shuffle', 'Shuffle the songs')}
+    ${choose(theme, 'login.music.button', 'Music button', [['corner', 'In the bottom corner'], ['hidden', 'Hidden']])}${check(theme, 'login.music.showTitle', 'Show the song’s name on the button')}
+    <p class="muted small">The music fades out as someone signs in, and each device remembers if it was paused there. Web browsers may wait for the first tap or key press before playing sound; the Fire TV and phone apps play it straight away. The preview on the right doesn't start music on its own; press the button on it to try.</p></div>`;
+};
+const studioSong = { a: null, i: -1 };
+
 function signinCards(theme) {
   const L = theme.login || {};
   const x = L.x || 'center', y = L.y || 'middle';
@@ -390,6 +456,7 @@ function signinCards(theme) {
         <p class="muted small">On phones the panel covers the screen.</p>` : ''}</div>
     <div class="card"><h2>Background</h2>${image(theme, 'login.image', 'Sign-in background picture or video')}
       ${range(theme, 'login.dim', 'Darken the whole screen', 0, 0.95, 0.05)}${range(theme, 'login.blur', 'Blur the whole picture', 0, 30, 1)}</div>
+    ${musicCard(theme)}
     <div class="card"><h2>Logo</h2>${choose(theme, 'login.logoPlace', 'Where', LOGO_PLACES)}${range(theme, 'login.logoSize', 'Size (pixels tall)', 40, 340, 5)}
       ${image(theme, 'login.logo', 'A different logo for this page (empty uses the site logo)')}
       ${text(theme, 'login.title', 'Heading over the profiles', 'Who’s watching?')}</div>
@@ -430,6 +497,7 @@ pages.look = async (main) => {
           ${range(libs[lib.id], 'blur', 'Blur background', 0, 30, 1, theme.background.blur || 0)}${choose(libs[lib.id], 'shade', 'Shade', BG_SHADES, 'Same as whole app')}${choose(libs[lib.id], 'position', 'Keep in view', BG_PLACES, 'Same as whole app')}
           <p class="muted small">You can also change this on the ${lib.name} page itself: admins see a picture button next to the library name.</p>
           ${image(libs[lib.id], 'logo', 'Logo shown instead of the library name')}
+          ${image(libs[lib.id], 'tileVideo', 'Tile video: plays on the Home tile while it is pointed at or in focus (MP4 or WebM, short and silent)')}
           ${check(libs[lib.id], 'useAccent', 'Give this library its own accent colours')}
           ${libs[lib.id].useAccent ? html`${color(libs[lib.id], 'accent', 'Accent')}${color(libs[lib.id], 'accent2', 'Second accent')}` : ''}</div>
         ${coversCard(libs[lib.id], theme.tileCovers || {}, lib.name)}`
@@ -437,17 +505,20 @@ pages.look = async (main) => {
         <div data-form="theme">
         <div class="card"><h2>Colours</h2>${color(theme, 'colors.bg', 'Background')}${color(theme, 'colors.surface', 'Panels')}${color(theme, 'colors.text', 'Text')}${color(theme, 'colors.muted', 'Quiet text')}${color(theme, 'colors.accent', 'Accent')}${color(theme, 'colors.accent2', 'Second accent')}</div>
         <div class="card"><h2>Type and shape</h2>${select(theme, 'interface', 'Interface style', L.options.interfaces)}${select(theme, 'fonts.display', 'Title font', L.options.fonts)}${select(theme, 'fonts.body', 'Reading font', L.options.fonts)}
-          ${range(theme, 'radius', theme.interface === 'classic' ? 'Card corners' : 'Corner cut', 0, 28, 1)}${range(theme, 'glow', 'Neon glow', 0, 1, 0.05)}${select(theme, 'cardShape', 'Card shape', L.options.cardShapes)}${range(theme, 'heroHeight', 'Banner height', 40, 100, 5)}</div>
+          ${range(theme, 'radius', theme.interface === 'classic' ? 'Card corners' : 'Corner cut', 0, 28, 1)}${select(theme, 'cardShape', 'Card shape', L.options.cardShapes)}${range(theme, 'heroHeight', 'Banner height', 40, 100, 5)}</div>
+        ${lightCard(theme)}
         <div class="card"><h2>Texture and effects</h2>${select(theme, 'texture', 'Texture', L.options.textures)}${select(theme, 'effect', 'Moving effect', L.options.effects)}</div>
         <div class="card"><h2>Backgrounds</h2>${image(theme, 'background.image', 'Home background picture or video')}${range(theme, 'background.dim', 'Darken', 0, 0.95, 0.05)}${range(theme, 'background.blur', 'Blur', 0, 30, 1)}${choose(theme, 'background.shade', 'Shade', BG_SHADES)}${choose(theme, 'background.position', 'Keep in view', BG_PLACES)}
           <p class="muted small">The sign-in screen has its own background and layout: see the Sign-in page tab.</p></div>
+        ${tilesCard(theme)}
         ${coversCard(theme, theme.tileCovers || {}, '')}
-        <div class="card"><h2>Motion and sound</h2>
+        <div class="card"><h2>Motion</h2>
           ${check(theme, 'artColor', 'Colour follows the artwork in focus')}${check(theme, 'depth', 'Posters lean toward the pointer')}
           ${select(theme, 'heroMotion', 'Spotlight', L.options.heroMotions)}<p class="muted small">“Trailer” plays a muted trailer behind the spotlight on computers. “Pan” moves the picture slowly.</p>
-          ${select(theme, 'sounds', 'Navigation sounds', L.options.sounds)}${check(theme, 'profileColors', 'Tint each profile’s session with its own colour')}
+          ${check(theme, 'profileColors', 'Tint each profile’s session with its own colour')}
           ${check(theme, 'glass', 'Glass controls that pick up the picture behind them')}${check(theme, 'previews', 'Open a larger preview when the pointer rests on a title')}
           ${select(theme, 'screensaver', 'Screensaver after five idle minutes', L.options.screensavers)}<p class="muted small">“tv” shows drifting artwork on TVs only, “all” on every screen. Glass and previews switch themselves off on TVs to keep them fast.</p></div>
+        ${soundsCard(theme)}
         <div class="card"><h2>Ident before a feature</h2>${check(theme, 'ident.enabled', 'Play the HallFlix logo card before a movie or episode')}
           ${image(theme, 'ident.video', 'Your own ident video (MP4, H.264). Empty uses the built-in animation on the website.')}
           <p class="muted small">An uploaded video also plays in the Fire TV, phone and Roku apps. A season can carry its own.</p></div>
@@ -475,6 +546,56 @@ pages.look = async (main) => {
   });
   // On the Sign-in page tab, some choices show or hide others (panel strength, how dark, where to blur).
   box.addEventListener('change', (e) => { if (tab === 'signin' && e.target.matches('select[data-path^="login."], [data-path="login.focusBlur"]')) draw(); });
+  // Choices that show or hide others on the Whole app tab.
+  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"]')) draw(); });
+  // Sounds and sign-in music: test, upload, reorder and remove.
+  const touched = (redraw = true) => { dirty = true; if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false; send(); };
+  const music = () => { theme.login ||= {}; theme.login.music ||= {}; if (!Array.isArray(theme.login.music.tracks)) theme.login.music.tracks = []; return theme.login.music; };
+  const stopSong = () => { studioSong.a?.pause(); studioSong.a = null; studioSong.i = -1; };
+  box.addEventListener('input', (e) => {
+    const n = e.target.closest('[data-trk-name]');
+    if (n) { music().tracks[+n.dataset.trkName].name = n.value; touched(false); }
+  });
+  box.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-sfx-play],[data-sfx-up],[data-sfx-clear],[data-trk-play],[data-trk-move],[data-trk-del],[data-trk-add],[data-trk-lib]');
+    if (!b) return;
+    e.preventDefault();
+    const d = b.dataset;
+    try {
+      if (d.sfxPlay) { if (!playSound(d.sfxPlay, theme, { test: true })) toast('That sound is switched off'); return; }
+      if (d.sfxUp) {
+        const [f] = await uploadFiles('audio/*,.mp3,.m4a,.ogg,.wav,.flac');
+        if (!f) return;
+        theme.soundFx ||= {}; theme.soundFx.events ||= {};
+        theme.soundFx.events[d.sfxUp] = { ...(theme.soundFx.events[d.sfxUp] || {}), url: f.url, name: f.name, off: false };
+        touched(); playSound(d.sfxUp, theme, { test: true });
+        return;
+      }
+      if (d.sfxClear) { const ev = theme.soundFx?.events?.[d.sfxClear]; if (ev) { delete ev.url; delete ev.name; } touched(); return; }
+      const m = music();
+      if (d.trkPlay) {
+        const i = +d.trkPlay, playing = studioSong.i === i && studioSong.a && !studioSong.a.paused;
+        stopSong();
+        if (!playing) {
+          studioSong.a = new Audio(m.tracks[i].url); studioSong.i = i;
+          studioSong.a.volume = Math.max(0, Math.min(1, m.volume ?? 0.5));
+          studioSong.a.onended = () => { stopSong(); draw(); };
+          await studioSong.a.play();
+        }
+        draw(); return;
+      }
+      if (d.trkMove) { const [i, by] = d.trkMove.split(',').map(Number); const j = i + by; [m.tracks[i], m.tracks[j]] = [m.tracks[j], m.tracks[i]]; stopSong(); touched(); return; }
+      if (d.trkDel) { m.tracks.splice(+d.trkDel, 1); stopSong(); touched(); return; }
+      if ('trkAdd' in d) {
+        const files = await uploadFiles('audio/*,.mp3,.m4a,.ogg,.wav,.flac', true);
+        if (!files.length) return;
+        m.tracks.push(...files); m.enabled = true;
+        touched(); toast(files.length > 1 ? `${files.length} songs added` : 'Song added');
+        return;
+      }
+      if ('trkLib' in d) songPicker((t) => { m.tracks.push(t); m.enabled = true; touched(); });
+    } catch (err) { fail(err); }
+  });
   // While the tile covers are being changed, the preview shows Home with the library tiles in view.
   const showTiles = () => {
     const sel = $('[data-pv-go]', main), frame = $('iframe', main);
@@ -514,6 +635,26 @@ pages.look = async (main) => {
   });
   draw();
 };
+
+/** Find songs in the music library and add them to the sign-in music. Each one is copied beside the uploads. */
+function songPicker(add) {
+  const d = dialog('Songs from the music library', html`<input type="text" data-song-q placeholder="Search by song, artist or album" style="width:100%">
+    <div class="browser" data-songs><p class="muted small">Type to search your music.</p></div>`, { ok: '' });
+  const box = $('[data-songs]', d.el);
+  const find = debounce(async (term) => {
+    const r = await api('GET', `/api/studio/songs?q=${encodeURIComponent(term)}`).catch(() => ({ songs: [] }));
+    box.innerHTML = String(html`${r.songs.length ? r.songs.map((x) => html`<button data-song="${x.id}">＋ <b>${x.title}</b> <span class="muted">${[x.artist, x.album].filter(Boolean).join(' · ')}${x.seconds ? ` · ${mins(x.seconds)}` : ''}</span></button>`) : html`<p class="muted small">No songs match.</p>`}`);
+  }, 220);
+  $('[data-song-q]', d.el).addEventListener('input', (e) => find(e.target.value));
+  box.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-song]');
+    if (!b || b.disabled) return;
+    b.disabled = true; b.firstChild.textContent = '… ';
+    try { add(await api('POST', `/api/studio/songs/${b.dataset.song}/use`)); b.firstChild.textContent = '✓ '; toast('Song added'); }
+    catch (err) { b.disabled = false; b.firstChild.textContent = '＋ '; fail(err); }
+  });
+  find('');
+}
 
 // ---------- seasons ----------
 pages.seasons = async (main) => {
