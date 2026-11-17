@@ -3,6 +3,7 @@
 import { $, $$, api, html, raw, icons, state, fmtRuntime, fmtTime, toast } from './core.js';
 import { cardHtml } from './views.js';
 import * as music from './music.js';
+import * as comics from './comics.js';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const bg = (u) => (u ? `background-image:url("${String(u).replace(/"/g, '%22')}")` : '');
@@ -61,18 +62,7 @@ export function sheet(o, d, id) {
       <div class="body">${d.overview ? html`<p class="overview">${d.overview}</p>` : ''}${facts([['Author', d.author], ['Published', d.year], ['Publisher', d.publisher], ['Format', d.format?.toUpperCase()]])}
         ${d.more?.length ? html`<h3>More by ${d.author}</h3><div class="similar">${d.more.map((x) => cardHtml(x))}</div>` : ''}</div>`;
   } else if (d.kind === 'series') {
-    const next = d.issues.find((x) => x.id === d.next);
-    body = html`<div class="m-head book">${close}<div class="m-bg" style="${bg(d.poster)}"></div>
-      <div class="m-cover book">${d.poster ? html`<img src="${d.poster}" alt="">` : html`<span>${d.title}</span>`}</div>
-      <div class="m-info"><p class="m-kind">Comic series</p><h1>${d.title}</h1>${d.author ? html`<p class="m-by">by ${d.author}</p>` : ''}
-        <div class="meta"><span>${plural(d.issues.length, 'issue')}</span>${d.year ? html`<span>${d.year}</span>` : ''}${d.genres.slice(0, 3).map((g) => html`<span>${g}</span>`)}</div>
-        <div class="actions">${next ? html`<a class="btn primary" href="#/read/${next.id}">${icons.book} ${d.resuming ? 'Continue' : 'Read'} ${next.number != null ? `#${next.number}` : next.title}</a>` : ''}${listBtn}
-          <button class="btn round" data-seen aria-label="Mark all as read" title="Mark all as read or unread">${icons.eye}</button></div></div></div>
-      <div class="body">${d.overview ? html`<p class="overview">${d.overview}</p>` : ''}${facts([['Writer', d.author], ['Publisher', d.publisher]])}
-        <h3>Issues</h3><div class="grid issues">${d.issues.map((x) => html`<a class="card book k-comic ${x.id === d.focus ? 'focus' : ''}" href="#/read/${x.id}" data-id="${x.id}">
-          <div class="art"><div class="fallback">${x.title}</div><img loading="lazy" src="${x.poster}" alt="" onload="this.classList.add('in')" onerror="this.remove()">
-          <div class="label">${x.number != null ? `#${x.number}` : x.title}<small>${x.number != null && x.title !== `${d.title} #${x.number}` ? x.title : plural(x.pages || 0, 'page')}</small></div>
-          ${x.progress && !x.progress.watched && pct(x.progress) ? html`<div class="bar"><i style="width:${pct(x.progress)}%"></i></div>` : ''}${x.progress?.watched ? html`<div class="seen">✓</div>` : ''}</div></a>`)}</div></div>`;
+    body = comics.seriesBody(d, close, listBtn, facts);
   } else if (d.kind === 'album') {
     const total = d.tracks.reduce((a, t) => a + (t.runtime || 0), 0);
     body = html`<div class="m-head">${close}<div class="m-bg" style="${bg(d.poster)}"></div>
@@ -96,6 +86,11 @@ export function sheet(o, d, id) {
   o.onchange = null;
   o.onclick = async (e) => {
     if (e.target === o || e.target.closest('[data-x]')) { if (history.length > 1) history.back(); else location.hash = '#/'; return; }
+    if (d.kind === 'series') {
+      const y = o.scrollTop;
+      const redraw = async (fetch) => { const fresh = fetch ? await api('GET', `/api/items/${id}`) : d; sheet(o, fresh, id); o.scrollTop = y; };
+      if (await comics.seriesClick(e, d, redraw)) return;
+    }
     const tr = e.target.closest('[data-track]');
     if (tr) { music.play(d.tracks, +tr.dataset.track); return; }
     if (e.target.closest('[data-playall]')) { music.play(d.tracks, 0, { shuffle: false }); return; }
@@ -117,7 +112,7 @@ export function sheet(o, d, id) {
     }
   };
   o.scrollTop = 0;
-  ($('.issues .focus', o) || $('.btn.primary', o))?.focus({ preventScroll: true });
+  ($('.issues .focus a, .cx-ilist .focus a', o) || $('.issues .focus', o) || $('.btn.primary', o))?.focus({ preventScroll: true });
 }
 
 // ---------- the music library ----------

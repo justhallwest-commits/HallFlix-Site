@@ -14,6 +14,7 @@ services:
     environment:
       DATABASE_URL: postgres://hallflix:hallflix@db:5432/hallflix
       TRANSCODER_URL: http://transcoder:8781
+      # COMIC_CACHE_GB: 4                              # optional: room for unpacked CBR/CB7 comics (oldest read are cleared first)
     volumes:
       - /volume1/docker/hallflix/data:/data            # HallFlix's own files: artwork cache, uploads, plugins
       - /volume1/Media:/media:ro                       # <-- CHANGE: your media share, then keep  :/media:ro  exactly

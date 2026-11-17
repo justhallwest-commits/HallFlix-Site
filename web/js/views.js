@@ -4,6 +4,8 @@ import * as browse from './browse.js';
 import * as feel from './feel.js';
 import * as media from './media.js';
 import * as more from './more.js';
+import * as comics from './comics.js';
+import * as profileEdit from './profile.js';
 
 export const extraRows = []; // rows added by plugins through HallFlix.addHomeRow()
 const app = () => $('#app');
@@ -169,22 +171,18 @@ async function onClick(e) {
   if (act === 'server') window.HallFlixNative?.changeServer();
   if (act === 'previews') { more.setPreviews(!more.previewsOn()); $('.menu')?.remove(); toast(more.previewsOn() ? 'Previews on' : 'Previews off'); }
   if (act === 'sounds') { feel.setSounds(!feel.soundsOn()); $('.menu')?.remove(); toast(feel.soundsOn() ? 'Sounds on' : 'Sounds off'); }
-  if (act === 'password') {
-    $('.menu')?.remove();
-    const current = prompt('Current password'); if (current == null) return;
-    const next = prompt('New password (at least 4 characters)'); if (next == null) return;
-    try { await api('POST', '/api/password', { current, next }); toast('Password changed'); } catch (err) { toast(err.message); }
-  }
+  if (act === 'profile') { $('.menu')?.remove(); profileEdit.editProfile(); return; }
+
 }
 
 function toggleMenu() {
   if ($('.menu')) return $('.menu').remove();
   const p = state.profile;
   $('.nav').insertAdjacentHTML('beforeend', String(html`<div class="menu"><div class="who">Signed in as <b>${p.name}</b></div>
-    <button data-do="switch">Switch profile</button>${p.admin ? html`<a href="/studio">Open the Studio</a>` : ''}
+    <button data-do="profile">Edit profile</button><button data-do="switch">Switch profile</button>${p.admin ? html`<a href="/studio">Open the Studio</a><a href="/studio#profiles">Manage profiles</a>` : ''}
     <a href="#/me">My HallFlix</a><a href="#/remote">Remote for another screen</a><a href="#/wrapped">Your year in review</a>
     ${themeNow()?.previews !== false && !document.body.classList.contains('tv') ? html`<button data-do="previews">${more.previewsOn() ? 'Turn previews off' : 'Turn previews on'}</button>` : ''}${feel.soundsAvailable() ? html`<button data-do="sounds">${feel.soundsOn() ? 'Turn sounds off' : 'Turn sounds on'}</button>` : ''}
-    <button data-do="password">Change password</button>${window.HallFlixNative ? html`<button data-do="server">Change server</button>` : ''}<button data-do="signout">Sign out</button></div>`));
+    ${window.HallFlixNative ? html`<button data-do="server">Change server</button>` : ''}<button data-do="signout">Sign out</button></div>`));
   $('.menu button').focus();
   for (const a of $$('.menu a')) a.addEventListener('click', () => $('.menu')?.remove());
 }
@@ -269,6 +267,7 @@ async function library(id) {
   const lib = state.libraries.find((l) => l.id === id);
   const lk = libraryLook(id);
   if (lib?.kind === 'music') return media.musicLibrary(view(), lib, lk, base);
+  if (lib?.kind === 'comics') return comics.comicsLibrary(view(), lib, lk, base, syncArrows);
   const sorts = lib?.kind === 'books' ? [['title', 'A to Z'], ['author', 'Author'], ['added', 'Recently added'], ['year', 'Newest first']]
     : lib?.kind === 'comics' ? [['title', 'A to Z'], ['added', 'Recently updated'], ['year', 'Newest first']]
       : [['title', 'A to Z'], ['added', 'Recently added'], ['year', 'Newest first'], ['score', 'Top rated']];

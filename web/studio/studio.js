@@ -499,33 +499,76 @@ pages.seasons = async (main) => {
 
 // ---------- pre-rolls ----------
 // ---------- profiles ----------
+// A "Manage profiles" grid: big pictures, when each person was last active and on how many devices, and an editor
+// with the picture chooser, colour, PIN, admin access, the parental controls that apply, and the account tools.
+const PROFILE_COLORS = ['#35d0d0', '#2a6df4', '#6366f1', '#b344d6', '#ff4d7e', '#f43f5e', '#ff7a3d', '#e8b84a', '#84cc16', '#1ce783', '#14b8a6', '#94a3b8'];
+function ago(t) {
+  if (!t) return 'Never signed in';
+  const s = (Date.now() - new Date(t)) / 1000;
+  if (s < 120) return 'Active just now';
+  if (s < 3600) return `Active ${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `Active ${Math.round(s / 3600)} h ago`;
+  if (s < 86400 * 45) return `Active ${Math.round(s / 86400)} days ago`;
+  return `Last active ${new Date(t).toLocaleDateString()}`;
+}
+const faceStyle = (p) => `background:${p.color ? `linear-gradient(135deg, ${p.color}, color-mix(in srgb, ${p.color} 55%, #000))` : 'linear-gradient(135deg, var(--violet), var(--cyan))'}`;
+const face = (p, big = false) => html`<span class="avatar ${big ? 'xl' : ''}" style="${faceStyle(p)}">${p.avatar ? html`<img src="${p.avatar}" alt="">` : (p.name || '?')[0].toUpperCase()}</span>`;
 pages.profiles = async (main) => {
-  const COLORS = ['#35d0d0', '#b344d6', '#ff7a3d', '#4ade80', '#ff4d7e', '#e8b84a', '#2a6df4'];
+  const { editAvatar, saveAvatar } = await import('/js/avatar.js');
+  let me = null;
+  try { me = (await api('GET', '/api/boot')).profile; } catch { /* fine */ }
   const draw = async () => {
-    const list = await api('GET', '/api/studio/profiles');
-    main.innerHTML = String(html`${head('Profiles', 'Everyone who watches gets a profile with their own history, list and sign-in.', html`<button class="btn primary" data-new>Add a profile</button>`)}
-      <div class="card">${list.map((p) => html`<div class="row" data-id="${p.id}"><div class="avatar" style="${p.color ? `background:${p.color}` : ''}">${p.name[0].toUpperCase()}</div>
-        <div class="grow"><b>${p.name}</b><span>${p.admin ? 'Admin · can open the Studio' : 'Viewer'}</span></div>
-        <div class="tools"><button class="btn sm" data-edit>Edit</button><button class="btn sm danger" data-del>Delete</button></div></div>`)}</div>`);
+    const [list, guard] = await Promise.all([api('GET', '/api/studio/profiles'), api('GET', '/api/studio/guard').catch(() => ({ rules: [] }))]);
+    const rulesFor = (id) => (guard.rules || []).filter((r) => r.enabled !== false && (r.profiles || []).includes(id)).map((r) => r.name);
+    main.innerHTML = String(html`${head('Profiles', 'Everyone who watches gets a profile with their own picture, history, list and sign-in. Click a profile to change anything about it.', html`<button class="btn primary" data-new>Add a profile</button>`)}
+      <div class="pf-grid">${list.map((p) => {
+        const rules = rulesFor(p.id);
+        return html`<button class="pf-tile" data-edit="${p.id}" aria-label="Edit ${p.name}">${face(p, true)}<span class="pf-edit">Edit</span>
+          <b>${p.name}${p.id === me?.id ? html` <small class="muted">(you)</small>` : ''}</b>
+          <span class="pf-tags">${p.admin ? html`<span class="pill live">Admin</span>` : html`<span class="pill">Viewer</span>`}${rules.length ? html`<span class="pill bad" title="${rules.join(', ')}">Parental controls</span>` : ''}</span>
+          <span class="muted small">${ago(p.seen)}${p.devices ? ` · ${p.devices} device${p.devices === 1 ? '' : 's'}` : ''}</span>
+          <span class="muted small">${p.watched} watched · ${p.read} read</span></button>`;
+      })}<button class="pf-tile pf-add" data-new><span class="avatar xl">+</span><b>Add a profile</b><span class="muted small">For someone else who watches</span></button></div>`);
     const form = (p) => {
       const v = { id: p?.id, name: p?.name || '', admin: !!p?.admin, color: p?.color || '', password: '' };
-      const d = dialog(p ? `Edit ${p.name}` : 'Add a profile', html`${text(v, 'name', 'Name')}
-        <label class="f"><span>${p ? 'New password or PIN' : 'Password or PIN'}</span><input type="password" data-path="password" autocomplete="new-password" placeholder="${p ? 'Leave empty to keep the current one' : 'At least 4 characters'}"></label>
-        <div class="f"><span>Colour</span><span class="checks">${COLORS.map((c) => html`<label class="check"><input type="radio" name="pc" value="${c}" ${v.color === c ? 'checked' : ''}><i style="width:22px;height:22px;border-radius:6px;background:${c};display:block"></i></label>`)}</span></div>
-        ${check(v, 'admin', 'Admin (can open the Studio and change everything)')}`,
-      { onOk: async (el) => {
-        const b = { id: v.id, name: v.name, admin: v.admin, color: $('input[name=pc]:checked', el)?.value || v.color || null };
+      let pic = null; // a picture chosen before saving: { blob } or { remove: true }
+      const preview = () => (pic?.blob ? { ...v, avatar: URL.createObjectURL(pic.blob) } : pic?.remove ? { ...v, avatar: null } : { ...v, avatar: p?.avatar });
+      const rules = p ? rulesFor(p.id) : [];
+      const body = () => html`<div class="pf-form"><div class="pf-left"><button class="pf-face" data-pic aria-label="Change the picture">${face(preview(), true)}<span>Change picture</span></button>
+          ${preview().avatar ? html`<button class="btn sm" data-nopic>Remove picture</button>` : ''}</div>
+        <div class="pf-right">${text(v, 'name', 'Name')}
+          <div class="f"><span>Colour</span><span class="pf-swatches">${PROFILE_COLORS.map((c) => html`<button type="button" data-sw="${c}" class="${v.color === c ? 'on' : ''}" style="background:${c}" aria-label="Colour ${c}"></button>`)}</span></div>
+          <label class="f"><span>${p ? 'New password or PIN' : 'Password or PIN'}</span><input type="password" data-path="password" autocomplete="new-password" placeholder="${p ? 'Leave empty to keep the current one' : 'At least 4 characters'}"></label>
+          ${check(v, 'admin', 'Admin (can open the Studio and change everything)')}
+          ${p ? html`<div class="f"><span>Parental controls</span><span>${rules.length ? rules.join(', ') : html`<span class="muted">None</span>`} · <a href="#guard" data-x>Change</a></span></div>
+            <div class="pf-danger"><h3>Account</h3><p class="muted small">${ago(p.seen)} · ${p.devices || 0} signed-in device${p.devices === 1 ? '' : 's'} · added ${new Date(p.created).toLocaleDateString()}</p>
+              <div class="pf-actions"><button class="btn sm" data-signout ${p.devices ? '' : 'disabled'}>Sign out on all devices</button><button class="btn sm" data-clearhist>Clear watch and reading history</button>
+              ${p.id !== me?.id ? html`<button class="btn sm danger" data-del>Delete profile</button>` : ''}</div></div>` : ''}</div></div>`;
+      const d = dialog(p ? `Edit ${p.name}` : 'Add a profile', body(), { wide: true, onOk: async () => {
+        const b = { id: v.id, name: v.name, admin: v.admin, color: v.color || null };
         if (v.password) b.password = v.password;
-        await api('POST', '/api/studio/profiles', b); toast('Saved'); draw();
+        const saved = await api('POST', '/api/studio/profiles', b);
+        if (pic) await saveAvatar(saved.id, pic);
+        toast('Saved'); draw();
       } });
+      const redraw = () => { d.el.innerHTML = String(body()); };
       bind(d.el, v, () => {});
+      d.el.addEventListener('click', async (e) => {
+        const t = e.target;
+        const sw = t.closest('[data-sw]');
+        if (sw) { v.color = v.color === sw.dataset.sw ? '' : sw.dataset.sw; redraw(); return; }
+        if (t.closest('[data-pic]')) { const res = await editAvatar({ profile: preview(), title: `A picture for ${v.name || 'this profile'}` }); if (res) { pic = res; redraw(); } return; }
+        if (t.closest('[data-nopic]')) { pic = { remove: true }; redraw(); return; }
+        if (t.closest('[data-x]')) { d.close(); return; }
+        if (t.closest('[data-signout]')) { await api('POST', `/api/studio/profiles/${p.id}/signout`).then(() => toast(`${p.name} is signed out everywhere${p.id === me?.id ? ' else' : ''}`), fail); d.close(); draw(); return; }
+        if (t.closest('[data-clearhist]')) { d.close(); confirmBox(`Clear ${p.name}'s history?`, 'Everything they have watched and read, and where they stopped, is forgotten. Their list and playlists stay.', 'Clear history', async () => { await api('POST', `/api/studio/profiles/${p.id}/clear`); toast('History cleared'); draw(); }); return; }
+        if (t.closest('[data-del]')) { d.close(); confirmBox(`Delete ${p.name}?`, 'Their watch history, list and playlists are deleted too.', 'Delete', async () => { await api('DELETE', `/api/studio/profiles/${p.id}`); draw(); }); }
+      });
     };
-    $('[data-new]', main).onclick = () => form(null);
     main.onclick = (e) => {
-      const b = e.target.closest('button'), row = e.target.closest('[data-id]'); if (!b || !row) return;
-      const p = list.find((x) => x.id === +row.dataset.id);
-      if (b.hasAttribute('data-edit')) form(p);
-      if (b.hasAttribute('data-del')) confirmBox(`Delete ${p.name}?`, 'Their watch history and list are deleted too.', 'Delete', async () => { await api('DELETE', `/api/studio/profiles/${p.id}`); draw(); });
+      if (e.target.closest('[data-new]')) return form(null);
+      const t = e.target.closest('[data-edit]');
+      if (t) form(list.find((x) => x.id === +t.dataset.edit));
     };
   };
   await draw();

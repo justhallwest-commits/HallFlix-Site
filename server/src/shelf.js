@@ -316,20 +316,30 @@ function once(key, fn) {
   return p;
 }
 
-async function shrink(buf, out, width) {
+// Resizing and converting pages runs a few at a time, so a thumbnail strip can't swamp the NAS.
+let running = 0;
+const queue = [];
+async function limited(fn) {
+  if (running >= 3) await new Promise((res) => queue.push(res));
+  running++;
+  try { return await fn(); } finally { running--; queue.shift()?.(); }
+}
+
+/** A JPEG no wider than width, from a Buffer or a file. */
+async function shrink(src, out, width) {
   await fs.promises.mkdir(path.dirname(out), { recursive: true });
-  const tmp = `${out}.${process.pid}.${Date.now()}.tmp`;
-  await fs.promises.writeFile(tmp, buf);
+  let input = src, tmp = null;
+  if (Buffer.isBuffer(src)) { tmp = `${out}.${process.pid}.${Date.now()}.tmp`; await fs.promises.writeFile(tmp, src); input = tmp; }
   try {
-    await exec(cfg.ffmpeg, ['-v', 'error', '-nostdin', '-y', '-i', tmp, '-vf', `scale='min(${width},iw)':-2`, '-frames:v', '1', '-q:v', '4', '-f', 'mjpeg', `${out}.part`], { timeout: 60e3 });
+    await limited(() => exec(cfg.ffmpeg, ['-v', 'error', '-nostdin', '-y', '-i', input, '-vf', `scale='min(${width},iw)':-2:flags=lanczos`, '-frames:v', '1', '-q:v', '3', '-f', 'mjpeg', `${out}.part`], { timeout: 60e3 }));
     await fs.promises.rename(`${out}.part`, out);
-  } finally { fs.promises.rm(tmp, { force: true }).catch(() => {}); }
+  } finally { if (tmp) fs.promises.rm(tmp, { force: true }).catch(() => {}); }
 }
 
 async function pdfPage(file, n, out, width) {
   await fs.promises.mkdir(path.dirname(out), { recursive: true });
   const base = `${out}.${process.pid}.${Date.now()}`;
-  await exec('pdftoppm', ['-f', String(n), '-l', String(n), '-singlefile', '-jpeg', '-jpegopt', 'quality=85', '-scale-to', String(width), file, base], { timeout: 120e3 });
+  await limited(() => exec('pdftoppm', ['-f', String(n), '-l', String(n), '-singlefile', '-jpeg', '-jpegopt', 'quality=85', '-scale-to', String(width), file, base], { timeout: 120e3 }));
   await fs.promises.rename(`${base}.jpg`, out);
 }
 
@@ -370,6 +380,42 @@ async function coverFile(item) {
   });
 }
 
+/** Page sizes for a comic or PDF, worked out once: [[width, height] or null, ...]. */
+const sizeCache = new Map();
+async function pageSizes(item) {
+  const key = `${item.id}-${item.mtime || 0}`;
+  if (sizeCache.has(key)) return sizeCache.get(key);
+  const file = cacheDir('sizes', `${key}.json`);
+  const work = (async () => {
+    try { return JSON.parse(await fs.promises.readFile(file, 'utf8')); } catch { /* work it out */ }
+    let sizes;
+    if (item.path.endsWith('.pdf')) {
+      const { stdout } = await exec('pdfinfo', ['-f', '1', '-l', String(item.pages || 9999), item.path], { timeout: 60e3, maxBuffer: 8e6 });
+      sizes = Array.from({ length: item.pages || 0 }, () => null);
+      const rot = new Map([...stdout.matchAll(/^Page\s+(\d+) rot:\s+(\d+)/gm)].map((m) => [+m[1], +m[2]]));
+      for (const m of stdout.matchAll(/^Page\s+(\d+) size:\s+([\d.]+) x ([\d.]+)/gm)) {
+        const w = Math.round(+m[2]), h = Math.round(+m[3]);
+        sizes[+m[1] - 1] = rot.get(+m[1]) % 180 ? [h, w] : [w, h];
+      }
+    } else {
+      const list = await archive.pages(item.path);
+      sizes = [];
+      for (const name of list) { try { sizes.push(await archive.pageSize(item.path, name)); } catch { sizes.push(null); } }
+    }
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await fs.promises.writeFile(file, JSON.stringify(sizes));
+    return sizes;
+  })();
+  sizeCache.set(key, work);
+  if (sizeCache.size > 200) sizeCache.delete(sizeCache.keys().next().value);
+  work.catch(() => sizeCache.delete(key));
+  return work;
+}
+
+// Page widths a reader may ask for: thumbnails, phones, TVs and big screens. Anything else rounds up to one of these.
+const WIDTHS = [240, 480, 720, 1080, 1440, 2048];
+const widthFor = (w) => (+w > 0 ? WIDTHS.find((x) => x >= +w) || null : null);
+
 async function readable(id) {
   const item = await q1(`select * from items where id=$1 and kind in ('book','comic')`, [id]);
   if (!item?.path) throw new HttpError(404, 'Not found');
@@ -390,7 +436,8 @@ export function routes(r) {
   r.get('/api/read/:id', async ({ profile, params }) => {
     const item = await readable(params.id);
     const prog = await q1('select position_s, duration_s, watched from progress where profile_id=$1 and item_id=$2', [profile.id, item.id]);
-    const out = { id: item.id, kind: item.kind, title: item.title, author: item.author, progress: prog ? { position: prog.position_s, duration: prog.duration_s, finished: prog.watched } : null };
+    const out = { id: item.id, kind: item.kind, title: item.title, author: item.author, library: item.library_id, progress: prog ? { position: prog.position_s, duration: prog.duration_s, finished: prog.watched } : null };
+    out.pdf = item.path.endsWith('.pdf');
     if (item.kind === 'comic') {
       out.mode = 'pages'; out.pages = item.pages || (await comicPages(item.path)); out.rtl = !!item.extra?.manga;
       const series = await q1('select id, title from items where id=$1', [item.parent_id]);
@@ -399,6 +446,13 @@ export function routes(r) {
           ((extra->>'number')::float, sort_title) > ($3::float, $4) order by (extra->>'number')::float nulls last, sort_title limit 1`,
         [item.parent_id, item.id, item.extra?.number ?? -1, item.sort_title]);
       out.next = next || null;
+      const prev = await q1(`select id, title from items where parent_id=$1 and kind='comic' and id<>$2 and
+          ((extra->>'number')::float, sort_title) < ($3::float, $4) order by (extra->>'number')::float desc nulls last, sort_title desc limit 1`,
+        [item.parent_id, item.id, item.extra?.number ?? -1, item.sort_title]);
+      out.prev = prev || null;
+      out.number = item.extra?.number ?? null;
+      // A CBR or CB7 starts unpacking now, so the first page is ready by the time the reader asks for it.
+      if (!item.path.endsWith('.pdf')) archive.pages(item.path).then(async (list) => { if (list.length && (await archive.cached(item.path))) await archive.extracted(item.path, list[0]); }).catch(() => {});
     } else if (item.container === 'pdf') {
       out.mode = 'pages'; out.pages = item.pages || (await pdfInfo(item.path)).pages;
     } else {
@@ -408,24 +462,54 @@ export function routes(r) {
     return out;
   });
 
-  r.get('/api/read/:id/page/:n', async ({ req, res, params }) => {
+  // One page as an image. ?w= asks for a smaller copy (made once and kept), so phones, TVs and the thumbnail strip load fast;
+  // pages a browser can't show (TIFF, JPEG XL, JPEG 2000) always come out as JPEG.
+  r.get('/api/read/:id/page/:n', async ({ req, res, params, query }) => {
     const item = await readable(params.id);
     const n = parseInt(params.n, 10);
     if (!(n >= 1)) throw new HttpError(404, 'Not found');
+    const want = widthFor(query.w);
+    const keep = { cache: 'private, max-age=604800', type: 'image/jpeg' };
     if (item.path.endsWith('.pdf')) {
-      const out = cacheDir('pages', `${item.id}-${item.mtime}`, `${n}.jpg`);
+      const w = want ? Math.min(want, 1800) : 1800;
+      const out = cacheDir('pages', `${item.id}-${item.mtime}`, w === 1800 ? `${n}.jpg` : `${n}-w${w}.jpg`);
       if (!fs.existsSync(out)) {
         if (n > (item.pages || 0)) throw new HttpError(404, 'Not found');
-        await once(out, () => pdfPage(item.path, n, out, 1800));
+        await once(out, () => pdfPage(item.path, n, out, w));
       }
-      return sendFile(req, res, out, { cache: 'private, max-age=604800', type: 'image/jpeg' });
+      return sendFile(req, res, out, keep);
     }
     const list = await archive.pages(item.path);
     const name = list[n - 1];
     if (!name) throw new HttpError(404, 'Not found');
-    const buf = await archive.read(item.path, name);
-    res.writeHead(200, { 'Content-Type': archive.mimeOf(name), 'Content-Length': buf.length, 'Cache-Control': 'private, max-age=604800' });
+    const onDisk = await archive.cached(item.path);
+    const file = onDisk ? await archive.extracted(item.path, name) : null;
+    const convert = archive.CONVERT.test(name);
+    let buf = null;
+    const source = async () => file || (buf ??= await archive.read(item.path, name));
+    if (want || convert) {
+      let small = true;
+      if (want && !convert) {
+        const size = file ? await archive.fileImageSize(file) : archive.imageSize(await source());
+        small = !size || size[0] > want * 1.15;
+      }
+      if (small) {
+        const out = cacheDir('pages', `${item.id}-${item.mtime}`, `${n}-w${want || 'full'}.jpg`);
+        if (!fs.existsSync(out)) await once(out, async () => shrink(await source(), out, want || 2400));
+        return sendFile(req, res, out, keep);
+      }
+    }
+    if (file) return sendFile(req, res, file, { cache: keep.cache, type: archive.mimeOf(name) });
+    await source();
+    res.writeHead(200, { 'Content-Type': archive.mimeOf(name), 'Content-Length': buf.length, 'Cache-Control': keep.cache });
     res.end(req.method === 'HEAD' ? undefined : buf);
+  });
+
+  // Every page's width and height, for laying out two-page spreads and the vertical scroll before the pictures arrive.
+  r.get('/api/read/:id/pages', async ({ params }) => {
+    const item = await readable(params.id);
+    if (item.kind === 'book' && item.container !== 'pdf') throw new HttpError(404, 'Not found');
+    return { sizes: await pageSizes(item) };
   });
 
   // EPUB contents, file by file. Scripts inside books never run.
