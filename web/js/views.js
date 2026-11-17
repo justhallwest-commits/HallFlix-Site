@@ -42,7 +42,7 @@ function shelfCard(it, read = false) {
 export function cardHtml(it, { wide = false, read = false } = {}) {
   if (SHELF.has(it.kind)) return shelfCard(it, read);
   const ep = it.kind === 'episode';
-  const art = wide || ep ? it.backdrop || it.poster : it.poster;
+  const art = wide || ep ? it.thumb || it.backdrop || it.poster : it.poster;
   const pct = it.progress && !it.progress.watched && it.progress.duration ? Math.min(100, (it.progress.position / it.progress.duration) * 100) : 0;
   const left = pct ? `${fmtRuntime(it.progress.duration - it.progress.position)} left` : '';
   const title = ep ? it.show.title : it.title;

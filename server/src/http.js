@@ -34,9 +34,10 @@ export function readBody(req, limit = 2e6) {
 }
 
 export async function readJson(req) {
+  if (req.hfJson !== undefined) return req.hfJson; // read once, so the server can look at a body before the route does
   const raw = await readBody(req);
-  if (!raw.length) return {};
-  try { return JSON.parse(raw.toString('utf8')); } catch { throw new HttpError(400, 'Invalid JSON'); }
+  if (!raw.length) return (req.hfJson = {});
+  try { return (req.hfJson = JSON.parse(raw.toString('utf8'))); } catch { throw new HttpError(400, 'Invalid JSON'); }
 }
 
 /** Serve a file with ETag and byte-range support (what video players need to seek). */

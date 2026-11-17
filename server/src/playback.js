@@ -9,7 +9,7 @@ import { q, q1, getSetting } from './db.js';
 import { HttpError, readJson, sendFile, json } from './http.js';
 import { run } from './probe.js';
 import { card, img } from './catalog.js';
-import { inRange } from './look.js';
+import * as prerolls from './prerolls.js';
 
 const DEFAULT_CAPS = { containers: ['mp4'], video: ['h264'], video10: [], audio: ['aac', 'mp3'], hlsHevc: false, audioSwitch: false, maxHeight: 0 };
 const HLS_AUDIO_COPY = ['aac', 'mp3', 'ac3', 'eac3'];
@@ -53,33 +53,7 @@ export function decide(media, caps = {}, opt = {}) {
     reason: tooTall ? `resized to ${height}p` : !c.video.includes(v.codec) ? `video converted from ${v.codec}` : `${v.bitDepth}-bit video converted` };
 }
 
-/** Choose pre-roll clips for a title. Pure, so the rules can be tested without a database. */
-export function pickPrerolls(rules, clips, target, settings = {}, date = new Date(), rnd = Math.random) {
-  if (settings.enabled === false) return [];
-  const max = settings.max ?? 2;
-  const out = [];
-  const lower = (list) => (list || []).map((x) => String(x).toLowerCase());
-  for (const rule of [...rules].sort((x, y) => x.position - y.position || x.id - y.id)) {
-    if (!rule.enabled || out.length >= max) continue;
-    const m = rule.match || {};
-    if (m.kinds?.length && !m.kinds.includes(target.kind)) continue;
-    if (m.libraries?.length && !m.libraries.map(Number).includes(target.library_id)) continue;
-    if (m.genres?.length && !lower(m.genres).some((g) => lower(target.genres).includes(g))) continue;
-    if (m.ratings?.length && !lower(m.ratings).includes(String(target.rating || '').toLowerCase())) continue;
-    if (m.from && m.to && !inRange(m.from, m.to, date)) continue;
-    const sel = rule.clips || { mode: 'all' };
-    let pool = clips.filter((cl) => !out.includes(cl) && (
-      sel.mode === 'pick' ? (sel.ids || []).map(Number).includes(cl.id)
-        : sel.mode === 'tag' ? cl.tags.includes(String(sel.tag || '').toLowerCase())
-          : true));
-    for (let n = 0; n < (rule.count || 1) && pool.length && out.length < max; n++) {
-      const pick = pool[Math.floor(rnd() * pool.length)];
-      out.push(pick);
-      pool = pool.filter((x) => x !== pick);
-    }
-  }
-  return out;
-}
+export { pickPrerolls } from './prerolls.js';
 
 const LANG = { eng: 'English', en: 'English', spa: 'Spanish', es: 'Spanish', fre: 'French', fra: 'French', fr: 'French', ger: 'German', deu: 'German', de: 'German',
   ita: 'Italian', it: 'Italian', jpn: 'Japanese', ja: 'Japanese', kor: 'Korean', ko: 'Korean', por: 'Portuguese', pt: 'Portuguese', chi: 'Chinese', zho: 'Chinese', zh: 'Chinese',
@@ -131,22 +105,16 @@ export function routes(r) {
   r.post('/api/play', async ({ profile, req }) => {
     const body = await readJson(req);
     const item = await q1(
-      `select i.*, s.title as show_title, s.genres as show_genres, s.rating as show_rating, s.backdrop as show_backdrop, s.logo as show_logo
+      `select i.*, s.title as show_title, s.genres as show_genres, s.studios as show_studios, s.rating as show_rating, s.backdrop as show_backdrop, s.logo as show_logo
        from items i left join items s on s.id = i.show_id where i.id=$1`, [body.itemId]);
     if (!item || !item.path || !['movie', 'episode', 'clip'].includes(item.kind)) throw new HttpError(404, 'Nothing to play');
     const prog = await q1('select position_s, watched from progress where profile_id=$1 and item_id=$2', [profile.id, item.id]);
     // Movie night: the full programme from the top, whatever was watched before.
     const resumeAt = body.cinema ? 0 : body.start != null ? +body.start : prog && !prog.watched && prog.position_s > 20 ? prog.position_s : 0;
     const queue = [];
-    const settings = await getSetting('prerolls', {});
-    if (item.kind !== 'clip' && body.prerolls !== false && (resumeAt < 60 || settings.onResume)) {
-      const rules = await q('select * from preroll_rules');
-      if (rules.length) {
-        const clips = await q(`select * from items where kind='clip' order by id`);
-        const target = { kind: item.kind, library_id: item.library_id, genres: item.genres?.length ? item.genres : item.show_genres, rating: item.rating || item.show_rating };
-        for (const clip of pickPrerolls(rules, clips, target, settings)) {
-          try { queue.push(await entryFor(clip, body.caps, {}, 'preroll')); } catch { /* unplayable clip: skip it */ }
-        }
+    if (item.kind !== 'clip' && body.prerolls !== false) {
+      for (const clip of await prerolls.forPlay(profile, item, resumeAt)) {
+        try { queue.push(await entryFor(clip, body.caps, {}, 'preroll')); } catch { /* unplayable clip: skip it */ }
       }
     }
     // The HallFlix ident (a logo card) plays last before the feature. An uploaded video reaches every app;

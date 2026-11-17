@@ -32,6 +32,7 @@ export function card(r) {
     poster: img(ep ? r.show_poster : r.poster, 'w342'),
     backdrop: img(r.backdrop || r.show_backdrop, 'w780'),
     logo: img(r.logo || r.show_logo, 'w500'),
+    thumb: r.extra?.thumb ? img(r.extra.thumb, 'w780') : undefined,
     show: ep ? { id: r.show_id, title: r.show_title, season: r.season_no, episode: r.episode_no } : undefined,
     progress: r.position_s != null ? { position: r.position_s, duration: r.duration_s || r.runtime_s || 0, watched: !!r.watched } : undefined,
     author: r.author || undefined, pages: r.pages ?? undefined, number: r.extra?.number ?? undefined, count: r.child_count ?? undefined,
@@ -157,7 +158,7 @@ export function routes(r) {
     };
   });
 
-  r.get('/api/library/:id', async ({ profile, params, query }) => {
+  r.get('/api/library/:id', async ({ profile, params, query, hidden }) => {
     const lib = await q1('select id, name, kind from libraries where id=$1', [params.id]);
     if (!lib || lib.kind === 'prerolls') throw new HttpError(404, 'Library not found');
     // Music lists albums, artists or songs.
@@ -172,6 +173,7 @@ export function routes(r) {
     const args = [profile.id, lib.id, kind];
     let where = 'i.library_id = $2 and i.kind = $3';
     if (query.genre) { args.push(query.genre); where += ` and $${args.length} = any(i.genres)`; }
+    if (hidden?.size) { args.push([...hidden.keys()]); where += ` and not (i.id = any($${args.length}::bigint[]))`; } // pages and counts stay right
     const total = (await q1(`select count(*)::int as n from items i where ${where.replace(/\$(\d)/g, (_, n) => `$${n - 1}`)}`, args.slice(1))).n;
     const limit = Math.min(+query.limit || 60, kind === 'track' ? 500 : 200), offset = +query.offset || 0;
     const items = await q(`select ${SEL}, ${COUNT}, al.title as album_title, al.poster as album_poster ${FROM} left join items al on al.id = i.parent_id and i.kind = 'track'

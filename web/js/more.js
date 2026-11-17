@@ -96,7 +96,7 @@ async function startSaver() {
   if (saver || mode === 'off' || (mode === 'tv' && !tv()) || !state.profile || state.preview || document.hidden) return;
   if (!$('#player').hidden || !$('#reader').hidden || document.body.classList.contains('music-on') && !tv() || $('.confirm, .surprise')) return arm();
   let list;
-  try { list = (await api('GET', '/api/surprise')).items.filter((x) => x.backdrop); } catch { return; }
+  try { list = (await api('GET', '/api/screensaver')).filter((x) => x.image); } catch { return; }
   if (list.length < 2) return;
   saver = document.createElement('div');
   saver.className = 'saver';
@@ -106,9 +106,9 @@ async function startSaver() {
   const next = () => {
     i = (i + 1) % list.length; layer = 1 - layer;
     const bgs = $$('.sv-bg', saver), it = list[i];
-    bgs[layer].style.backgroundImage = bgUrl(it.backdrop); bgs[layer].classList.add('on'); bgs[1 - layer].classList.remove('on');
-    $('.sv-info b', saver).textContent = it.title;
-    $('.sv-info small', saver).textContent = [it.year, ...(it.genres || []).slice(0, 2)].filter(Boolean).join(' · ');
+    bgs[layer].style.backgroundImage = bgUrl(it.image); bgs[layer].classList.add('on'); bgs[1 - layer].classList.remove('on');
+    $('.sv-info b', saver).textContent = it.title || '';
+    $('.sv-info small', saver).textContent = it.sub || '';
     $('.sv-clock', saver).textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   };
   next();

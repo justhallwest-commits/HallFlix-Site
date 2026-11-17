@@ -17,6 +17,10 @@ import * as look from './look.js';
 import * as plugins from './plugins.js';
 import * as scan from './scan.js';
 import * as tmdb from './tmdb.js';
+import * as guard from './guard.js';
+import * as meta from './meta.js';
+import * as art from './art.js';
+import * as prerollsMod from './prerolls.js';
 import { IMAGE_EXT } from './names.js';
 
 const open = { auth: false };
@@ -80,6 +84,10 @@ manage.routes(r);
 extras.routes(r);
 shelf.routes(r);
 more.routes(r);
+meta.routes(r);
+guard.routes(r);
+art.routes(r);
+prerollsMod.routes(r);
 
 // TMDb artwork, fetched once and then served from the NAS.
 const SIZES = new Set(['w185', 'w300', 'w342', 'w500', 'w780', 'w1280', 'original']);
@@ -117,9 +125,8 @@ r.get('/img/t/:size/:file', async ({ req, res, params }) => {
 // Artwork that lives beside the media or was picked from the NAS.
 r.get('/img/l/:ref', async ({ req, res, params }) => {
   const file = path.resolve(Buffer.from(params.ref, 'base64url').toString('utf8'));
-  const root = path.resolve(cfg.mediaRoot);
   const e = path.extname(file).slice(1).toLowerCase();
-  if (!file.startsWith(root + path.sep) || !(IMAGE_EXT.has(e) || e === 'mp4' || e === 'webm')) throw new HttpError(404, 'Not found');
+  if (!(await art.allowed(file)) || !(IMAGE_EXT.has(e) || e === 'mp4' || e === 'webm')) throw new HttpError(404, 'Not found');
   await sendFile(req, res, file, { cache: 'public, max-age=86400' });
 }, open);
 
@@ -150,8 +157,17 @@ async function handle(req, res) {
         ctx.profile = await auth.authenticate(ctx);
         if (!ctx.profile) throw new HttpError(401, 'Sign in first');
         if (m.opts.admin && !ctx.profile.is_admin) throw new HttpError(403, 'Only an admin can do that');
+        // Content Guard: titles hidden from this profile can't be listed, opened or played.
+        if (!m.opts.admin && !pathname.startsWith('/api/studio/')) {
+          ctx.hidden = await guard.hiddenFor(ctx.profile);
+          if (ctx.hidden) {
+            const body = guard.needsBody(req.method, url.pathname) ? await readJson(req) : null;
+            if (guard.blocked(url.pathname, ctx.params, body, ctx.hidden)) throw new HttpError(404, 'Not found');
+          }
+        }
       }
-      const out = await m.fn(ctx);
+      let out = await m.fn(ctx);
+      if (ctx.hidden?.size && out && typeof out === 'object') out = guard.scrub(out, ctx.hidden);
       if (out !== undefined && !res.headersSent) json(res, 200, out);
       return;
     }

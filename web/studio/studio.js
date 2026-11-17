@@ -1,5 +1,6 @@
 // HallFlix Studio: the admin panel. Every page here talks to /api/studio/* and needs an admin profile.
 import { $, $$, api, html, raw, toast } from '/js/core.js';
+import * as tools from './tools.js';
 
 const root = $('#studio');
 const clone = (o) => JSON.parse(JSON.stringify(o ?? {}));
@@ -23,8 +24,8 @@ const niceDate = (md) => (/^\d\d-\d\d$/.test(md || '') ? `${MONTHS[+md.slice(0, 
 const mins = (s) => (s >= 60 ? `${Math.round(s / 60)} min` : `${Math.round(s || 0)} sec`);
 
 const PAGES = [
-  ['overview', 'Overview'], ['libraries', 'Libraries'], ['home', 'Home screen'], ['collections', 'Collections'], ['look', 'Look and feel'], ['seasons', 'Seasons'],
-  ['prerolls', 'Pre-rolls'], ['profiles', 'Profiles'], ['plugins', 'Plugins'], ['settings', 'Settings'],
+  ['overview', 'Overview'], ['libraries', 'Libraries'], ['artwork', 'Artwork'], ['metadata', 'Metadata'], ['home', 'Home screen'], ['collections', 'Collections'],
+  ['look', 'Look and feel'], ['seasons', 'Seasons'], ['prerolls', 'Pre-rolls'], ['guard', 'Parental controls'], ['profiles', 'Profiles'], ['plugins', 'Plugins'], ['settings', 'Settings'],
 ];
 let timer = null; // the current page's refresh timer, cleared on every page change
 
@@ -147,6 +148,12 @@ async function route() {
 const head = (title, sub, tools = '') => html`<div class="head"><div><h1>${title}</h1><p>${sub}</p></div><div class="tools">${tools}</div></div>`;
 
 const pages = {};
+// The tool pages live in tools.js and borrow these helpers.
+const kit = { head, dialog, confirmBox, fail, debounce, dates, readDate, niceDate, mins, browse };
+pages.artwork = (main) => tools.artwork(main, kit);
+pages.metadata = (main) => tools.metadata(main, kit);
+pages.guard = (main) => tools.guard(main, kit);
+pages.prerolls = (main) => tools.prerolls(main, kit);
 
 // ---------- overview ----------
 pages.overview = async (main) => {
@@ -491,70 +498,6 @@ pages.seasons = async (main) => {
 };
 
 // ---------- pre-rolls ----------
-pages.prerolls = async (main) => {
-  const draw = async () => {
-    const P = await api('GET', '/api/studio/prerolls');
-    const set0 = P.settings;
-    const libName = (id) => P.libraries.find((l) => l.id === +id)?.name || 'a removed library';
-    const describe = (r) => {
-      const m = r.match || {}, bits = [];
-      if (m.kinds?.length === 1) bits.push(m.kinds[0] === 'movie' ? 'movies only' : 'episodes only');
-      if (m.libraries?.length) bits.push(`in ${m.libraries.map(libName).join(', ')}`);
-      if (m.genres?.length) bits.push(m.genres.join(' or '));
-      if (m.ratings?.length) bits.push(`rated ${m.ratings.join(', ')}`);
-      if (m.from && m.to) bits.push(`${niceDate(m.from)} to ${niceDate(m.to)}`);
-      const what = r.clips?.mode === 'tag' ? `clips tagged “${r.clips.tag}”` : r.clips?.mode === 'pick' ? `${r.clips.ids?.length || 0} chosen clips` : 'any clip';
-      return `Plays ${r.count} from ${what} before ${bits.length ? bits.join(' · ') : 'everything'}`;
-    };
-    main.innerHTML = String(html`${head('Pre-rolls', 'Short clips that play before a movie or episode, the same way on every device. Rules run from top to bottom until the limit is reached.', html`<button class="btn primary" data-new>New rule</button>`)}
-      <div class="card" data-settings><h2>Settings</h2>${check(set0, 'enabled', 'Play pre-rolls')}${range(set0, 'max', 'Most clips per title', 0, 6, 1)}${check(set0, 'onResume', 'Also play them when resuming part-way through')}</div>
-      <div class="card"><h2>Rules</h2>${P.rules.length ? P.rules.map((r, i) => html`<div class="row" data-id="${r.id}"><div class="grow"><b>${r.name} ${r.enabled ? '' : html`<span class="pill">Off</span>`}</b><span>${describe(r)}</span></div>
-        <div class="tools">${i ? html`<button class="btn sm" data-up title="Run earlier">↑</button>` : ''}<button class="btn sm" data-edit>Edit</button><button class="btn sm danger" data-del>Delete</button></div></div>`)
-    : html`<p class="muted">${P.clips.length ? 'No rules yet, so nothing plays. Add a rule to choose which clips play before what.' : 'Add a “Pre-roll clips” library first, then come back to make rules.'}</p>`}</div>
-      <div class="card"><h2>Clips (${P.clips.length})</h2>${P.clips.length ? P.clips.map((c) => html`<div class="row"><div class="grow"><b>${c.title}</b><span>${mins(c.runtime_s)}${c.tags.length ? ` · tags: ${c.tags.join(', ')}` : ''}</span></div></div>`) : html`<p class="muted">No clips found. <a href="#libraries">Add a pre-roll library</a>.</p>`}</div>`);
-    bind($('[data-settings]', main), set0, debounce(async () => { try { await api('PUT', '/api/studio/settings', { prerolls: set0 }); toast('Saved', 1200); } catch (e) { fail(e); } }, 400));
-    const tags = [...new Set(P.clips.flatMap((c) => c.tags))].sort();
-    const form = (r) => {
-      const v = clone(r || { name: '', enabled: true, count: 1, clips: { mode: 'all' }, match: {} });
-      v.match.kinds ||= []; v.match.libraries ||= []; v.match.genres ||= []; v.match.ratings ||= []; v.clips.ids ||= [];
-      const boxes = (key, list, label = (x) => x) => html`<div class="checks">${list.map((x) => html`<label class="check"><input type="checkbox" data-multi="${key}" value="${x}" ${get(v, key).map(String).includes(String(x)) ? 'checked' : ''}> ${label(x)}</label>`)}</div>`;
-      const d = dialog(r ? `Edit ${r.name}` : 'New pre-roll rule', html`${text(v, 'name', 'Name', 'Halloween bumpers')}${check(v, 'enabled', 'Rule is on')}${range(v, 'count', 'Clips to play', 1, 6, 1)}
-        <h3 style="margin:14px 0 6px">Which clips</h3>
-        <label class="f"><span>Choose from</span><select data-path="clips.mode"><option value="all" ${v.clips.mode === 'all' ? 'selected' : ''}>Any clip</option><option value="tag" ${v.clips.mode === 'tag' ? 'selected' : ''}>Clips with a tag</option><option value="pick" ${v.clips.mode === 'pick' ? 'selected' : ''}>Clips I pick</option></select></label>
-        <div data-show="tag">${tags.length ? html`<label class="f"><span>Tag</span><select data-path="clips.tag">${tags.map((t) => html`<option ${v.clips.tag === t ? 'selected' : ''}>${t}</option>`)}</select></label>` : html`<p class="muted small">No tags yet. Put clips in a sub-folder to tag them.</p>`}</div>
-        <div data-show="pick">${boxes('clips.ids', P.clips.map((c) => c.id), (id) => P.clips.find((c) => c.id === id).title)}</div>
-        <h3 style="margin:14px 0 6px">Before what (leave empty for everything)</h3>
-        <div class="f"><span>Type</span>${boxes('match.kinds', ['movie', 'episode'], (k) => (k === 'movie' ? 'Movies' : 'Episodes'))}</div>
-        ${P.libraries.filter((l) => l.kind !== 'prerolls').length ? html`<div class="f"><span>Library</span>${boxes('match.libraries', P.libraries.filter((l) => l.kind !== 'prerolls').map((l) => l.id), libName)}</div>` : ''}
-        ${P.genres.length ? html`<div class="f"><span>Genre</span>${boxes('match.genres', P.genres)}</div>` : ''}
-        ${P.ratings.length ? html`<div class="f"><span>Rating</span>${boxes('match.ratings', P.ratings)}</div>` : ''}
-        ${check(v, 'dated', 'Only between two dates each year')}<div data-show="dated">${dates('f', 'From', v.match.from)}${dates('t', 'To', v.match.to)}</div>`,
-      { wide: true, onOk: async (el) => {
-        for (const key of ['clips.ids', 'match.kinds', 'match.libraries', 'match.genres', 'match.ratings']) set(v, key, $$(`[data-multi="${key}"]:checked`, el).map((x) => (/ids|libraries/.test(key) ? +x.value : x.value)));
-        if (v.clips.mode === 'tag') v.clips.tag ||= tags[0] || '';
-        if (v.dated) { v.match.from = readDate(el, 'f'); v.match.to = readDate(el, 't'); } else { delete v.match.from; delete v.match.to; }
-        delete v.dated;
-        if (!r) v.position = (P.rules.at(-1)?.position ?? 0) + 1;
-        await api('POST', '/api/studio/prerolls/rules', v); toast('Rule saved'); draw();
-      } });
-      v.dated = !!(v.match.from && v.match.to); $('[data-path=dated]', d.el).checked = v.dated;
-      const show = () => { for (const s of $$('[data-show]', d.el)) s.hidden = s.dataset.show === 'dated' ? !v.dated : v.clips.mode !== s.dataset.show; };
-      bind(d.el, v, show); show();
-    };
-    $('[data-new]', main).onclick = () => form(null);
-    main.onclick = async (e) => {
-      const b = e.target.closest('button'), row = e.target.closest('[data-id]'); if (!b || !row) return;
-      const r = P.rules.find((x) => x.id === +row.dataset.id);
-      try {
-        if (b.hasAttribute('data-edit')) form(r);
-        if (b.hasAttribute('data-del')) confirmBox(`Delete ${r.name}?`, 'The rule is removed. The clips stay.', 'Delete', async () => { await api('DELETE', `/api/studio/prerolls/rules/${r.id}`); draw(); });
-        if (b.hasAttribute('data-up')) { const i = P.rules.indexOf(r); const order = [...P.rules]; [order[i - 1], order[i]] = [order[i], order[i - 1]]; for (const [n, x] of order.entries()) if (x.position !== n + 1) await api('POST', '/api/studio/prerolls/rules', { ...x, position: n + 1 }); draw(); }
-      } catch (err) { fail(err); }
-    };
-  };
-  await draw();
-};
-
 // ---------- profiles ----------
 pages.profiles = async (main) => {
   const COLORS = ['#35d0d0', '#b344d6', '#ff7a3d', '#4ade80', '#ff4d7e', '#e8b84a', '#2a6df4'];

@@ -77,6 +77,14 @@ const MIGRATIONS = [
    create table bookmarks (id serial primary key, profile_id int not null references profiles on delete cascade, item_id bigint not null references items on delete cascade,
      position real not null, label text, created_at timestamptz not null default now());
    create index bookmarks_item on bookmarks (profile_id, item_id);`,
+  // 6: hand edits that survive rescans, the metadata editor's history, and pre-roll play records.
+  `alter table items add column edits jsonb not null default '{}';
+   create table meta_history (id serial primary key, label text not null, changes jsonb not null, undoes int, undone boolean not null default false,
+     created_at timestamptz not null default now());
+   create table preroll_plays (id bigserial primary key, profile_id int references profiles on delete cascade, clip_id bigint references items on delete cascade,
+     item_id bigint references items on delete set null, rule text, played_at timestamptz not null default now());
+   create index preroll_plays_profile on preroll_plays (profile_id, played_at desc);
+   create index preroll_plays_clip on preroll_plays (clip_id);`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {

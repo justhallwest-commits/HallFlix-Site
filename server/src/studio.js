@@ -113,7 +113,7 @@ export function routes(r) {
         scan.scanAll();
       }
     }
-    if (b.prerolls) await setSetting('prerolls', { enabled: b.prerolls.enabled !== false, max: Math.max(0, Math.min(6, +b.prerolls.max || 0)), onResume: !!b.prerolls.onResume });
+    if (b.prerolls) await setSetting('prerolls', { ...(await getSetting('prerolls', {})), enabled: b.prerolls.enabled !== false, max: Math.max(0, Math.min(6, +b.prerolls.max || 0)), onResume: !!b.prerolls.onResume });
     if (b.showProfilesOnLogin !== undefined) await setSetting('showProfilesOnLogin', !!b.showProfilesOnLogin);
     return { ok: true };
   }, admin);
@@ -159,24 +159,6 @@ export function routes(r) {
     const file = insideMedia((await readJson(req)).path);
     return { url: img(`local:${file}`) };
   }, admin);
-
-  // ----- pre-rolls
-  r.get('/api/studio/prerolls', async () => ({
-    settings: { enabled: true, max: 2, onResume: false, ...(await getSetting('prerolls', {})) },
-    rules: await q('select * from preroll_rules order by position, id'),
-    clips: (await q(`select id, title, tags, runtime_s, library_id from items where kind='clip' order by sort_title`)),
-    libraries: await q(`select id, name, kind from libraries order by position, id`),
-    genres: (await q(`select distinct g from items i, unnest(i.genres) g order by g`)).map((x) => x.g),
-    ratings: (await q(`select distinct rating from items where rating is not null and rating <> '' order by rating`)).map((x) => x.rating),
-  }), admin);
-  r.post('/api/studio/prerolls/rules', async ({ req }) => {
-    const b = await readJson(req);
-    if (!b.name?.trim()) throw new HttpError(400, 'Give the rule a name');
-    const vals = [b.name.trim(), b.enabled !== false, +b.position || 0, JSON.stringify(b.clips || { mode: 'all' }), JSON.stringify(b.match || {}), Math.max(1, Math.min(6, +b.count || 1))];
-    if (b.id) return q1('update preroll_rules set name=$1, enabled=$2, position=$3, clips=$4::jsonb, match=$5::jsonb, count=$6 where id=$7 returning *', [...vals, b.id]);
-    return q1('insert into preroll_rules (name, enabled, position, clips, match, count) values ($1,$2,$3,$4::jsonb,$5::jsonb,$6) returning *', vals);
-  }, admin);
-  r.delete('/api/studio/prerolls/rules/:id', async ({ params }) => { await q('delete from preroll_rules where id=$1', [params.id]); return { ok: true }; }, admin);
 
   // ----- profiles
   r.get('/api/studio/profiles', async () => (await q('select * from profiles order by id')).map(publicProfile), admin);

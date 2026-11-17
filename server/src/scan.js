@@ -6,6 +6,8 @@ import { probe } from './probe.js';
 import * as names from './names.js';
 import * as tmdb from './tmdb.js';
 import { scanBooks, scanComics, scanMusic } from './shelf.js';
+import { reapplyEdits } from './meta.js';
+import * as guard from './guard.js';
 
 export const status = { running: false, library: null, phase: '', done: 0, total: 0, errors: [], finishedAt: null };
 const queue = [];
@@ -36,7 +38,9 @@ async function drain() {
       console.error('[scan]', e);
       status.errors.push(String(e.message || e));
     }
+    try { await reapplyEdits(id); } catch (e) { console.error('[scan] hand edits', e); } // locked edits win over what the files say
   }
+  guard.changed();
   Object.assign(status, { running: false, libraryId: null, phase: '', finishedAt: new Date().toISOString() });
 }
 export const idle = () => new Promise((resolve) => { const t = setInterval(() => { if (!status.running) { clearInterval(t); resolve(); } }, 50); });

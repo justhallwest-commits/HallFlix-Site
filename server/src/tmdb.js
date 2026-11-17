@@ -4,7 +4,7 @@ import { getSetting } from './db.js';
 
 export async function tmdbKey() { return (await getSetting('tmdbKey', '')) || ''; }
 
-async function call(pathname, params = {}) {
+export async function call(pathname, params = {}) {
   const key = await tmdbKey();
   if (!key) return null;
   const url = new URL(cfg.tmdbBase + pathname);
