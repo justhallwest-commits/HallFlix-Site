@@ -234,7 +234,7 @@ export function routes(r) {
     return {
       order: home.order || [], hidden: home.hidden || [], announcement: home.announcement || { text: '', link: '' },
       spotlight: (home.spotlight || []).map((id) => spot.find((x) => x.id === id)).filter(Boolean).map((x) => ({ id: x.id, title: x.title, year: x.year, kind: x.kind, poster: img(x.poster, 'w185') })),
-      sections: [['libraries', 'Library tiles'], ['continue', `Continue watching`], ['mylist', 'My List'], ['recent', 'New in each library'], ['top', 'Top rated'], ['collections', 'Collections'], ['genres', 'Genre rows']].map(([id, name]) => ({ id, name })),
+      sections: [['libraries', 'Library tiles'], ['continue', `Continue watching`], ['reading', 'Continue reading'], ['mylist', 'My List'], ['top10', 'Most watched this month'], ['foryou', 'Because you watched and Hidden gems'], ['recent', 'New in each library'], ['top', 'Top rated'], ['collections', 'Collections'], ['genres', 'Genre rows']].map(([id, name]) => ({ id, name })),
       me: profile.name,
     };
   }, admin);

@@ -75,6 +75,20 @@ test('ffmpeg arguments', () => {
   assert.match(hevc, /-tag:v hvc1/); assert.match(hevc, /-hls_segment_type fmp4/);
 });
 
+test('plain-language search understands moods, decades, length and what is unwatched', async () => {
+  const { understand } = await import('../src/more.js');
+  const u = (t) => { const f = understand(t, ['Comedy', 'Mystery', 'Science Fiction', 'Western']); return f && { ...f, genreSets: f.genreSets.map((g) => g[0]) }; };
+  assert.equal(understand('the long signal', []) !== null, true); // "long" reads as a length; the caller checks titles first
+  assert.equal(understand('harbor lights', []), null);
+  let f = u('show me a short funny movie from the 90s');
+  assert.deepEqual([f.kind, f.maxMin, f.from, f.to, f.genreSets, f.rest], ['movie', 100, 1990, 1999, ['Comedy'], '']);
+  f = u('westerns under 2 hours I haven\'t seen');
+  assert.deepEqual([f.maxMin, f.unwatched, f.genreSets, f.labels], [120, true, ['Western'], ['Not watched yet', 'Under 2 hours', 'Western']]);
+  f = u('best mysteries since 2015 with tom hanks');
+  assert.deepEqual([f.best, f.from, f.genreSets, f.rest], [true, 2015, ['Mystery'], 'tom hanks']);
+  assert.deepEqual([u('something from the 2010s').from, u('80s action').from, u("early '00s shows").from], [2010, 1980, 2000]);
+});
+
 test('pre-roll rules', () => {
   const clips = [{ id: 1, tags: [] }, { id: 2, tags: ['halloween'] }, { id: 3, tags: ['kids'] }];
   const movie = { kind: 'movie', library_id: 1, genres: ['Horror', 'Thriller'], rating: 'R' };

@@ -135,7 +135,8 @@ export function routes(r) {
        from items i left join items s on s.id = i.show_id where i.id=$1`, [body.itemId]);
     if (!item || !item.path || !['movie', 'episode', 'clip'].includes(item.kind)) throw new HttpError(404, 'Nothing to play');
     const prog = await q1('select position_s, watched from progress where profile_id=$1 and item_id=$2', [profile.id, item.id]);
-    const resumeAt = body.start != null ? +body.start : prog && !prog.watched && prog.position_s > 20 ? prog.position_s : 0;
+    // Movie night: the full programme from the top, whatever was watched before.
+    const resumeAt = body.cinema ? 0 : body.start != null ? +body.start : prog && !prog.watched && prog.position_s > 20 ? prog.position_s : 0;
     const queue = [];
     const settings = await getSetting('prerolls', {});
     if (item.kind !== 'clip' && body.prerolls !== false && (resumeAt < 60 || settings.onResume)) {
@@ -157,6 +158,9 @@ export function routes(r) {
     const main = await entryFor(item, body.caps, { audio: body.audio, quality: body.quality }, 'main');
     main.resumeAt = resumeAt;
     main.marks = item.marks || {};
+    main.showId = item.show_id || null;
+    const v = (item.streams || []).find((x) => x.type === 'video'), au = (item.streams || []).filter((x) => x.type === 'audio')[main.audioIndex || 0];
+    main.file = { container: item.container, size: item.size, bitrate: item.bitrate, video: v ? `${String(v.codec).toUpperCase()} ${v.width}×${v.height}${v.hdr ? ' HDR' : ''}` : null, audio: au ? `${String(au.codec).toUpperCase()}${au.channels ? ` ${au.channels === 6 ? '5.1' : au.channels === 8 ? '7.1' : au.channels === 2 ? 'stereo' : au.channels + 'ch'}` : ''}` : null };
     main.subtitle = item.kind === 'episode' ? `${item.show_title} · S${item.season_no} E${item.episode_no}` : item.year ? String(item.year) : '';
     main.backdrop = img(item.backdrop || item.show_backdrop, 'w1280');
     main.logo = img(item.kind === 'episode' ? item.show_logo : item.logo, 'w500');

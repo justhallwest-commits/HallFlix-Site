@@ -70,6 +70,13 @@ const MIGRATIONS = [
   // 4: books, comics and music.
   `alter table items add column author text, add column pages int, add column extra jsonb not null default '{}';
    create index items_author on items (library_id, kind, author);`,
+  // 5: playlists and bookmarks.
+  `create table playlists (id serial primary key, profile_id int not null references profiles on delete cascade, name text not null, created_at timestamptz not null default now());
+   create table playlist_items (playlist_id int not null references playlists on delete cascade, item_id bigint not null references items on delete cascade,
+     position int not null default 0, added_at timestamptz not null default now(), primary key (playlist_id, item_id));
+   create table bookmarks (id serial primary key, profile_id int not null references profiles on delete cascade, item_id bigint not null references items on delete cascade,
+     position real not null, label text, created_at timestamptz not null default now());
+   create index bookmarks_item on bookmarks (profile_id, item_id);`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {

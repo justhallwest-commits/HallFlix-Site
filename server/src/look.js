@@ -20,6 +20,9 @@ export const DEFAULT_THEME = {
   heroMotion: 'trailer', // none | pan | trailer: what the spotlight does after a moment
   depth: true, // posters tilt toward the pointer
   sounds: 'off', // off | soft | arcade: navigation sounds
+  previews: true, // a card held in focus opens a larger preview
+  glass: true, // translucent controls that pick up the picture behind them
+  screensaver: 'tv', // off | tv | all: drifting backdrops after a few idle minutes
   profileColors: true, // each profile's colour tints its own session
   ident: { enabled: true, video: '' }, // the HallFlix logo card before a feature; `video` replaces the built-in animation
   night: { enabled: false, from: '20:00', to: '06:00', theme: {} }, // a second look for the evening, by the viewer's clock
@@ -65,6 +68,7 @@ export const OPTIONS = {
   interfaces: ['futuristic', 'classic'],
   heroMotions: ['none', 'pan', 'trailer'],
   sounds: ['off', 'soft', 'arcade'],
+  screensavers: ['off', 'tv', 'all'],
 };
 
 export function merge(base, patch) {

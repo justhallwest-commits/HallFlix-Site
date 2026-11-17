@@ -1,6 +1,7 @@
 // Browsing: home rows, libraries, title pages, search, watch progress and My List.
 import { q, q1, getSetting } from './db.js';
 import { MOODS, collectionCards } from './extras.js';
+import { smartSearch, top10Row, forYouRows, dedupe } from './more.js';
 import { HttpError, readJson } from './http.js';
 
 export function img(ref, size) {
@@ -76,12 +77,13 @@ async function continueRow(pid) {
 }
 
 export function routes(r) {
-  r.get('/api/home', async ({ profile }) => {
+  r.get('/api/home', async ({ profile, query }) => {
     const pid = profile.id;
     const day = new Date().toISOString().slice(0, 10);
     const libs = await q(`select id, name, kind from libraries where kind <> 'prerolls' order by position, id`);
     const home = await getSetting('home', {});
-    const sec = { continue: [], reading: [], mylist: [], recent: [], top: [], genres: [] };
+    const sec = { continue: [], reading: [], mylist: [], top10: [], foryou: await forYouRows(pid), recent: [], top: [], genres: [] };
+    const t10 = await top10Row(pid); if (t10) sec.top10.push(t10);
     const reading = await q(`select ${SEL} ${FROM} where i.kind in ('book','comic') and p.profile_id = $1 and not p.watched and p.position_s > 0 order by p.updated_at desc limit 20`, [pid]);
     if (reading.length) sec.reading.push({ id: 'reading', title: 'Continue reading', items: reading.map(card) });
     const cont = await continueRow(pid);
@@ -103,10 +105,10 @@ export function routes(r) {
     const top = await q(`select ${SEL} ${FROM} where i.kind in ('movie','show') and i.score is not null order by i.score desc, i.id limit 20`, [pid]);
     if (top.length >= 6) sec.top.push({ id: 'top', title: 'Top rated', items: top.map(card) });
     // The Studio's Home layout decides the order of sections and which are hidden.
-    const known = ['libraries', 'continue', 'reading', 'mylist', 'recent', 'top', 'collections', 'genres'];
+    const known = ['libraries', 'continue', 'reading', 'mylist', 'top10', 'recent', 'foryou', 'top', 'collections', 'genres'];
     const order = [...(home.order || []).filter((x) => known.includes(x)), ...known.filter((x) => !(home.order || []).includes(x))];
     const hidden = new Set(home.hidden || []);
-    const rows = [];
+    let rows = [];
     const layout = { tilesAt: -1, collectionsAt: -1 };
     for (const id of order) {
       if (hidden.has(id)) continue;
@@ -114,6 +116,12 @@ export function routes(r) {
       else if (id === 'collections') layout.collectionsAt = rows.length;
       else rows.push(...sec[id]);
     }
+    // Dedupe, then re-point the tile and collection positions at the rows they sat in front of.
+    const before = rows; rows = dedupe(rows);
+    const shift = (at) => (at < 0 ? at : before.slice(0, at).filter((r) => rows.includes(r)).length);
+    layout.tilesAt = shift(layout.tilesAt); layout.collectionsAt = shift(layout.collectionsAt);
+    // Slower TV sticks ask for a lighter Home.
+    if (query.lite) for (const r of rows) r.items = r.items.slice(0, 14);
     let pinned = [];
     if (home.spotlight?.length) {
       const got = await q(`select ${SEL} ${FROM} where i.id = any($2) and i.kind in ('movie','show')`, [pid, home.spotlight]);
@@ -221,6 +229,8 @@ export function routes(r) {
   r.get('/api/search', async ({ profile, query }) => {
     const term = String(query.q || '').trim();
     if (!term) return { items: [] };
+    const direct = await q1(`select 1 from items where kind in ('movie','show','book','series','album','artist') and (title ilike $1 or author ilike $1) limit 1`, [`%${term.replace(/[%_\\]/g, '\\$&')}%`]);
+    if (!direct) { const smart = await smartSearch(profile.id, term); if (smart?.items.length) return smart; }
     const like = `%${term.replace(/[%_\\]/g, '\\$&')}%`;
     const items = await q(
       `select ${SEL}, ${COUNT} ${FROM} where i.kind in ('movie','show','book','series','album','artist') and (i.title ilike $2 or $3 ilike any(i.genres) or i.author ilike $2
@@ -240,6 +250,10 @@ export function routes(r) {
   r.post('/api/progress', async ({ profile, req }) => {
     const { itemId, position, duration, ended } = await readJson(req);
     const it = await q1(`select id, kind, runtime_s from items where id=$1`, [itemId]);
+    if (it?.kind === 'track') { // a played song: remembered for Recently played
+      await q(`insert into progress (profile_id, item_id, position_s, watched, updated_at) values ($1,$2,0,true,now()) on conflict (profile_id, item_id) do update set updated_at=now()`, [profile.id, itemId]);
+      return { ok: true };
+    }
     if (!it || !['movie', 'episode', 'book', 'comic'].includes(it.kind)) return { ok: true };
     const dur = +duration || it.runtime_s || 0;
     const pos = Math.max(0, +position || 0);

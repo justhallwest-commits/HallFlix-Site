@@ -459,6 +459,69 @@ test('skip marks, scrub previews, the ident, evening look, year in review and wa
   assert.equal((await hf.api('GET', '/api/party/ZZZZZZ')).$status, 404);
 });
 
+test('plain-language search, Top 10, the hub, cast pages, TV sign-in by phone and the phone remote', async () => {
+  const search = (q) => hf.api('GET', `/api/search?q=${encodeURIComponent(q)}`);
+  let r = await search('a dark thriller from the 2010s');
+  assert.deepEqual([r.items.map((i) => i.title), r.understood], [['Night Drive'], ['2010s', 'Dark', 'Thriller']]);
+  r = await search('documentaries I haven\'t seen');
+  assert.deepEqual([r.items.map((i) => i.title), r.understood], [['Deep Field'], ['Not watched yet', 'Documentary']]);
+  assert.deepEqual((await search('best sci-fi movies')).understood, ['Movies', 'Top rated', 'Science fiction']);
+  assert.equal((await search('night')).understood, undefined, 'a title match stays an ordinary search');
+  assert.deepEqual((await search('zzzz qqqq')).items, []);
+
+  // Everyone's last 30 days make the Top 10; a finished title seeds "Because you watched".
+  const all = (await hf.api('GET', '/api/home')).rows.filter((x) => x.id.startsWith('recent-')).flatMap((x) => x.items);
+  assert.ok(all.length >= 4);
+  for (const it of all) {
+    const id = it.kind === 'show' ? (await hf.api('GET', `/api/items/${it.id}`)).playId : it.id;
+    await hf.api('POST', '/api/progress', { itemId: id, position: 9, duration: 10, ended: it.title !== 'Quiet Orbit' });
+  }
+  const home = await hf.api('GET', '/api/home');
+  const top = home.rows.find((x) => x.id === 'top10');
+  assert.deepEqual([top.shape, top.items.length], ['ranked', all.length]);
+  assert.ok((await hf.api('GET', '/api/home?lite=1')).rows.every((x) => x.items.length <= 14));
+  const me = await hf.api('GET', '/api/me');
+  assert.ok(me.totals.movies >= 3 && me.rows.some((x) => x.id === 'finished'));
+  const night = (await search('night drive')).items[0];
+  const q0 = (await hf.api('POST', '/api/play', { itemId: night.id, caps: {}, cinema: true })).queue;
+  assert.deepEqual([q0.at(-1).resumeAt, q0.at(-1).file.container], [0, 'mp4']);
+  assert.deepEqual((await hf.api('GET', `/api/chapters/${night.id}`)).chapters, []);
+  await hf.api('POST', '/api/watched', { itemId: night.id, watched: false });
+
+  const d = await hf.api('GET', `/api/items/${night.id}`);
+  if (d.people.length) {
+    const p = await hf.api('GET', `/api/person?name=${encodeURIComponent(d.people[0].name.toUpperCase())}`);
+    assert.ok(p.items.some((i) => i.title === 'Night Drive') && p.items[0].role !== undefined);
+  }
+  assert.equal((await hf.api('GET', '/api/person?name=Nobody%20Here')).$status, 404);
+
+  // A TV asks for a code; a signed-in phone approves it; the TV collects its sign-in once.
+  const anon = (p, init) => fetch(hf.base + p, init);
+  const pair = await (await anon('/api/pair', { method: 'POST' })).json();
+  assert.match(pair.code, /^[A-Z2-9]{6}$/);
+  assert.equal((await (await anon(`/api/pair/${pair.code}?secret=${pair.secret}`)).json()).status, 'waiting');
+  assert.equal((await anon(`/api/pair/${pair.code}?secret=wrong`)).status, 404);
+  assert.equal((await anon(`/api/pair/${pair.code}/approve`, { method: 'POST' })).status, 401, 'approving needs a signed-in profile');
+  assert.ok((await hf.api('GET', `/api/pair/${pair.code.toLowerCase()}/info`)).device);
+  await hf.api('POST', `/api/pair/${pair.code}/approve`);
+  const done = await anon(`/api/pair/${pair.code}?secret=${pair.secret}`);
+  const got = await done.json();
+  assert.deepEqual([got.status, got.profile.name, /hf_token=/.test(done.headers.get('set-cookie'))], ['approved', me.name, true]);
+  assert.equal((await (await anon('/api/boot', { headers: { Authorization: `Bearer ${got.token}` } })).json()).profile.name, me.name);
+  assert.equal((await anon(`/api/pair/${pair.code}?secret=${pair.secret}`)).status, 404, 'a code works once');
+
+  // The phone remote: the playing screen reports in and picks up commands sent to it.
+  assert.deepEqual((await hf.api('POST', '/api/remote/state', { device: 'tv1', name: 'Living room', itemId: night.id, title: 'Night Drive', position: 12, duration: 30, paused: true })).commands, []);
+  const list = await hf.api('GET', '/api/remote/devices');
+  assert.deepEqual(list.map((x) => [x.id, x.name, x.title, x.position, x.paused]), [['tv1', 'Living room', 'Night Drive', 12, true]]);
+  await hf.api('POST', '/api/remote/command', { device: 'tv1', cmd: 'play' });
+  await hf.api('POST', '/api/remote/command', { device: 'tv1', cmd: 'seek', value: 20 });
+  assert.equal((await hf.api('POST', '/api/remote/command', { device: 'tv1', cmd: 'explode' })).$status, 400);
+  assert.deepEqual((await hf.api('POST', '/api/remote/state', { device: 'tv1', name: 'Living room', position: 12, duration: 30 })).commands, [{ cmd: 'play', value: 0 }, { cmd: 'seek', value: 20 }]);
+  await hf.api('POST', '/api/remote/state', { device: 'tv1', closed: true });
+  assert.equal((await hf.api('GET', '/api/remote/devices')).length, 0);
+});
+
 test('admins remove titles from HallFlix, delete files from the NAS, and bring titles back', async () => {
   await hf.api('POST', '/api/studio/scan', {}); await hf.scan.idle();
   const find = async (q) => (await hf.api('GET', `/api/search?q=${encodeURIComponent(q)}`)).items[0];
@@ -649,6 +712,26 @@ test('books, comics and music: scanning, reading and listening', async () => {
   assert.deepEqual(found.items.map((x) => x.kind).sort(), ['album', 'artist']);
   home = await hf.api('GET', '/api/home');
   assert.equal(home.rows.find((r) => r.id === `recent-${libs.music.id}`).shape, 'square');
+
+  // Lyrics beside a song, playlists, Recently played, and bookmarks in a book.
+  const neon = nova.tracks[0];
+  fs.writeFileSync(path.join(media, 'Music', 'Nova Lines', 'Night Drive (2020)', '01 Neon Rain.lrc'), '[ar:Nova Lines]\n[00:01.50]Rain on the glass\n[00:02.75]Lights going past\n[00:00.20]Intro');
+  assert.deepEqual((await hf.api('GET', `/api/lyrics/${neon.id}`)).synced, [{ t: 0.2, text: 'Intro' }, { t: 1.5, text: 'Rain on the glass' }, { t: 2.75, text: 'Lights going past' }]);
+  const none = await hf.api('GET', `/api/lyrics/${nova.tracks[1].id}`);
+  assert.ok(!none.synced && !none.plain);
+  const pl = await hf.api('POST', '/api/playlists', { name: 'Late drive' });
+  assert.equal((await hf.api('POST', `/api/playlists/${pl.id}/tracks`, { add: [nova.tracks[1].id, neon.id, sea.id] })).count, 2, 'only songs go in');
+  assert.deepEqual((await hf.api('GET', `/api/playlists/${pl.id}`)).tracks.map((t) => t.title), ['Afterglow', 'Neon Rain']);
+  await hf.api('POST', `/api/playlists/${pl.id}/tracks`, { remove: [neon.id] });
+  assert.deepEqual((await hf.api('GET', '/api/playlists')).map((p) => [p.name, p.count]), [['Late drive', 1]]);
+  await hf.api('POST', '/api/progress', { itemId: neon.id });
+  const hub = await hf.api('GET', '/api/me');
+  assert.deepEqual([hub.rows.find((x) => x.id === 'played').items.map((a) => a.title), hub.playlists.length], [['Night Drive'], 1]);
+  const bm = await hf.api('POST', `/api/bookmarks/${sea.id}`, { position: 1.25, label: 'The Storm' });
+  assert.deepEqual((await hf.api('GET', `/api/bookmarks/${sea.id}`)).map((b) => [b.position, b.label]), [[1.25, 'The Storm']]);
+  await hf.api('DELETE', `/api/bookmarks/${sea.id}/${bm.id}`);
+  assert.equal((await hf.api('GET', `/api/bookmarks/${sea.id}`)).length, 0);
+  await hf.api('DELETE', `/api/playlists/${pl.id}`);
 
   // A file that disappears takes its album and artist with it.
   fs.rmSync(path.join(media, 'Music', 'Loose'), { recursive: true });
