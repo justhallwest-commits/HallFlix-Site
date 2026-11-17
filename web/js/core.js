@@ -39,6 +39,7 @@ export function toast(text, ms = 3200) {
   const el = document.createElement('div');
   el.className = 'toast'; el.textContent = text;
   $('#toasts').append(el);
+  emit('toast', text);
   setTimeout(() => el.remove(), ms);
 }
 
@@ -126,6 +127,20 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   body.classList.toggle('hero-pan', (t.heroMotion || 'trailer') !== 'none');
   body.classList.toggle('depth', t.depth !== false);
   body.classList.toggle('glass', t.glass !== false);
+  // Light: how glow falls, how focus is outlined, the living light behind the app, and the pointer's light.
+  const one = (v, ok, d) => (ok.includes(v) ? v : d);
+  body.className = body.className.replace(/\b(glow|ring|atm|tiles)-\S+/g, '').trim();
+  body.classList.add(`glow-${one(t.glowStyle, ['neon', 'natural', 'ambient'], 'natural')}`, `ring-${one(t.focusRing, ['glow', 'line', 'aurora'], 'glow')}`);
+  const atm = one(t.atmosphere, ['none', 'aurora', 'leak', 'both'], 'none');
+  if (atm !== 'none') body.classList.add(`atm-${atm}`);
+  body.classList.toggle('plight', t.pointerLight === true);
+  // Library tiles on Home: flat, tilting, or layered 3D with a sheen and a thick edge.
+  const T = t.tiles3d || {};
+  body.classList.add(`tiles-${one(T.style, ['flat', 'tilt', 'layered'], 'layered')}`);
+  body.classList.toggle('tiles-shine', T.shine !== false);
+  body.classList.toggle('tiles-sway', T.sway !== false);
+  root.setProperty('--tile-depth', String(Math.max(0, Math.min(1, T.depth ?? 0.6))));
+  root.setProperty('--tile-thick', `${Math.max(0, Math.min(16, T.thickness ?? 6))}px`);
   const signedOut = !state.profile || !!state.signinPreview;
   const bg = signedOut ? (t.login?.image || t.background?.image) : (lib.background || t.background?.image);
   const dim = signedOut ? (t.login?.dim ?? 0.45) : (lib.dim ?? t.background?.dim ?? 0.6);

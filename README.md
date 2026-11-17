@@ -39,6 +39,16 @@ A self-hosted media service with its own server, web app and design Studio. It r
   everyone can edit their own name, colour, picture and password; admins see when each profile was last active and on how many devices, and can sign
   a profile out everywhere or clear its history.
 - **Ways to browse:** a mood dial, Surprise Me, a timeline by decade, hand-made collections, voice search and a year in review.
+- **Light, depth and sound** (Studio → Look and feel):
+  - **Glow styles:** natural (soft light that falls off and is cast downward, coloured by each poster's artwork), the original sharp neon, or ambient
+    (light only spills underneath); a crisp or travelling "aurora" outline for the title in focus; a slow aurora or film light leak behind the app;
+    and a light that follows the pointer.
+  - **3D library tiles:** like Apple TV's layered icons, the picture, covers and name move at different depths as a tile turns toward the pointer (or
+    sways while it has the remote's focus), with a sliding sheen, a thick edge, and a tile video per library that plays while the tile is in focus.
+  - **Sounds:** six packs (soft, arcade, cinema, glass, sci-fi, or only your own); every sound (moving, choosing, opening, going back, signing in,
+    messages and the ident) can be tested, replaced with an upload, given its own volume or switched off.
+  - **Sign-in music:** songs uploaded or picked from the music library play on the sign-in page, fade in, shuffle if you like, show their name on a
+    small pause button, and fade out as someone signs in.
 - **Cinema touches:** a logo ident before the feature, scrub previews, skip intro, ambient glow and watch parties.
 - **Plugins:** add themes, styles and features from a zip. See [docs/PLUGINS.md](docs/PLUGINS.md).
 
