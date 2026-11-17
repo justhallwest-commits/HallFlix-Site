@@ -2,6 +2,7 @@ package net.hallflix.app
 
 import android.content.Context
 import android.media.MediaCodecInfo
+import android.net.Uri
 import android.media.MediaCodecList
 import android.webkit.CookieManager
 import androidx.media3.exoplayer.audio.AudioCapabilities
@@ -20,12 +21,38 @@ object Server {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("server", url).apply()
     }
 
-    /** "192.168.1.83:8780" → "http://192.168.1.83:8780"; trailing slashes removed. */
+    /**
+     * "192.168.1.83:8780" → "http://192.168.1.83:8780"; "new.hallflix.net" → "https://new.hallflix.net".
+     * A bare name gets https; an IP address, a port or a local name gets http. Trailing slashes removed.
+     */
     fun normalise(raw: String): String {
         var s = raw.trim().trimEnd('/')
         if (s.isEmpty()) return s
-        if (!s.startsWith("http://", true) && !s.startsWith("https://", true)) s = "http://$s"
+        if (!s.startsWith("http://", true) && !s.startsWith("https://", true)) {
+            val host = s.substringBefore('/')
+            val local = host.contains(':') || host.matches(Regex("""\d{1,3}(\.\d{1,3}){3}""")) ||
+                !host.contains('.') || host.endsWith(".local", true) || host.endsWith(".lan", true)
+            s = (if (local) "http://" else "https://") + s
+        }
         return s
+    }
+
+    /** "https://new.hallflix.net/#/home" → "https://new.hallflix.net". */
+    fun origin(url: String): String? {
+        val u = Uri.parse(url)
+        val scheme = u.scheme?.lowercase() ?: return null
+        if (scheme != "http" && scheme != "https") return null
+        val host = u.host ?: return null
+        return "$scheme://$host" + (if (u.port != -1) ":${u.port}" else "")
+    }
+
+    /** Is this link part of the HallFlix server? Same host on http or https (or a subdomain of it) counts. */
+    fun sameSite(server: String, link: Uri): Boolean {
+        val scheme = link.scheme?.lowercase()
+        if (scheme != "http" && scheme != "https") return false
+        val home = Uri.parse(server).host?.lowercase() ?: return false
+        val host = link.host?.lowercase() ?: return false
+        return host == home || host.endsWith(".$home")
     }
 
     /** The sign-in token the web app stored as a cookie, so the native player acts as the same profile. */

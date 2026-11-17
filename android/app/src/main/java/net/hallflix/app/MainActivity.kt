@@ -62,15 +62,21 @@ class MainActivity : Activity() {
         web.addJavascriptInterface(Bridge(), "HallFlixNative")
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val url = request.url.toString()
-                if (url.startsWith(server)) return false
+                // Anything on the HallFlix server stays in the app, even after an http → https redirect.
+                if (Server.sameSite(server, request.url)) return false
                 // Trailers and other outside links open in another app, if there is one.
-                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (e: Exception) { /* nothing can open it */ }
+                try { startActivity(Intent(Intent.ACTION_VIEW, request.url)) } catch (e: Exception) { /* nothing can open it */ }
                 return true
             }
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) { loadFailed = false }
             override fun onPageFinished(view: WebView, url: String) {
                 if (loadFailed) return
+                // If the server sent us somewhere else on the same site (usually http → https), remember that address.
+                val landed = Server.origin(url)
+                if (landed != null && landed != server && Server.sameSite(server, Uri.parse(url))) {
+                    server = landed
+                    Server.save(this@MainActivity, landed)
+                }
                 web.visibility = View.VISIBLE
                 splash.visibility = View.GONE
                 panel.visibility = View.GONE

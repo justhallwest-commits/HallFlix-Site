@@ -42,8 +42,8 @@ jobs:
 
   apps:
     # The Android APK (Fire TV, Android TV, phones) and the Roku channel, published to the "apps" release.
+    # Pull requests build it too, so a change that breaks the app shows up before merge; only main publishes.
     needs: test
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:
@@ -53,6 +53,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "8.7" }
       - name: Signing key
+        if: github.event_name == 'push'
         env:
           KEYSTORE_B64: ${{ secrets.HALLFLIX_KEYSTORE_B64 }}
           KEYSTORE_PASSWORD: ${{ secrets.HALLFLIX_KEYSTORE_PASSWORD }}
@@ -75,6 +76,7 @@ jobs:
           npx --yes brighterscript@0.65 --rootDir roku --createPackage false
           (cd roku && zip -qr ../hallflix-roku.zip manifest source components images)
       - name: Publish to the apps release
+        if: github.event_name == 'push'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk hallflix.apk
