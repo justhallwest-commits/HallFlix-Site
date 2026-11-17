@@ -643,7 +643,7 @@ export function login(boot) {
     if (!preview) $('.who button')?.focus();
   };
   // The logo sits outside the box, so it can go above it, inside its panel, in a corner, or nowhere.
-  app().innerHTML = String(html`<div class="login signin"><div class="stack"><img class="brand" src="${logoUrl()}" alt=""><div class="box"></div></div></div>`);
+  app().innerHTML = String(html`<div class="login signin"><div class="side-fade" aria-hidden="true"></div><div class="stack"><img class="brand" src="${logoUrl()}" alt=""><div class="box"></div></div></div>`);
   styleLogin();
   if (tiles) picker(); else formFor(null);
 }

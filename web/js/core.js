@@ -161,19 +161,25 @@ export function styleLogin(t = themeNow()) {
   // In the side-panel layout the box fills a full-height panel, so it sits on the panel's side.
   const x = split ? side : pick(L.x, ['left', 'center', 'right'], 'center'), y = pick(L.y, ['top', 'middle', 'bottom'], 'middle');
   Object.assign(el.dataset, { x, y, layout: split ? 'split' : 'floating', logo: pick(L.logoPlace, ['above', 'inside', 'corner', 'hidden'], 'above'), panel: split ? 'none' : pick(L.panel, ['none', 'glass', 'solid'], 'none'),
-    tiles: pick(L.tileShape, ['theme', 'rounded', 'circle', 'square'], 'theme'), buttons: pick(L.buttons, ['links', 'outlined', 'filled'], 'links'), divider: L.divider === false ? 'no' : 'yes', motion: L.tileMotion === false ? 'still' : 'tilt' });
+    tiles: pick(L.tileShape, ['theme', 'rounded', 'circle', 'square'], 'theme'), buttons: pick(L.buttons, ['links', 'outlined', 'filled'], 'links'),
+    // The panel's edge: a line, nothing, or a soft fade into the picture. (Older looks only had the line on or off.)
+    edge: pick(L.sideEdge, ['line', 'none', 'fade'], L.divider === false ? 'none' : 'line'), motion: L.tileMotion === false ? 'still' : 'tilt' });
   const s = el.style;
   const w = Math.max(20, Math.min(70, +L.sideWidth || 33));
   s.setProperty('--side-w', `${w}vw`);
   const sc = /^#[0-9a-f]{6}$/i.test(L.sideColor || '') ? rgb(L.sideColor) : null;
   s.setProperty('--side-rgb', sc || 'var(--bg-rgb)');
-  s.setProperty('--side-op', String(Math.max(0.2, Math.min(1, L.sideOpacity ?? 0.96))));
+  s.setProperty('--side-op', String(Math.max(0, Math.min(1, L.sideOpacity ?? 0.96))));
+  s.setProperty('--side-blur', `${Math.max(0, Math.min(40, +L.sideBlur || 0))}px`);
+  s.setProperty('--fade-w', `${Math.max(4, Math.min(45, +L.fadeWidth || 18))}vw`);
   s.setProperty('--tile-size', `${Math.max(56, Math.min(220, +L.tileSize || 132))}px`);
   s.setProperty('--tile-cols', +L.tileColumns > 0 ? `repeat(${Math.min(8, +L.tileColumns)}, var(--tile-size))` : '');
   el.classList.toggle('fixed-cols', +L.tileColumns > 0);
   // The background picture moves into the space beside the panel, so the panel doesn't hide it.
-  root.classList.toggle('signin-split-left', split && side === 'left');
-  root.classList.toggle('signin-split-right', split && side === 'right');
+  // The picture sits beside the panel, or fills the screen behind it (for a see-through or frosted panel).
+  const beside = split && L.sidePicture !== 'behind';
+  root.classList.toggle('signin-split-left', beside && side === 'left');
+  root.classList.toggle('signin-split-right', beside && side === 'right');
   root.style.setProperty('--side-w', `${w}vw`);
   s.setProperty('--logo-size', `${Math.max(30, Math.min(360, +L.logoSize || 150))}px`);
   s.setProperty('--lp-op', String(Math.max(0, Math.min(1, L.panelOpacity ?? 0.72))));
