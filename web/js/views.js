@@ -7,6 +7,7 @@ import * as more from './more.js';
 import * as comics from './comics.js';
 import * as profileEdit from './profile.js';
 import * as ratings from './ratings.js';
+import * as backdrop from './backdrop.js';
 
 export const extraRows = []; // rows added by plugins through HallFlix.addHomeRow()
 const app = () => $('#app');
@@ -312,7 +313,7 @@ async function library(id) {
       : [['title', 'A to Z'], ['added', 'Recently added'], ['year', 'Newest first'], ['score', 'Top rated']];
   view().innerHTML = String(html`<div class="page"><div class="lib-head">
       ${lk.logo ? html`<img class="lib-logo" src="${lk.logo}" alt="${lib?.name || ''}">` : html`<h1>${lib?.name || 'Library'}</h1>`}
-      <span class="count"></span>
+      <span class="count"></span>${backdrop.button(lib)}
       <select data-sort aria-label="Sort">${sorts.map(([v, n]) => html`<option value="${v}">${n}</option>`)}</select>
     </div><div class="chips"></div><div class="grid"></div><div class="sentinel" style="height:1px"></div></div>`);
   $('[data-sort]').value = base.sort;
@@ -331,7 +332,7 @@ async function videoLibrary(lib, lk) {
   const home = base.tab === 'home';
   const bar = html`<div class="vlib-bar">${lk.logo ? html`<img class="lib-logo" src="${lk.logo}" alt="${lib.name}">` : html`<h1>${lib.name}</h1>`}
     <div class="tabs" role="tablist">${TABS.map(([k, n]) => html`<button role="tab" data-tab="${k}" aria-selected="${base.tab === k}" class="${base.tab === k ? 'on' : ''}">${n}</button>`)}</div>
-    <span class="count"></span></div>`;
+    <span class="count"></span>${backdrop.button(lib)}</div>`;
   if (home) {
     let d;
     try { d = await api('GET', `/api/videos/${lib.id}${document.body.classList.contains('tv') ? '?lite=1' : ''}`); } catch (e) { toast(e.message); return; }

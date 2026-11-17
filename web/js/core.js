@@ -132,7 +132,11 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   const layer = $('#backdrop');
   layer.classList.toggle('has-image', !!bg);
   root.setProperty('--bg-dim', String(dim));
-  root.setProperty('--bg-blur', `${+t.background?.blur || 0}px`);
+  root.setProperty('--bg-blur', `${+(signedOut ? t.background?.blur : lib.blur ?? t.background?.blur) || 0}px`);
+  // How the darkening is laid on (even, fading down, spotlight, accent tint) and which part of the picture stays in view.
+  const shade = signedOut ? 'even' : lib.shade || t.background?.shade || 'even';
+  layer.dataset.shade = ['even', 'fade', 'spot', 'tint'].includes(shade) ? shade : 'even';
+  root.setProperty('--bg-pos', { top: 'center top', bottom: 'center bottom' }[signedOut ? '' : lib.position || t.background?.position] || 'center');
   const vid = $('video', layer);
   if (bg && isVideo(bg)) {
     root.setProperty('--bg-image', 'none');
