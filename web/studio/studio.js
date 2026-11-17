@@ -39,6 +39,8 @@ const select = (o, p, label, options, blank) => html`<label class="f"><span>${la
   ${blank ? html`<option value="">${blank}</option>` : ''}${options.map((x) => html`<option value="${x}" ${get(o, p) === x ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`)}</select></label>`;
 const choose = (o, p, label, options, blank) => html`<label class="f"><span>${label}</span><select data-path="${p}">${blank ? html`<option value="">${blank}</option>` : ''}
   ${options.map(([v, n]) => html`<option value="${v}" ${String(get(o, p) ?? '') === String(v) ? 'selected' : ''}>${n}</option>`)}</select></label>`;
+const BG_SHADES = [['even', 'Even'], ['fade', 'Fade down'], ['spot', 'Spotlight'], ['tint', 'Accent tint']];
+const BG_PLACES = [['center', 'Middle'], ['top', 'Top'], ['bottom', 'Bottom']];
 const COVER_PLACES = [['br', 'Bottom right'], ['mr', 'Middle right'], ['tr', 'Top right'], ['bc', 'Bottom centre'], ['tc', 'Top centre'], ['tl', 'Top left']];
 /** The covers on a library's Home tile: for the whole app, or one library (where empty means "same as the whole app"). */
 const coversCard = (o, base, lib) => html`<div class="card"><h2>Covers on the Home tile</h2>
@@ -384,6 +386,8 @@ pages.look = async (main) => {
       <div class="tabs"><button data-tab="theme" class="${tab === 'theme' ? 'on' : ''}">Whole app</button>${L.libraries.map((l) => html`<button data-tab="lib-${l.id}" class="${tab === `lib-${l.id}` ? 'on' : ''}">${l.name}</button>`)}</div>
       ${lib ? html`<div class="card" data-form="lib"><h2>${lib.name} only</h2><p class="muted small">Leave anything empty to use the whole-app look.</p>
           ${image(libs[lib.id], 'background', 'Background picture or video')}${range(libs[lib.id], 'dim', 'Darken background', 0, 0.95, 0.05, theme.background.dim)}
+          ${range(libs[lib.id], 'blur', 'Blur background', 0, 30, 1, theme.background.blur || 0)}${choose(libs[lib.id], 'shade', 'Shade', BG_SHADES, 'Same as whole app')}${choose(libs[lib.id], 'position', 'Keep in view', BG_PLACES, 'Same as whole app')}
+          <p class="muted small">You can also change this on the ${lib.name} page itself: admins see a picture button next to the library name.</p>
           ${image(libs[lib.id], 'logo', 'Logo shown instead of the library name')}
           ${check(libs[lib.id], 'useAccent', 'Give this library its own accent colours')}
           ${libs[lib.id].useAccent ? html`${color(libs[lib.id], 'accent', 'Accent')}${color(libs[lib.id], 'accent2', 'Second accent')}` : ''}</div>
@@ -394,7 +398,7 @@ pages.look = async (main) => {
         <div class="card"><h2>Type and shape</h2>${select(theme, 'interface', 'Interface style', L.options.interfaces)}${select(theme, 'fonts.display', 'Title font', L.options.fonts)}${select(theme, 'fonts.body', 'Reading font', L.options.fonts)}
           ${range(theme, 'radius', theme.interface === 'classic' ? 'Card corners' : 'Corner cut', 0, 28, 1)}${range(theme, 'glow', 'Neon glow', 0, 1, 0.05)}${select(theme, 'cardShape', 'Card shape', L.options.cardShapes)}${range(theme, 'heroHeight', 'Banner height', 40, 100, 5)}</div>
         <div class="card"><h2>Texture and effects</h2>${select(theme, 'texture', 'Texture', L.options.textures)}${select(theme, 'effect', 'Moving effect', L.options.effects)}</div>
-        <div class="card"><h2>Backgrounds</h2>${image(theme, 'background.image', 'Home background picture or video')}${range(theme, 'background.dim', 'Darken', 0, 0.95, 0.05)}${range(theme, 'background.blur', 'Blur', 0, 30, 1)}
+        <div class="card"><h2>Backgrounds</h2>${image(theme, 'background.image', 'Home background picture or video')}${range(theme, 'background.dim', 'Darken', 0, 0.95, 0.05)}${range(theme, 'background.blur', 'Blur', 0, 30, 1)}${choose(theme, 'background.shade', 'Shade', BG_SHADES)}${choose(theme, 'background.position', 'Keep in view', BG_PLACES)}
           ${image(theme, 'login.image', 'Sign-in screen background')}${range(theme, 'login.dim', 'Darken sign-in', 0, 0.95, 0.05)}</div>
         ${coversCard(theme, theme.tileCovers || {}, '')}
         <div class="card"><h2>Motion and sound</h2>

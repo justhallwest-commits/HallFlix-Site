@@ -89,6 +89,13 @@ export function routes(r) {
     if (dir !== lib.path) scan.startScan(lib.id);
     return out;
   }, admin);
+  // Backdrops already in a library, to pick one as the library's background.
+  r.get('/api/studio/libraries/:id/backdrops', async ({ params }) => {
+    const rows = await q(`select distinct on (backdrop) id, title, backdrop from items where library_id=$1 and backdrop is not null
+      and kind not in ('episode','season','track') order by backdrop, added_at desc limit 300`, [params.id]);
+    rows.sort(() => Math.random() - 0.5);
+    return rows.slice(0, 48).map((r) => ({ id: r.id, title: r.title, thumb: img(r.backdrop, 'w300'), url: img(r.backdrop, 'w1280') }));
+  }, admin);
   r.delete('/api/studio/libraries/:id', async ({ params }) => { await q('delete from libraries where id=$1', [params.id]); return { ok: true }; }, admin);
   r.post('/api/studio/scan', async ({ req }) => {
     const b = await readJson(req);

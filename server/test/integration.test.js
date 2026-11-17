@@ -1132,3 +1132,13 @@ test('movies and shows: library front page, filters, ratings from services, and 
     stub.close();
   }
 });
+
+test('a library background: pick from its own backdrops, shade and position, seen by everyone', async () => {
+  const list = await hf.api('GET', `/api/studio/libraries/${lib.movies.id}/backdrops`);
+  assert.ok(Array.isArray(list) && list.length >= 1 && list.every((x) => x.url && x.thumb));
+  const look = { background: list[0].url, dim: 0.35, blur: 4, shade: 'fade', position: 'top' };
+  await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look });
+  const boot = await hf.api('GET', '/api/boot');
+  assert.deepEqual(boot.look.libraries[lib.movies.id], look);
+  await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: {} });
+});
