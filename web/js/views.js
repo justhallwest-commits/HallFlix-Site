@@ -9,6 +9,7 @@ import * as profileEdit from './profile.js';
 import * as ratings from './ratings.js';
 import * as backdrop from './backdrop.js';
 import { startLoginMusic, fadeOutLoginMusic } from './loginmusic.js';
+import { initRows } from './rows.js';
 
 export const extraRows = []; // rows added by plugins through HallFlix.addHomeRow()
 const app = () => $('#app');
@@ -154,6 +155,7 @@ export function shell() {
       <div class="search"><input type="search" placeholder="Titles, people, genres" aria-label="Search" autocomplete="off">${browse.canListen() ? html`<button class="mic" data-mic aria-label="Search by voice" title="Search by voice">${icons.mic}</button>` : ''}</div>
       <button class="avatar" style="${avatarStyle(p)}" aria-label="Profile menu" data-menu>${p.avatar ? html`<img src="${p.avatar}" alt="" style="width:100%;height:100%;border-radius:8px;object-fit:cover">` : p.name[0].toUpperCase()}</button>
     </header><main id="view"></main>`);
+  initRows();
   addEventListener('scroll', () => $('.nav')?.classList.toggle('solid', scrollY > 30), { passive: true });
   let timer;
   $('.search input').addEventListener('input', (e) => {

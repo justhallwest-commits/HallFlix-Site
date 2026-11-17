@@ -1689,3 +1689,30 @@ body.tiles-flat .lib-tile:is(:hover, :focus-visible) { transform: translateY(-3p
 @keyframes eq { from { height: 22%; } to { height: 100%; } }
 @keyframes nudge { 0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); } 50% { box-shadow: 0 0 0 6px rgba(var(--accent-rgb), 0.18); } }
 body.tv .music-btn { font-size: 16px; padding: 12px 20px 12px 16px; backdrop-filter: none; background: rgba(var(--bg-rgb), 0.85); }
+
+/* ---------- Rows kept in check: titles per row, rows per page, a scroll bar, and a scrolling panel ---------- */
+.cap-hide { display: none !important; }
+/* The last tile of a row that was cut short. It stretches to the row's height, so it fits posters, wide stills and squares. */
+.cap-more { flex: none; width: clamp(110px, 10vw, 160px); min-height: 110px; align-self: stretch; display: grid; place-content: center; gap: 4px; text-align: center;
+  border-radius: var(--radius); border: 1px solid rgba(var(--accent-rgb), 0.45); background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.16), rgba(var(--surface-rgb, 22, 18, 43), 0.85));
+  color: var(--text); font: inherit; cursor: pointer; text-decoration: none; transition: transform 0.2s, box-shadow 0.3s, border-color 0.2s; }
+.cap-more b { font-family: var(--font-display); font-size: clamp(26px, 2.6vw, 40px); line-height: 1; color: var(--accent); text-shadow: var(--text-glow); }
+.cap-more span { font-size: 14px; font-weight: 600; color: var(--muted); }
+.cap-more:hover, .cap-more:focus-visible { transform: scale(1.05); border-color: var(--accent); box-shadow: var(--glow-shadow); outline: none; }
+.cap-more:hover span, .cap-more:focus-visible span { color: var(--text); }
+body.ui-hud .cap-more { border-radius: 0; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.cap-rows { display: flex; margin: 4px auto clamp(26px, 4vw, 44px); }
+/* A thin scroll bar under each row, in the accent colour (arrows stay too). */
+body.rows-bar .row > .scroller { scrollbar-width: thin; scrollbar-color: rgba(var(--accent-rgb), 0.75) rgba(var(--text-rgb), 0.08); }
+body.rows-bar .row > .scroller::-webkit-scrollbar { display: block; height: 7px; }
+body.rows-bar .row > .scroller::-webkit-scrollbar-track { background: rgba(var(--text-rgb), 0.08); border-radius: 4px; margin: 0 var(--pad); }
+body.rows-bar .row > .scroller::-webkit-scrollbar-thumb { background: rgba(var(--accent-rgb), 0.75); border-radius: 4px; }
+body.rows-bar .row > .scroller::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+/* The rows in their own panel with its own scroll bar: the page stays short, so the background stays in view. */
+.cap-panel { max-height: var(--rows-panel-h, 60vh); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding-top: 16px; margin-bottom: 24px;
+  scrollbar-width: thin; scrollbar-color: rgba(var(--accent-rgb), 0.75) transparent;
+  -webkit-mask-image: linear-gradient(transparent, #000 16px, #000 calc(100% - 30px), transparent); mask-image: linear-gradient(transparent, #000 16px, #000 calc(100% - 30px), transparent); }
+.cap-panel::-webkit-scrollbar { width: 8px; }
+.cap-panel::-webkit-scrollbar-thumb { background: rgba(var(--accent-rgb), 0.7); border-radius: 4px; }
+.cap-panel::-webkit-scrollbar-track { background: rgba(var(--text-rgb), 0.06); border-radius: 4px; }
+body.tv .cap-panel { -webkit-mask-image: none; mask-image: none; }

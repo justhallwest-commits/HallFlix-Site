@@ -303,7 +303,8 @@ pages.home = async (main) => {
   const hidden = new Set(H.hidden), spot = [...H.spotlight], ann = { ...H.announcement };
   const save = debounce(async () => { try { await api('PUT', '/api/studio/home', { order, hidden: [...hidden], spotlight: spot.map((x) => x.id), announcement: ann }); toast('Saved', 1200); } catch (e) { fail(e); } }, 350);
   main.innerHTML = String(html`${head('Home screen', 'Decide what Home shows and in what order. Changes save as you make them and show on every device.')}
-    <div class="card"><h2>Sections, top to bottom</h2><div data-order></div></div>
+    <div class="card"><h2>Sections, top to bottom</h2><div data-order></div>
+      <p class="muted small" style="margin-top:10px">To limit how many titles each section shows, how many sections show before “Show more rows”, or to add a scroll bar, see <a href="#look">Look and feel → Rows on Home and in libraries</a>. It covers every library too.</p></div>
     <div class="card"><h2>Spotlight</h2><p class="muted small" style="margin-bottom:10px">Pin titles to the big banner. They show first, in this order; HallFlix fills the rest with recent additions.</p><div data-spot></div></div>
     <div class="card" data-ann><h2>Announcement</h2><p class="muted small">A banner above the rows, such as “New this week: three more seasons of…”. Leave empty for none.</p>
       ${text(ann, 'text', 'Message', 'New this week…')}${text(ann, 'link', 'Link (optional)', '#/library/1 or https://…')}</div>`);
@@ -439,6 +440,23 @@ const musicCard = (theme) => {
     <p class="muted small">The music fades out as someone signs in, and each device remembers if it was paused there. Web browsers may wait for the first tap or key press before playing sound; the Fire TV and phone apps play it straight away. The preview on the right doesn't start music on its own; press the button on it to try.</p></div>`;
 };
 const studioSong = { a: null, i: -1 };
+/** Rows on Home and in the libraries: for the whole app, or one library (where empty means "same as the whole app"). */
+const ROW_ITEMS = [['6', '6'], ['8', '8'], ['10', '10'], ['12', '12'], ['15', '15'], ['20', '20'], ['0', 'All of them']];
+const ROW_COUNT = [['3', '3'], ['4', '4'], ['5', '5'], ['6', '6'], ['8', '8'], ['10', '10'], ['12', '12'], ['0', 'All of them']];
+const rowsCard = (o, lib, wholePanel = false, wholeHeight = 60) => {
+  const same = lib && 'Same as whole app';
+  const panel = lib ? String(o.rows?.panel ?? '') : '';
+  return html`<div class="card"><h2>${lib ? `Rows in ${lib}` : 'Rows on Home and in libraries'}</h2>
+    <p class="muted small">${lib ? `Keep the ${lib} page tidy. “Same as whole app” follows the Whole app tab.` : 'Keep Home and every library from overflowing, so the background stays in view. Each library’s tab can change any of this for that library.'}</p>
+    ${choose(o, 'rows.items', 'Titles in each row', ROW_ITEMS, same)}
+    <p class="muted small">A longer row ends with a “See all” tile that opens the full list, or “Show all” where there is no list to open.</p>
+    ${choose(o, 'rows.sections', 'Rows on the page before “Show more rows”', ROW_COUNT, same)}
+    ${choose(o, 'rows.scroll', 'Moving along a row', [['arrows', 'Arrows at the ends'], ['bar', 'Arrows and a scroll bar under the row']], same)}
+    ${lib ? choose(o, 'rows.panel', 'Rows in their own scrolling panel', [['no', 'No: the page scrolls'], ['yes', 'Yes: rows scroll inside a panel']], same)
+      : check(o, 'rows.panel', 'Hold the rows in their own scrolling panel, so the page stays short and the background shows')}
+    ${(lib ? panel === 'yes' || (panel === '' && wholePanel) : o.rows?.panel) ? range(o, 'rows.panelHeight', 'Panel height (% of the screen)', 30, 90, 5, wholeHeight) : ''}</div>`;
+};
+
 
 function signinCards(theme) {
   const L = theme.login || {};
@@ -500,7 +518,8 @@ pages.look = async (main) => {
           ${image(libs[lib.id], 'tileVideo', 'Tile video: plays on the Home tile while it is pointed at or in focus (MP4 or WebM, short and silent)')}
           ${check(libs[lib.id], 'useAccent', 'Give this library its own accent colours')}
           ${libs[lib.id].useAccent ? html`${color(libs[lib.id], 'accent', 'Accent')}${color(libs[lib.id], 'accent2', 'Second accent')}` : ''}</div>
-        ${coversCard(libs[lib.id], theme.tileCovers || {}, lib.name)}`
+        ${coversCard(libs[lib.id], theme.tileCovers || {}, lib.name)}
+        ${rowsCard(libs[lib.id], lib.name, !!theme.rows?.panel, theme.rows?.panelHeight ?? 60)}`
     : html`<div class="card"><h2>Start from a preset</h2><div class="presets">${L.presets.map((p) => html`<button class="preset ${theme.preset === p.id ? 'on' : ''}" data-preset="${p.id}" title="${p.description}">${swatch(p.theme, L.defaults)}<b>${p.name}</b></button>`)}</div></div>
         <div data-form="theme">
         <div class="card"><h2>Colours</h2>${color(theme, 'colors.bg', 'Background')}${color(theme, 'colors.surface', 'Panels')}${color(theme, 'colors.text', 'Text')}${color(theme, 'colors.muted', 'Quiet text')}${color(theme, 'colors.accent', 'Accent')}${color(theme, 'colors.accent2', 'Second accent')}</div>
@@ -511,6 +530,7 @@ pages.look = async (main) => {
         <div class="card"><h2>Backgrounds</h2>${image(theme, 'background.image', 'Home background picture or video')}${range(theme, 'background.dim', 'Darken', 0, 0.95, 0.05)}${range(theme, 'background.blur', 'Blur', 0, 30, 1)}${choose(theme, 'background.shade', 'Shade', BG_SHADES)}${choose(theme, 'background.position', 'Keep in view', BG_PLACES)}
           <p class="muted small">The sign-in screen has its own background and layout: see the Sign-in page tab.</p></div>
         ${tilesCard(theme)}
+        ${rowsCard(theme, '')}
         ${coversCard(theme, theme.tileCovers || {}, '')}
         <div class="card"><h2>Motion</h2>
           ${check(theme, 'artColor', 'Colour follows the artwork in focus')}${check(theme, 'depth', 'Posters lean toward the pointer')}
@@ -547,7 +567,7 @@ pages.look = async (main) => {
   // On the Sign-in page tab, some choices show or hide others (panel strength, how dark, where to blur).
   box.addEventListener('change', (e) => { if (tab === 'signin' && e.target.matches('select[data-path^="login."], [data-path="login.focusBlur"]')) draw(); });
   // Choices that show or hide others on the Whole app tab.
-  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"]')) draw(); });
+  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"]')) draw(); });
   // Sounds and sign-in music: test, upload, reorder and remove.
   const touched = (redraw = true) => { dirty = true; if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false; send(); };
   const music = () => { theme.login ||= {}; theme.login.music ||= {}; if (!Array.isArray(theme.login.music.tracks)) theme.login.music.tracks = []; return theme.login.music; };

@@ -49,6 +49,9 @@ A self-hosted media service with its own server, web app and design Studio. It r
     messages and the ident) can be tested, replaced with an upload, given its own volume or switched off.
   - **Sign-in music:** songs uploaded or picked from the music library play on the sign-in page, fade in, shuffle if you like, show their name on a
     small pause button, and fade out as someone signs in.
+- **Tidy rows** (Studio → Look and feel → Rows): limit how many titles each row shows (the last tile becomes “See all”), how many rows show
+  before “Show more rows”, add a scroll bar under each row, or hold the rows in their own scrolling panel so the background stays in view. It applies
+  to Home and every library, and each library can set its own.
 - **Cinema touches:** a logo ident before the feature, scrub previews, skip intro, ambient glow and watch parties.
 - **Plugins:** add themes, styles and features from a zip. See [docs/PLUGINS.md](docs/PLUGINS.md).
 
