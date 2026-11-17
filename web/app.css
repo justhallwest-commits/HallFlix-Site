@@ -1303,3 +1303,15 @@ body.tv .mh-play, body.tv .mh-radio, body.tv .mh-mixplay { display: none; }
   .music-lib .tabs-row::-webkit-scrollbar { display: none; }
   .music-lib .tabs-row .chip { flex: none; }
 }
+
+/* ---------- library tile covers: placed, sized and styled from the Studio ---------- */
+.lib-tile .tile-stack { --edge-x: clamp(12px, 2vw, 26px); --edge-y: clamp(10px, 1.6vw, 20px); right: auto; transform: none;
+  height: var(--cov-h, 56%); aspect-ratio: var(--ar, 1.28); perspective: 700px;
+  left: calc(var(--edge-x) + var(--ax, 1) * (100% - 2 * var(--edge-x)) + var(--cov-x, 0%));
+  top: calc(var(--edge-y) + var(--ay, 1) * (100% - 2 * var(--edge-y)) + var(--cov-y, 0%));
+  translate: calc(var(--ax, 1) * -100%) calc(var(--ay, 1) * -100%); z-index: 1; }
+.lib-tile .tile-stack img { right: calc(var(--i) * 24%); }
+.lib-tile .tile-stack.st-flat img { transform: none; right: calc(var(--i) * 24%); opacity: calc(1 - var(--i) * 0.15); }
+.lib-tile:hover .tile-stack.st-flat img, .lib-tile:focus-visible .tile-stack.st-flat img { transform: translateX(calc(var(--i) * -10%)); }
+.lib-tile .tile-stack.st-fan img { transform-origin: 50% 110%; transform: rotate(calc((var(--i) - (var(--n) - 1) / 2) * -9deg)); right: calc(var(--i) * 12%); opacity: 1; }
+.lib-tile:hover .tile-stack.st-fan img, .lib-tile:focus-visible .tile-stack.st-fan img { transform: rotate(calc((var(--i) - (var(--n) - 1) / 2) * -15deg)); }

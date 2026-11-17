@@ -37,6 +37,21 @@ const range = (o, p, label, min, max, step, def = min) => html`<label class="f">
   <input type="range" data-path="${p}" min="${min}" max="${max}" step="${step}" value="${get(o, p) ?? def}"><output>${get(o, p) ?? def}</output></span></label>`;
 const select = (o, p, label, options, blank) => html`<label class="f"><span>${label}</span><select data-path="${p}">
   ${blank ? html`<option value="">${blank}</option>` : ''}${options.map((x) => html`<option value="${x}" ${get(o, p) === x ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`)}</select></label>`;
+const choose = (o, p, label, options, blank) => html`<label class="f"><span>${label}</span><select data-path="${p}">${blank ? html`<option value="">${blank}</option>` : ''}
+  ${options.map(([v, n]) => html`<option value="${v}" ${String(get(o, p) ?? '') === String(v) ? 'selected' : ''}>${n}</option>`)}</select></label>`;
+const COVER_PLACES = [['br', 'Bottom right'], ['mr', 'Middle right'], ['tr', 'Top right'], ['bc', 'Bottom centre'], ['tc', 'Top centre'], ['tl', 'Top left']];
+/** The covers on a library's Home tile: for the whole app, or one library (where empty means "same as the whole app"). */
+const coversCard = (o, base, lib) => html`<div class="card"><h2>Covers on the Home tile</h2>
+  <p class="muted small">${lib ? `How the covers sit on the ${lib} tile on Home. “Same as whole app” follows the Whole app tab.` : 'The stack of covers on each library’s tile on Home. A library can change any of this on its own tab.'}</p>
+  ${choose(o, 'tileCovers.show', 'Covers', [['yes', 'Show'], ['no', 'Hide']], lib && 'Same as whole app')}
+  ${choose(o, 'tileCovers.place', 'Position', COVER_PLACES, lib && 'Same as whole app')}
+  ${range(o, 'tileCovers.size', 'Size (% of tile height)', 20, 100, 2, base.size)}
+  ${choose(o, 'tileCovers.count', 'How many', [['1', 'One'], ['2', 'Two'], ['3', 'Three']], lib && 'Same as whole app')}
+  ${choose(o, 'tileCovers.style', 'Style', [['angled', 'Angled'], ['flat', 'Flat, side by side'], ['fan', 'Fanned out']], lib && 'Same as whole app')}
+  ${range(o, 'tileCovers.x', 'Move left or right', -40, 40, 1, base.x)}
+  ${range(o, 'tileCovers.y', 'Move up or down', -40, 40, 1, base.y)}
+  <p class="muted small">The two last sliders move the covers from the chosen position, as a share of the tile: negative is left or up.</p>
+  ${lib && o.tileCovers ? html`<button class="btn sm" data-covers-reset>Use the whole-app settings for ${lib}</button>` : ''}</div>`;
 const check = (o, p, label) => html`<label class="check"><input type="checkbox" data-path="${p}" ${get(o, p) ? 'checked' : ''}> ${label}</label>`;
 const image = (o, p, label) => html`<div class="f block"><span>${label}</span><div class="imgrow">
   <div class="thumb" style="background-image:url('${encodeURI(get(o, p) || '')}')"></div>
@@ -371,7 +386,8 @@ pages.look = async (main) => {
           ${image(libs[lib.id], 'background', 'Background picture or video')}${range(libs[lib.id], 'dim', 'Darken background', 0, 0.95, 0.05, theme.background.dim)}
           ${image(libs[lib.id], 'logo', 'Logo shown instead of the library name')}
           ${check(libs[lib.id], 'useAccent', 'Give this library its own accent colours')}
-          ${libs[lib.id].useAccent ? html`${color(libs[lib.id], 'accent', 'Accent')}${color(libs[lib.id], 'accent2', 'Second accent')}` : ''}</div>`
+          ${libs[lib.id].useAccent ? html`${color(libs[lib.id], 'accent', 'Accent')}${color(libs[lib.id], 'accent2', 'Second accent')}` : ''}</div>
+        ${coversCard(libs[lib.id], theme.tileCovers || {}, lib.name)}`
     : html`<div class="card"><h2>Start from a preset</h2><div class="presets">${L.presets.map((p) => html`<button class="preset ${theme.preset === p.id ? 'on' : ''}" data-preset="${p.id}" title="${p.description}">${swatch(p.theme, L.defaults)}<b>${p.name}</b></button>`)}</div></div>
         <div data-form="theme">
         <div class="card"><h2>Colours</h2>${color(theme, 'colors.bg', 'Background')}${color(theme, 'colors.surface', 'Panels')}${color(theme, 'colors.text', 'Text')}${color(theme, 'colors.muted', 'Quiet text')}${color(theme, 'colors.accent', 'Accent')}${color(theme, 'colors.accent2', 'Second accent')}</div>
@@ -380,6 +396,7 @@ pages.look = async (main) => {
         <div class="card"><h2>Texture and effects</h2>${select(theme, 'texture', 'Texture', L.options.textures)}${select(theme, 'effect', 'Moving effect', L.options.effects)}</div>
         <div class="card"><h2>Backgrounds</h2>${image(theme, 'background.image', 'Home background picture or video')}${range(theme, 'background.dim', 'Darken', 0, 0.95, 0.05)}${range(theme, 'background.blur', 'Blur', 0, 30, 1)}
           ${image(theme, 'login.image', 'Sign-in screen background')}${range(theme, 'login.dim', 'Darken sign-in', 0, 0.95, 0.05)}</div>
+        ${coversCard(theme, theme.tileCovers || {}, '')}
         <div class="card"><h2>Motion and sound</h2>
           ${check(theme, 'artColor', 'Colour follows the artwork in focus')}${check(theme, 'depth', 'Posters lean toward the pointer')}
           ${select(theme, 'heroMotion', 'Spotlight', L.options.heroMotions)}<p class="muted small">“Trailer” plays a muted trailer behind the spotlight on computers. “Pan” moves the picture slowly.</p>
@@ -411,7 +428,16 @@ pages.look = async (main) => {
     if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false;
     send();
   });
+  // While the tile covers are being changed, the preview shows Home with the library tiles in view.
+  const showTiles = () => {
+    const sel = $('[data-pv-go]', main), frame = $('iframe', main);
+    if (sel.value !== '#/') { sel.value = '#/'; sel.onchange({ target: sel }); }
+    clearTimeout(showTiles.t);
+    showTiles.t = setTimeout(() => frame.contentWindow?.postMessage({ type: 'hallflix-show', selector: '.libs' }, location.origin), 500);
+  };
+  box.addEventListener('input', (e) => { if (e.target.closest('[data-path^="tileCovers"]')) showTiles(); });
   box.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-covers-reset]') && curLib()) { delete libs[curLib().id].tileCovers; dirty = true; draw(); send(); showTiles(); return; }
     const t = e.target.closest('[data-tab],[data-preset],[data-save],[data-undo]');
     if (!t) return;
     if (t.dataset.tab) {

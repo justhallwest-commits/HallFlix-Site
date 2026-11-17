@@ -156,3 +156,9 @@ test('lyrics: LRC with offsets, repeated stamps and word timing', async () => {
   assert.deepEqual(out[1].words.map((w) => [w.t, w.text]), [[3, 'Word '], [3.5, 'by '], [4, 'word']]);
   assert.deepEqual(parseLrc('[01:02.5]x').map((l) => l.t), [62.5]);
 });
+
+test('looks: tile covers default to the bottom right, and a library can change only what it sets', () => {
+  const out = look.resolve({ theme: { tileCovers: { size: 48 } }, libraries: [{ id: 3, look: { tileCovers: { place: 'tr', style: '', x: '' } } }], seasons: [] });
+  assert.deepEqual(out.theme.tileCovers, { show: 'yes', place: 'br', size: 48, count: 3, style: 'angled', x: 0, y: 0 });
+  assert.deepEqual(out.libraries[3].tileCovers, { place: 'tr' }, 'empty choices mean "same as the whole app"');
+});

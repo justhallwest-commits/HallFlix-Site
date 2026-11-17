@@ -79,6 +79,7 @@ async function boot() {
       if (e.origin !== location.origin || !e.data) return;
       if (e.data.type === 'hallflix-look') applyLook(e.data.look, e.data.library ?? undefined);
       if (e.data.type === 'hallflix-go' && location.hash !== e.data.hash) location.hash = e.data.hash;
+      if (e.data.type === 'hallflix-show' && typeof e.data.selector === 'string') document.querySelector(e.data.selector)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     });
     parent?.postMessage({ type: 'hallflix-ready' }, location.origin);
   }
