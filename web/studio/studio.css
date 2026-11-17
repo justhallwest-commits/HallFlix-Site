@@ -224,3 +224,28 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 .pf-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 640px) { .pf-form { grid-template-columns: 1fr; } }
 .row .grow .pill { display: inline-block; margin-left: 6px; vertical-align: 1px; }
+/* the picture gallery */
+.pf-gallery { margin-top: 18px; }
+.pf-ghead { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
+.pf-ghead > div:first-child { flex: 1; min-width: 260px; }
+.pf-ghead h2 { margin-bottom: 4px; }
+.pf-ghead .tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.pf-gdrop { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px; padding: 14px; border: 2px dashed var(--line); border-radius: 14px; min-height: 120px; transition: border-color .2s, background .2s; }
+.pf-gdrop > p { grid-column: 1 / -1; align-self: center; text-align: center; }
+.pf-gdrop.drop-on { border-color: var(--cyan); background: rgba(53, 208, 208, 0.08); }
+.pf-g { position: relative; aspect-ratio: 1; }
+.pf-g > button:first-child { width: 100%; height: 100%; padding: 0; border: 0; border-radius: 16px; overflow: hidden; cursor: grab; background: var(--panel2); transition: transform .15s, box-shadow .15s; }
+.pf-g > button:first-child:hover, .pf-g > button:first-child:focus-visible { transform: translateY(-2px); box-shadow: 0 0 0 2px var(--cyan); outline: none; }
+.pf-g img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pf-gx { position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--muted); cursor: pointer; font-size: 11px; opacity: 0; transition: opacity .15s; }
+.pf-g:hover .pf-gx, .pf-gx:focus-visible { opacity: 1; } @media (hover: none) { .pf-gx { opacity: 1; } }
+.pf-gx:hover { color: var(--bad); border-color: var(--bad); }
+.pf-tile.drop-on { border-color: var(--cyan); box-shadow: 0 0 0 2px var(--cyan), 0 12px 34px rgba(0,0,0,0.4); transform: scale(1.03); }
+.pf-tile.drop-on::after { content: 'Drop to use this picture'; position: absolute; left: 0; right: 0; bottom: 8px; font-size: 12px; color: var(--cyan); }
+.pf-pick { display: grid; grid-template-columns: 120px 1fr; gap: 18px; align-items: start; }
+.pf-pickimg { width: 120px; height: 120px; border-radius: 20px; object-fit: cover; }
+.pf-pickwho { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.pf-who { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel2); cursor: pointer; text-align: left; }
+.pf-who:hover, .pf-who:focus-visible { border-color: var(--cyan); outline: none; }
+.pf-who .avatar { overflow: hidden; }
+@media (max-width: 560px) { .pf-pick { grid-template-columns: 1fr; } }
