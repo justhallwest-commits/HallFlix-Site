@@ -616,7 +616,9 @@ export function login(boot) {
     box().innerHTML = String(html`<form class="form">${p ? html`<h1 style="text-align:center;margin-bottom:6px">Hi, ${p.name}</h1>` : html`<label>Name<input name="name" autocomplete="username" required></label>`}
       <label>Password or PIN<input name="password" type="password" autocomplete="current-password" ${preview ? '' : raw('required')}></label>
       <div class="err"></div><button class="btn primary">Sign in</button></form>
-      ${tiles ? html`<button class="linkbtn" data-back>Choose a different profile</button>` : ''}<button class="linkbtn" data-pair>Sign in with your phone instead</button>`);
+      <div class="alt">${tiles ? html`<button class="linkbtn" data-back>Choose a different profile</button>` : ''}<button class="linkbtn" data-pair data-default="Sign in with your phone instead">Sign in with your phone instead</button></div>
+      <div class="signin-foot" hidden></div>`);
+    styleLogin();
     $('[data-pair]').onclick = () => (preview ? toast('This is a preview') : more.pairScreen(box(), tiles ? picker : () => formFor(null)));
     const form = $('.login form');
     if (!preview) $(p ? '[name=password]' : '[name=name]', form).focus();
@@ -632,8 +634,10 @@ export function login(boot) {
   const picker = () => {
     box().innerHTML = String(html`<h1 data-login-title></h1>
       <div class="who">${boot.profiles.map((p) => html`<button data-p="${p.id}"><div class="avatar" style="${avatarStyle(p)}">${p.avatar ? html`<img src="${p.avatar}" alt="">` : p.name[0].toUpperCase()}</div>${p.name}</button>`)}</div>
-      <button class="linkbtn" data-pair>Sign in with your phone</button>`);
+      <div class="alt"><button class="linkbtn" data-manual>Sign in with name and password</button><button class="linkbtn" data-pair data-default="Sign in with your phone">Sign in with your phone</button></div>
+      <div class="signin-foot" hidden></div>`);
     styleLogin();
+    $('[data-manual]').onclick = () => formFor(null);
     $('[data-pair]').onclick = () => (preview ? toast('This is a preview') : more.pairScreen(box(), picker));
     for (const b of $$('.who button')) b.onclick = () => formFor(boot.profiles.find((p) => p.id === +b.dataset.p));
     if (!preview) $('.who button')?.focus();

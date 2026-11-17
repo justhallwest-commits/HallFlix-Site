@@ -377,16 +377,30 @@ const WHERE = [['all', 'Everywhere'], ['behind', 'Behind the box'], ['away', 'Ar
 function signinCards(theme) {
   const L = theme.login || {};
   const x = L.x || 'center', y = L.y || 'middle';
-  return html`<div class="card"><h2>Background</h2>${image(theme, 'login.image', 'Sign-in background picture or video')}
+  const split = L.layout === 'split';
+  return html`<div class="card"><h2>Layout</h2>${choose(theme, 'login.layout', 'Layout', [['floating', 'A box over the picture'], ['split', 'A side panel, with the picture beside it']])}
+      ${split ? html`${choose(theme, 'login.side', 'Panel side', [['left', 'Left'], ['right', 'Right']])}${range(theme, 'login.sideWidth', 'Panel width (% of the screen)', 20, 70, 1, 33)}
+        ${color(theme, 'login.sideColor', 'Panel colour (empty uses the theme background)')}${range(theme, 'login.sideOpacity', 'Panel strength', 0.2, 1, 0.02, 0.96)}
+        ${check(theme, 'login.divider', 'Edge line between the panel and the picture')}
+        ${choose(theme, 'login.y', 'Content in the panel', [['top', 'At the top'], ['middle', 'In the middle'], ['bottom', 'At the bottom']])}
+        <p class="muted small">The picture fills the space beside the panel. On phones the panel covers the screen.</p>` : ''}</div>
+    <div class="card"><h2>Background</h2>${image(theme, 'login.image', 'Sign-in background picture or video')}
       ${range(theme, 'login.dim', 'Darken the whole screen', 0, 0.95, 0.05)}${range(theme, 'login.blur', 'Blur the whole picture', 0, 30, 1)}</div>
     <div class="card"><h2>Logo</h2>${choose(theme, 'login.logoPlace', 'Where', LOGO_PLACES)}${range(theme, 'login.logoSize', 'Size (pixels tall)', 40, 340, 5)}
       ${image(theme, 'login.logo', 'A different logo for this page (empty uses the site logo)')}
       ${text(theme, 'login.title', 'Heading over the profiles', 'Who’s watching?')}</div>
-    <div class="card"><h2>Sign-in box</h2>
+    ${split ? '' : html`<div class="card"><h2>Sign-in box</h2>
       <div class="f"><span>Where on the screen</span><div class="posgrid" role="group" aria-label="Where the sign-in box sits">${['top', 'middle', 'bottom'].flatMap((yy) => ['left', 'center', 'right'].map((xx) => html`<button type="button" data-lpos="${xx},${yy}" class="${x === xx && y === yy ? 'on' : ''}" aria-label="${yy} ${xx}" title="${yy === 'middle' ? '' : `${yy} `}${xx === 'center' ? (yy === 'middle' ? 'centre' : 'centre') : xx}"><i></i></button>`))}</div></div>
       ${choose(theme, 'login.panel', 'Panel behind the box', PANELS)}
       ${L.panel && L.panel !== 'none' ? html`${range(theme, 'login.panelOpacity', 'Panel strength', 0.1, 1, 0.05)}${L.panel === 'glass' ? range(theme, 'login.panelBlur', 'Frost (blur behind the panel)', 0, 40, 1) : ''}` : ''}
-      <p class="muted small">On phones the box is always centred.</p></div>
+      <p class="muted small">On phones the box is always centred.</p></div>`}
+    <div class="card"><h2>Profiles and buttons</h2>
+      ${choose(theme, 'login.tileShape', 'Profile picture shape', [['theme', 'Same as the theme'], ['rounded', 'Rounded square'], ['square', 'Square'], ['circle', 'Circle']])}
+      ${check(theme, 'login.tileMotion', 'Profiles lift and tilt when pointed at')}${range(theme, 'login.tileSize', 'Profile picture size (pixels)', 56, 220, 2, 132)}${range(theme, 'login.tileColumns', 'Profiles per row (0 = as many as fit)', 0, 8, 1, 0)}
+      ${choose(theme, 'login.buttons', 'Other ways to sign in', [['links', 'Small links'], ['outlined', 'Full-width outlined buttons'], ['filled', 'Full-width filled buttons']])}
+      ${check(theme, 'login.manualButton', 'Offer “Sign in with name and password” under the profiles')}
+      ${text(theme, 'login.manualLabel', 'Its label', 'Sign in with name and password')}${text(theme, 'login.phoneLabel', 'Label for signing in with a phone', 'Sign in with your phone')}
+      ${text(theme, 'login.footer', 'Note at the bottom', 'Forgot your password? Ask Jus.')}${text(theme, 'login.footerLink', 'Link for the note (optional)', 'https://…')}</div>
     <div class="card"><h2>Make the box stand out</h2>
       ${choose(theme, 'login.darkWhere', 'Darken', [['none', 'Nothing extra'], ...WHERE])}${L.darkWhere && L.darkWhere !== 'none' ? range(theme, 'login.dark', 'How dark', 0.05, 1, 0.05) : ''}
       ${range(theme, 'login.focusBlur', 'Blur', 0, 40, 1)}${+L.focusBlur ? choose(theme, 'login.blurWhere', 'Blur where', WHERE) : ''}
