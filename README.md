@@ -49,8 +49,8 @@ A self-hosted media service with its own server, web app and design Studio. It r
     messages and the ident) can be tested, replaced with an upload, given its own volume or switched off.
   - **Sign-in music:** songs uploaded or picked from the music library play on the sign-in page, fade in, shuffle if you like, show their name on a
     small pause button, and fade out as someone signs in.
-- **Library logos** (Studio → Look and feel): put each library's logo (or name) anywhere on its Home tile with a 3×3 position grid and nudge
-  sliders, resize it, hide the title count, and set the logo's height at the top of the library's own page; for all libraries or one at a time.
+- **Library logos** (Studio → Look and feel): drag each library's logo (or name) to its own spot on a miniature of its Home tile, all tiles
+  in one place under **Logo on each tile**, or use a 3×3 position grid and nudge sliders, resize it, hide the title count, and set the logo's height at the top of the library's own page; for all libraries or one at a time.
 - **Tidy rows** (Studio → Look and feel → Rows): limit how many titles each row shows (the last tile becomes “See all”), how many rows show
   before “Show more rows”, add a scroll bar under each row, or hold the rows in their own scrolling panel so the background stays in view. It applies
   to Home and every library, and each library can set its own.

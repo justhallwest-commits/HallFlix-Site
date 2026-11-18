@@ -55,6 +55,31 @@ const coversCard = (o, base, lib) => html`<div class="card"><h2>Covers on the Ho
   ${range(o, 'tileCovers.y', 'Move up or down', -40, 40, 1, base.y)}
   <p class="muted small">The two last sliders move the covers from the chosen position, as a share of the tile: negative is left or up.</p>
   ${lib && o.tileCovers ? html`<button class="btn sm" data-covers-reset>Use the whole-app settings for ${lib}</button>` : ''}</div>`;
+/** Where a library's tile logo sits, as 0–100% across and down, from any of its settings (a dragged spot, or a place and nudges). */
+const TL_PLACES = { tl: [0, 0], tc: [50, 0], tr: [100, 0], ml: [0, 50], mc: [50, 50], mr: [100, 50], bl: [0, 100], bc: [50, 100], br: [100, 100] };
+function tileSpot(c) {
+  if (c.place === 'free' && Number.isFinite(+c.fx) && Number.isFinite(+c.fy)) return [+c.fx, +c.fy];
+  const [x, y] = TL_PLACES[c.place] || TL_PLACES.bl;
+  return [Math.max(0, Math.min(100, x + (+c.x || 0))), Math.max(0, Math.min(100, y + (+c.y || 0)))];
+}
+const tlStyle = ([x, y], k) => `--ax:${(x / 100).toFixed(3)};--ay:${(y / 100).toFixed(3)};--k:${k};--j:${x < 34 ? 'start' : x > 66 ? 'end' : 'center'}`;
+/** One library's tile in miniature: drag its logo (or name) anywhere, and size it, for that library alone. */
+function tileEditor(l, own, base) {
+  const c = { place: 'bl', size: 100, count: 'yes', ...base, ...(own.tileLogo || {}) };
+  const pic = own.background && !/\.(mp4|webm|m4v|mov)(\?|$)/i.test(own.background) ? own.background : l.art;
+  const k = Math.max(30, Math.min(300, +c.size || 100)) / 100;
+  return html`<div class="tl-edit" data-tl-lib="${l.id}">
+    <div class="tl-tile" style="${pic ? `--bg:url('${encodeURI(pic)}')` : ''}" title="Drag the logo to where it should sit on the ${l.name} tile">
+      <span class="tl-logo" tabindex="0" role="button" aria-label="${l.name} logo: drag, or use the arrow keys, to move it" style="${tlStyle(tileSpot(c), k)}">${own.logo ? html`<img src="${own.logo}" alt="" draggable="false">` : html`<b>${l.name}</b>`}${c.count !== 'no' ? html`<small>Title count</small>` : ''}</span></div>
+    <div class="tl-ctl"><b>${l.name}</b>
+      <label class="tl-size">Size <input type="range" min="30" max="300" step="5" value="${Math.round(k * 100)}" data-tl-size><output>${Math.round(k * 100)}%</output></label>
+      <label class="check sm"><input type="checkbox" data-tl-count ${c.count !== 'no' ? 'checked' : ''}> Count</label>
+      ${own.tileLogo ? html`<button class="btn sm" data-tl-reset title="Follow the Whole app settings again">Reset</button>` : ''}</div></div>`;
+}
+const tilesEditorCard = (libraries, libs, base) => html`<div class="card"><h2>Logo on each tile</h2>
+  <p class="muted small">Every library’s Home tile, each with its own logo position and size. Drag a logo anywhere on its tile (or click it and use the arrow keys), then set its size. Each tile keeps its own spot; the preview shows the Home tiles as you go.</p>
+  <div class="tl-grid">${libraries.map((l) => tileEditor(l, libs[l.id], base))}</div></div>`;
+
 const LOGO_GRID = [['tl', 'Top left'], ['tc', 'Top centre'], ['tr', 'Top right'], ['ml', 'Middle left'], ['mc', 'Centre'], ['mr', 'Middle right'], ['bl', 'Bottom left'], ['bc', 'Bottom centre'], ['br', 'Bottom right']];
 /** The logo (or name) on a library's Home tile, and the logo on its own page: for the whole app, or one library. */
 const logoCard = (o, base, lib) => {
@@ -535,6 +560,7 @@ pages.look = async (main) => {
           ${image(libs[lib.id], 'tileVideo', 'Tile video: plays on the Home tile while it is pointed at or in focus (MP4 or WebM, short and silent)')}
           ${check(libs[lib.id], 'useAccent', 'Give this library its own accent colours')}
           ${libs[lib.id].useAccent ? html`${color(libs[lib.id], 'accent', 'Accent')}${color(libs[lib.id], 'accent2', 'Second accent')}` : ''}</div>
+        <div class="card"><h2>${lib.name} tile</h2><p class="muted small">Drag the logo to where it should sit on the ${lib.name} tile on Home, and set its size.</p>${tileEditor(lib, libs[lib.id], theme.tileLogo || {})}</div>
         ${logoCard(libs[lib.id], theme.tileLogo || {}, lib.name)}
         ${coversCard(libs[lib.id], theme.tileCovers || {}, lib.name)}
         ${rowsCard(libs[lib.id], lib.name, !!theme.rows?.panel, theme.rows?.panelHeight ?? 60)}`
@@ -549,6 +575,7 @@ pages.look = async (main) => {
           <p class="muted small">The sign-in screen has its own background and layout: see the Sign-in page tab.</p></div>
         ${tilesCard(theme)}
         ${rowsCard(theme, '')}
+        ${tilesEditorCard(L.libraries, libs, theme.tileLogo || {})}
         ${logoCard(theme, theme.tileLogo || {}, '')}
         ${coversCard(theme, theme.tileCovers || {}, '')}
         <div class="card"><h2>Motion</h2>
@@ -634,6 +661,57 @@ pages.look = async (main) => {
       }
       if ('trkLib' in d) songPicker((t) => { m.tracks.push(t); m.enabled = true; touched(); });
     } catch (err) { fail(err); }
+  });
+  // Logo on each tile: drag (or arrow keys) to place, a slider to size, for one library at a time.
+  const tlOf = (el) => { const ed = el.closest('[data-tl-lib]'); return ed && { ed, id: +ed.dataset.tlLib, own: libs[+ed.dataset.tlLib] }; };
+  const tlPaint = (t) => {
+    const c = { place: 'bl', size: 100, ...(theme.tileLogo || {}), ...(t.own.tileLogo || {}) };
+    $('.tl-logo', t.ed).setAttribute('style', tlStyle(tileSpot(c), Math.max(30, Math.min(300, +c.size || 100)) / 100));
+  };
+  const tlSet = (t, patch, redraw = false) => {
+    t.own.tileLogo = { ...(t.own.tileLogo || {}), ...patch };
+    if (redraw) { draw(); } else { tlPaint(t); const r = $('[data-tl-reset]', t.ed); if (!r) $('.tl-ctl', t.ed).insertAdjacentHTML('beforeend', '<button class="btn sm" data-tl-reset title="Follow the Whole app settings again">Reset</button>'); }
+    dirty = true; for (const b of $$('.savebar button', box)) b.disabled = false; send(); showTiles();
+  };
+  const tlMove = (t, e) => {
+    const r = $('.tl-tile', t.ed).getBoundingClientRect();
+    const fx = Math.round(Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100)));
+    const fy = Math.round(Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100)));
+    tlSet(t, { place: 'free', fx, fy });
+  };
+  box.addEventListener('pointerdown', (e) => {
+    const tile = e.target.closest('.tl-tile');
+    if (!tile || e.button) return;
+    const t = tlOf(tile);
+    e.preventDefault();
+    tile.setPointerCapture(e.pointerId);
+    tile.classList.add('dragging');
+    $('.tl-logo', t.ed).focus({ preventScroll: true });
+    tlMove(t, e);
+    const move = (ev) => tlMove(t, ev);
+    const up = () => { tile.classList.remove('dragging'); tile.removeEventListener('pointermove', move); tile.removeEventListener('pointerup', up); tile.removeEventListener('pointercancel', up); };
+    tile.addEventListener('pointermove', move); tile.addEventListener('pointerup', up); tile.addEventListener('pointercancel', up);
+  });
+  box.addEventListener('keydown', (e) => {
+    const logo = e.target.closest('.tl-logo');
+    const d = { ArrowLeft: [-2, 0], ArrowRight: [2, 0], ArrowUp: [0, -3], ArrowDown: [0, 3] }[e.key];
+    if (!logo || !d) return;
+    e.preventDefault();
+    const t = tlOf(logo), [x, y] = tileSpot({ place: 'bl', ...(theme.tileLogo || {}), ...(t.own.tileLogo || {}) });
+    const step = e.shiftKey ? 5 : 1;
+    tlSet(t, { place: 'free', fx: Math.max(0, Math.min(100, x + d[0] * step)), fy: Math.max(0, Math.min(100, y + d[1] * step)) });
+  });
+  box.addEventListener('input', (e) => {
+    const sz = e.target.closest('[data-tl-size]');
+    if (sz) { const t = tlOf(sz); sz.nextElementSibling.textContent = `${sz.value}%`; tlSet(t, { size: +sz.value }); }
+  });
+  box.addEventListener('change', (e) => {
+    const ct = e.target.closest('[data-tl-count]');
+    if (ct) tlSet(tlOf(ct), { count: ct.checked ? 'yes' : 'no' }, true);
+  });
+  box.addEventListener('click', (e) => {
+    const rs = e.target.closest('[data-tl-reset]');
+    if (rs) { const t = tlOf(rs); delete t.own.tileLogo; dirty = true; draw(); send(); showTiles(); }
   });
   // While the tile covers are being changed, the preview shows Home with the library tiles in view.
   const showTiles = () => {
