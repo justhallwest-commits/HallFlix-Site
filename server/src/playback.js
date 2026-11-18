@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { cfg } from './config.js';
 import { currentLook } from './look.js';
-import { q, q1, getSetting } from './db.js';
+import { q, q1, getSetting, setSetting } from './db.js';
 import { HttpError, readJson, sendFile, json } from './http.js';
 import { run } from './probe.js';
 import { card, img } from './catalog.js';
@@ -14,6 +14,24 @@ import * as subtitles from './subtitles.js';
 
 const DEFAULT_CAPS = { containers: ['mp4'], video: ['h264'], video10: [], audio: ['aac', 'mp3'], hlsHevc: false, audioSwitch: false, maxHeight: 0 };
 const HLS_AUDIO_COPY = ['aac', 'mp3', 'ac3', 'eac3'];
+
+const IDENT_FILE = /^\/uploads\/[\w.-]+\.(mp4|webm)$/;
+/**
+ * Which ident plays this time: one of the uploaded idents, shuffled (never the same one twice in a row) or in turn.
+ * With the built-in animation in the mix, an empty answer means "the built-in one" (the website draws it).
+ */
+export async function pickIdent(ident) {
+  const list = [...new Set([...(Array.isArray(ident?.videos) ? ident.videos.map((v) => (typeof v === 'string' ? v : v?.url)) : []), ident?.video])]
+    .filter((u) => typeof u === 'string' && IDENT_FILE.test(u));
+  const choices = ident?.builtIn ? [...list, ''] : list;
+  if (choices.length <= 1) return choices[0] || '';
+  const last = await getSetting('identLast', null);
+  let at;
+  if (ident.order === 'order') at = (Math.max(-1, choices.indexOf(last)) + 1) % choices.length;
+  else { const others = choices.map((_, i) => i).filter((i) => choices[i] !== last); at = others[Math.floor(Math.random() * others.length)]; }
+  await setSetting('identLast', choices[at]);
+  return choices[at];
+}
 
 export function defaultAudio(audios) {
   const i = audios.findIndex((a) => a.default);
@@ -122,9 +140,8 @@ export function routes(r) {
     // The HallFlix ident (a logo card) plays last before the feature. An uploaded video reaches every app;
     // without one, the web app draws its own animation.
     const ident = (await currentLook()).theme.ident;
-    if (item.kind !== 'clip' && body.prerolls !== false && resumeAt < 60 && ident?.enabled && /^\/uploads\/[\w.-]+\.(mp4|webm)$/.test(ident.video || '')) {
-      queue.push({ kind: 'ident', itemId: 0, title: '', duration: 0, container: 'mp4', mode: 'direct', url: ident.video, audio: [], subs: [] });
-    }
+    const identUrl = item.kind !== 'clip' && body.prerolls !== false && resumeAt < 60 && ident?.enabled ? await pickIdent(ident) : '';
+    if (identUrl) queue.push({ kind: 'ident', itemId: 0, title: '', duration: 0, container: 'mp4', mode: 'direct', url: identUrl, audio: [], subs: [] });
     const main = await entryFor(item, body.caps, { audio: body.audio, quality: body.quality }, 'main');
     main.resumeAt = resumeAt;
     main.marks = item.marks || {};

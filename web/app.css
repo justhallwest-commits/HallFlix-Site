@@ -1736,3 +1736,14 @@ body.tv .cap-panel { -webkit-mask-image: none; mask-image: none; }
 /* At the top of the library's own page. */
 .lib-head img.lib-logo { max-height: var(--lib-logo-h, 110px); max-width: var(--lib-logo-w, min(70vw, 420px)); }
 .vlib-bar .lib-logo { max-height: var(--lib-logo-h, 84px); max-width: var(--lib-logo-w, min(60vw, 340px)); }
+
+/* ---------- Home: tile size and picture brightness, and the banner's film logo ---------- */
+.libs { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--libs-min, 320px)), 1fr)); }
+.libs[data-count="1"] { grid-template-columns: minmax(0, max(720px, var(--libs-min, 320px))); }
+.libs .lib-tile { aspect-ratio: 1 / var(--libs-ratio, 0.4375); min-height: 90px; container-type: inline-size; }
+/* The logo, name and count scale with the tile, so small tiles stay tidy and big ones get a bigger logo. */
+.libs .lib-tile .tile-text.placed .tile-logo { max-height: calc(clamp(28px, 21cqw, 120px) * var(--tl-k, 1) * min(1, var(--libs-ratio, 0.4375) / 0.4375 + 0.25)); }
+.libs .lib-tile .tile-text.placed .tile-name { font-size: calc(clamp(16px, 9.5cqw, 56px) * var(--tl-k, 1) * min(1, var(--libs-ratio, 0.4375) / 0.4375 + 0.25)); }
+.libs .lib-tile .tile-count { font-size: clamp(10.5px, 3.3cqw, 15px); }
+.lib-tile .tile-art { filter: brightness(var(--tile-bright, 1)); }
+.hero .banner-logo { max-width: min(86vw, calc(460px * var(--banner-logo-k, 1))); max-height: calc(190px * var(--banner-logo-k, 1)); }

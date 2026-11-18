@@ -64,21 +64,31 @@ function tileSpot(c) {
 }
 const tlStyle = ([x, y], k) => `--ax:${(x / 100).toFixed(3)};--ay:${(y / 100).toFixed(3)};--k:${k};--j:${x < 34 ? 'start' : x > 66 ? 'end' : 'center'}`;
 /** One library's tile in miniature: drag its logo (or name) anywhere, and size it, for that library alone. */
-function tileEditor(l, own, base) {
+function tileEditor(l, own, base, bright = 100) {
+  base = { ...base, brightness: bright };
   const c = { place: 'bl', size: 100, count: 'yes', ...base, ...(own.tileLogo || {}) };
   const pic = own.background && !/\.(mp4|webm|m4v|mov)(\?|$)/i.test(own.background) ? own.background : l.art;
   const k = Math.max(30, Math.min(300, +c.size || 100)) / 100;
   return html`<div class="tl-edit" data-tl-lib="${l.id}">
-    <div class="tl-tile" style="${pic ? `--bg:url('${encodeURI(pic)}')` : ''}" title="Drag the logo to where it should sit on the ${l.name} tile">
+    <div class="tl-tile" style="${pic ? `--bg:url('${encodeURI(pic)}');` : ''}--b:${(+own.tileBrightness || +base.brightness || 100) / 100}" title="Drag the logo to where it should sit on the ${l.name} tile">
       <span class="tl-logo" tabindex="0" role="button" aria-label="${l.name} logo: drag, or use the arrow keys, to move it" style="${tlStyle(tileSpot(c), k)}">${own.logo ? html`<img src="${own.logo}" alt="" draggable="false">` : html`<b>${l.name}</b>`}${c.count !== 'no' ? html`<small>Title count</small>` : ''}</span></div>
     <div class="tl-ctl"><b>${l.name}</b>
       <label class="tl-size">Size <input type="range" min="30" max="300" step="5" value="${Math.round(k * 100)}" data-tl-size><output>${Math.round(k * 100)}%</output></label>
+      <label class="tl-size">Brightness <input type="range" min="0" max="160" step="5" value="${+own.tileBrightness || 0}" data-tl-bright><output>${+own.tileBrightness ? `${+own.tileBrightness}%` : 'Auto'}</output></label>
       <label class="check sm"><input type="checkbox" data-tl-count ${c.count !== 'no' ? 'checked' : ''}> Count</label>
       ${own.tileLogo ? html`<button class="btn sm" data-tl-reset title="Follow the Whole app settings again">Reset</button>` : ''}</div></div>`;
 }
-const tilesEditorCard = (libraries, libs, base) => html`<div class="card"><h2>Logo on each tile</h2>
+/** Home: how big the library tiles are, how bright their pictures, and the film logo on the banner. */
+const homeCard = (theme) => html`<div class="card"><h2>Home page</h2>
+  ${range(theme, 'homeTiles.width', 'Library tile width (pixels; smaller fits more in a row)', 180, 900, 10, 320)}
+  ${range(theme, 'homeTiles.height', 'Library tile height (% of its width)', 20, 80, 1, 44)}
+  ${range(theme, 'homeTiles.brightness', 'Brightness of the tile pictures (%)', 20, 160, 5, 100)}
+  <p class="muted small">Each library can have its own brightness: use its slider under “Logo on each tile”, or on its tab.</p>
+  ${range(theme, 'bannerLogo', 'Size of the film’s logo on the banner (% of the usual size)', 30, 250, 5, 100)}
+  <p class="muted small">The preview shows Home while you adjust.</p></div>`;
+const tilesEditorCard = (libraries, libs, base, bright = 100) => html`<div class="card"><h2>Logo on each tile</h2>
   <p class="muted small">Every library’s Home tile, each with its own logo position and size. Drag a logo anywhere on its tile (or click it and use the arrow keys), then set its size. Each tile keeps its own spot; the preview shows the Home tiles as you go.</p>
-  <div class="tl-grid">${libraries.map((l) => tileEditor(l, libs[l.id], base))}</div></div>`;
+  <div class="tl-grid">${libraries.map((l) => tileEditor(l, libs[l.id], base, bright))}</div></div>`;
 
 const LOGO_GRID = [['tl', 'Top left'], ['tc', 'Top centre'], ['tr', 'Top right'], ['ml', 'Middle left'], ['mc', 'Centre'], ['mr', 'Middle right'], ['bl', 'Bottom left'], ['bc', 'Bottom centre'], ['br', 'Bottom right']];
 /** The logo (or name) on a library's Home tile, and the logo on its own page: for the whole app, or one library. */
@@ -482,6 +492,30 @@ const musicCard = (theme) => {
     <p class="muted small">The music fades out as someone signs in, and each device remembers if it was paused there. Web browsers may wait for the first tap or key press before playing sound; the Fire TV and phone apps play it straight away. The preview on the right doesn't start music on its own; press the button on it to try.</p></div>`;
 };
 const studioSong = { a: null, i: -1 };
+/** Idents before a feature: several uploads, shuffled or in turn, with the built-in animation in the mix if wanted. */
+const identCard = (theme) => {
+  const id = theme.ident || {}, list = identList(theme);
+  return html`<div class="card" data-idents><h2>Ident before a feature</h2>${check(theme, 'ident.enabled', 'Play an ident before a movie or episode')}
+    <div class="tracks">${list.length ? list.map((v, i) => html`<div class="row track ident-row">
+        <video src="${v.url}#t=0.5" muted preload="metadata" playsinline data-idv="${i}" title="Point at it to watch"></video>
+        <input type="text" data-idname="${i}" value="${v.name || fileName(v.url)}" aria-label="Ident name">
+        <div class="tools">${id.order === 'order' && i ? html`<button class="btn sm" data-idmove="${i},-1" title="Move up">↑</button>` : ''}${id.order === 'order' && i < list.length - 1 ? html`<button class="btn sm" data-idmove="${i},1" title="Move down">↓</button>` : ''}
+          <button class="btn sm danger" data-iddel="${i}" title="Remove">✕</button></div></div>`)
+      : html`<p class="muted small">No ident videos yet: the website plays the built-in HallFlix animation.</p>`}</div>
+    <div class="row-btns"><button class="btn sm" data-idadd>Upload idents</button></div>
+    ${choose(theme, 'ident.order', 'Which one plays', [['shuffle', 'Shuffle (never the same one twice in a row)'], ['order', 'Take turns, in this order']])}
+    ${check(theme, 'ident.builtIn', 'Include the built-in HallFlix animation in the mix (website only)')}
+    <p class="muted small">MP4 (H.264) or WebM. Uploaded idents also play in the Fire TV, phone and Roku apps. A season can carry its own set.</p></div>`;
+};
+/** The ident videos in a look, including the older single "video" setting. */
+function identList(theme) {
+  const id = theme.ident || (theme.ident = {});
+  if (!Array.isArray(id.videos)) id.videos = [];
+  if (id.video && !id.videos.some((v) => v.url === id.video)) id.videos.unshift({ url: id.video, name: 'Ident 1' });
+  id.video = '';
+  return id.videos;
+}
+
 /** Rows on Home and in the libraries: for the whole app, or one library (where empty means "same as the whole app"). */
 const ROW_ITEMS = [['6', '6'], ['8', '8'], ['10', '10'], ['12', '12'], ['15', '15'], ['20', '20'], ['0', 'All of them']];
 const ROW_COUNT = [['3', '3'], ['4', '4'], ['5', '5'], ['6', '6'], ['8', '8'], ['10', '10'], ['12', '12'], ['0', 'All of them']];
@@ -560,7 +594,7 @@ pages.look = async (main) => {
           ${image(libs[lib.id], 'tileVideo', 'Tile video: plays on the Home tile while it is pointed at or in focus (MP4 or WebM, short and silent)')}
           ${check(libs[lib.id], 'useAccent', 'Give this library its own accent colours')}
           ${libs[lib.id].useAccent ? html`${color(libs[lib.id], 'accent', 'Accent')}${color(libs[lib.id], 'accent2', 'Second accent')}` : ''}</div>
-        <div class="card"><h2>${lib.name} tile</h2><p class="muted small">Drag the logo to where it should sit on the ${lib.name} tile on Home, and set its size.</p>${tileEditor(lib, libs[lib.id], theme.tileLogo || {})}</div>
+        <div class="card"><h2>${lib.name} tile</h2><p class="muted small">Drag the logo to where it should sit on the ${lib.name} tile on Home, and set its size.</p>${tileEditor(lib, libs[lib.id], theme.tileLogo || {}, theme.homeTiles?.brightness ?? 100)}</div>
         ${logoCard(libs[lib.id], theme.tileLogo || {}, lib.name)}
         ${coversCard(libs[lib.id], theme.tileCovers || {}, lib.name)}
         ${rowsCard(libs[lib.id], lib.name, !!theme.rows?.panel, theme.rows?.panelHeight ?? 60)}`
@@ -575,7 +609,8 @@ pages.look = async (main) => {
           <p class="muted small">The sign-in screen has its own background and layout: see the Sign-in page tab.</p></div>
         ${tilesCard(theme)}
         ${rowsCard(theme, '')}
-        ${tilesEditorCard(L.libraries, libs, theme.tileLogo || {})}
+        ${homeCard(theme)}
+        ${tilesEditorCard(L.libraries, libs, theme.tileLogo || {}, theme.homeTiles?.brightness ?? 100)}
         ${logoCard(theme, theme.tileLogo || {}, '')}
         ${coversCard(theme, theme.tileCovers || {}, '')}
         <div class="card"><h2>Motion</h2>
@@ -585,9 +620,7 @@ pages.look = async (main) => {
           ${check(theme, 'glass', 'Glass controls that pick up the picture behind them')}${check(theme, 'previews', 'Open a larger preview when the pointer rests on a title')}
           ${select(theme, 'screensaver', 'Screensaver after five idle minutes', L.options.screensavers)}<p class="muted small">“tv” shows drifting artwork on TVs only, “all” on every screen. Glass and previews switch themselves off on TVs to keep them fast.</p></div>
         ${soundsCard(theme)}
-        <div class="card"><h2>Ident before a feature</h2>${check(theme, 'ident.enabled', 'Play the HallFlix logo card before a movie or episode')}
-          ${image(theme, 'ident.video', 'Your own ident video (MP4, H.264). Empty uses the built-in animation on the website.')}
-          <p class="muted small">An uploaded video also plays in the Fire TV, phone and Roku apps. A season can carry its own.</p></div>
+        ${identCard(theme)}
         <div class="card"><h2>Evening look</h2>${check(theme, 'night.enabled', 'Switch to a second look in the evening')}
           <label class="f"><span>From</span><input type="time" data-path="night.from" value="${theme.night?.from || '20:00'}"></label>
           <label class="f"><span>Until</span><input type="time" data-path="night.to" value="${theme.night?.to || '06:00'}"></label>
@@ -618,6 +651,28 @@ pages.look = async (main) => {
   const touched = (redraw = true) => { dirty = true; if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false; send(); };
   const music = () => { theme.login ||= {}; theme.login.music ||= {}; if (!Array.isArray(theme.login.music.tracks)) theme.login.music.tracks = []; return theme.login.music; };
   const stopSong = () => { studioSong.a?.pause(); studioSong.a = null; studioSong.i = -1; };
+  box.addEventListener('input', (e) => {
+    const n = e.target.closest('[data-idname]');
+    if (n) { identList(theme)[+n.dataset.idname].name = n.value; touched(false); }
+  });
+  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="ident.order"]')) draw(); });
+  box.addEventListener('pointerover', (e) => { const v = e.target.closest?.('[data-idv]'); if (v) { v.currentTime = 0; v.play().catch(() => {}); } });
+  box.addEventListener('pointerout', (e) => { const v = e.target.closest?.('[data-idv]'); if (v) v.pause(); });
+  box.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-idadd],[data-iddel],[data-idmove]');
+    if (!b) return;
+    e.preventDefault();
+    const list = identList(theme);
+    try {
+      if ('idadd' in b.dataset) {
+        const files = await uploadFiles('video/mp4,video/webm', true);
+        if (!files.length) return;
+        list.push(...files); theme.ident.enabled = true;
+        touched(); toast(files.length > 1 ? `${files.length} idents added` : 'Ident added');
+      } else if (b.dataset.iddel) { list.splice(+b.dataset.iddel, 1); touched(); }
+      else { const [i, by] = b.dataset.idmove.split(',').map(Number); [list[i], list[i + by]] = [list[i + by], list[i]]; touched(); }
+    } catch (err) { fail(err); }
+  });
   box.addEventListener('input', (e) => {
     const n = e.target.closest('[data-trk-name]');
     if (n) { music().tracks[+n.dataset.trkName].name = n.value; touched(false); }
@@ -702,6 +757,15 @@ pages.look = async (main) => {
     tlSet(t, { place: 'free', fx: Math.max(0, Math.min(100, x + d[0] * step)), fy: Math.max(0, Math.min(100, y + d[1] * step)) });
   });
   box.addEventListener('input', (e) => {
+    const tb = e.target.closest('[data-tl-bright]');
+    if (tb) {
+      const t = tlOf(tb), v = +tb.value;
+      if (v) t.own.tileBrightness = v; else delete t.own.tileBrightness;
+      tb.nextElementSibling.textContent = v ? `${v}%` : 'Auto';
+      $('.tl-tile', t.ed).style.setProperty('--b', String((v || +theme.homeTiles?.brightness || 100) / 100));
+      dirty = true; for (const b of $$('.savebar button', box)) b.disabled = false; send(); showTiles();
+      return;
+    }
     const sz = e.target.closest('[data-tl-size]');
     if (sz) { const t = tlOf(sz); sz.nextElementSibling.textContent = `${sz.value}%`; tlSet(t, { size: +sz.value }); }
   });
@@ -720,7 +784,7 @@ pages.look = async (main) => {
     clearTimeout(showTiles.t);
     showTiles.t = setTimeout(() => frame.contentWindow?.postMessage({ type: 'hallflix-show', selector: '.libs' }, location.origin), 500);
   };
-  box.addEventListener('input', (e) => { if (e.target.closest('[data-path^="tileCovers"], [data-path^="tileLogo"]')) showTiles(); });
+  box.addEventListener('input', (e) => { if (e.target.closest('[data-path^="tileCovers"], [data-path^="tileLogo"], [data-path^="homeTiles"], [data-path="bannerLogo"]')) showTiles(); });
   box.addEventListener('click', async (e) => {
     const tl = e.target.closest('[data-tlpos]');
     if (tl) { const o = target(); o.tileLogo = { ...(o.tileLogo || {}), place: tl.dataset.tlpos }; dirty = true; draw(); send(); showTiles(); return; }

@@ -49,6 +49,10 @@ A self-hosted media service with its own server, web app and design Studio. It r
     messages and the ident) can be tested, replaced with an upload, given its own volume or switched off.
   - **Sign-in music:** songs uploaded or picked from the music library play on the sign-in page, fade in, shuffle if you like, show their name on a
     small pause button, and fade out as someone signs in.
+- **Home page sizes** (Studio → Look and feel → Home page): library tile width and height, the brightness of the tile pictures (each library can
+  set its own), and the size of the film's logo on the banner.
+- **Several idents:** upload as many as you like; they play shuffled (never the same one twice in a row) or in turn, optionally mixed with the
+  built-in animation.
 - **Library logos** (Studio → Look and feel): drag each library's logo (or name) to its own spot on a miniature of its Home tile, all tiles
   in one place under **Logo on each tile**, or use a 3×3 position grid and nudge sliders, resize it, hide the title count, and set the logo's height at the top of the library's own page; for all libraries or one at a time.
 - **Tidy rows** (Studio → Look and feel → Rows): limit how many titles each row shows (the last tile becomes “See all”), how many rows show

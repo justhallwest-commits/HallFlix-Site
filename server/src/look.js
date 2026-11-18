@@ -40,12 +40,18 @@ export const DEFAULT_THEME = {
   glass: true, // translucent controls that pick up the picture behind them
   screensaver: 'tv', // off | tv | all: drifting backdrops after a few idle minutes
   profileColors: true, // each profile's colour tints its own session
-  ident: { enabled: true, video: '' }, // the HallFlix logo card before a feature; `video` replaces the built-in animation
+  // The ident before a feature. `videos` are uploaded idents ({ url, name }), played shuffled or in turn; `builtIn` keeps the
+  // built-in animation in the mix (website only). `video` is the older single-video setting, still honoured.
+  ident: { enabled: true, video: '', videos: [], order: 'shuffle', builtIn: false },
   night: { enabled: false, from: '20:00', to: '06:00', theme: {} }, // a second look for the evening, by the viewer's clock
   // Rows on Home and in every library (a library can override any of it): how many titles each row shows (0 = all),
   // how many rows show before "Show more rows" (0 = all), arrows or a visible scroll bar under each row, and whether the
   // rows sit in their own scrolling panel so the background stays in view.
   rows: { items: 15, sections: 8, scroll: 'arrows', panel: false, panelHeight: 60 },
+  // The library tiles on Home: how wide each may get before another fits in a row (pixels), how tall for their width (%), and
+  // how bright the picture behind them is (%; a library can set its own). And the film's logo on the Home banner (% of usual).
+  homeTiles: { width: 320, height: 44, brightness: 100 },
+  bannerLogo: 100,
   // The logo (or name) on each library's Home tile: where it sits, how big (% of the usual size), a nudge from there,
   // and whether the title count shows under it. A library can override any of it.
   tileLogo: { place: 'bl', size: 100, x: 0, y: 0, count: 'yes' },
