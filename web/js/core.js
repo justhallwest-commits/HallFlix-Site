@@ -252,3 +252,25 @@ export function avatarStyle(p) {
   const a = p.color || `hsl(${h} 70% 52%)`;
   return `--a1:${a};--a2:hsl(${(h + 60) % 360} 70% 42%)`;
 }
+
+/**
+ * The logo (or name) at the top of a library's page, placed as set in Studio → Look and feel: left (usual), centre or
+ * right of the bar, the name instead of the logo, or hidden; nudged from there (it may overlap the banner below).
+ * The library's own setting wins over the whole app's.
+ */
+export function libTitle(lib, lk = {}) {
+  const c = { place: 'left', x: 0, y: 0, ...(themeNow()?.libPage || {}), ...(lk.libPage || {}) };
+  const place = ['left', 'center', 'right', 'name', 'hidden'].includes(c.place) ? c.place : 'left';
+  const name = lib?.name || 'Library';
+  const x = Math.max(-400, Math.min(400, +c.x || 0)), y = Math.max(-300, Math.min(300, +c.y || 0));
+  const inner = place === 'hidden' ? html`<h1 class="sr-only">${name}</h1>`
+    : lk.logo && place !== 'name' ? html`<img class="lib-logo" src="${lk.logo}" alt="${name}">` : html`<h1>${name}</h1>`;
+  return html`<span class="lib-title" data-place="${place}" data-lib="${lib?.id ?? ''}" data-name="${name}" style="--lt-x:${x}px;--lt-y:${y}px">${inner}</span>`;
+}
+// A new look (the Studio's live preview) moves or hides the logo on the page that is already showing.
+on('look', () => {
+  for (const el of $$('.lib-title[data-lib]')) {
+    const id = el.dataset.lib;
+    if (id) el.outerHTML = String(libTitle({ id: +id, name: el.dataset.name }, libraryLook(+id)));
+  }
+});

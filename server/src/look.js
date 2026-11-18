@@ -57,6 +57,9 @@ export const DEFAULT_THEME = {
   tileLogo: { place: 'bl', size: 100, x: 0, y: 0, count: 'yes' },
   // How tall a library's logo is at the top of its own page, in pixels (0 = automatic). A library can set its own.
   libLogoSize: 0,
+  // Where the logo (or name) sits at the top of each library's page: left, center or right of the bar, 'name' (the name
+  // instead of the logo) or 'hidden'; x/y nudge it in pixels (it may overlap the banner). A library can set its own.
+  libPage: { place: 'left', x: 0, y: 0 },
   // The covers on each library's Home tile: where they sit, how big, how many and how they stand. A library can override any of it.
   tileCovers: { show: 'yes', place: 'br', size: 56, count: 3, style: 'angled', x: 0, y: 0 },
 };

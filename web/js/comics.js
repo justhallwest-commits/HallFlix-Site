@@ -2,7 +2,7 @@
 // Up next, new issues, a row per publisher, then every series with read-status filters), and the series page
 // (how far you've got, issues in either order as a grid or a list, hide what you've read, mark read up to here).
 import * as backdrop from './backdrop.js';
-import { $, $$, api, html, raw, icons, toast } from './core.js';
+import { $, $$, api, html, raw, icons, toast, libTitle } from './core.js';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const bg = (u) => (u ? `background-image:url("${String(u).replace(/"/g, '%22')}")` : '');
@@ -64,7 +64,7 @@ export async function comicsLibrary(view, lib, lk, base, syncArrows) {
         ${d.start.overview ? html`<p class="cx-over">${d.start.overview}</p>` : ''}
         <div class="actions"><a class="btn primary" href="#/title/${d.start.id}">${icons.book} Start reading</a><span class="cx-meta">${plural(d.start.count || 0, 'issue')}</span></div></div></section>` : '';
   view.innerHTML = String(html`<div class="page cx-lib">${hero}
-    <div class="lib-head">${lk.logo ? html`<img class="lib-logo" src="${lk.logo}" alt="${lib.name}">` : html`<h1>${lib.name}</h1>`}
+    <div class="lib-head">${libTitle(lib, lk)}
       <span class="count">${plural(d.totals.series, 'series', 'series')} · ${plural(d.totals.issues, 'issue')}${d.totals.read ? ` · ${d.totals.read} read` : ''}</span>${backdrop.button(lib)}</div>
     ${d.continue.length > 1 ? row('Continue reading', d.continue, issueCard, 'cx-continue') : ''}
     ${row('Up next', d.upNext, issueCard, 'cx-next')}

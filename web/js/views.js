@@ -1,5 +1,5 @@
 // Screens: first-run setup, sign-in, home, libraries, search and the title sheet.
-import { $, $$, api, html, raw, esc, icons, state, applyLook, styleLogin, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, on, themeNow } from './core.js';
+import { $, $$, api, html, raw, esc, icons, state, applyLook, styleLogin, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, on, themeNow, libTitle } from './core.js';
 import * as browse from './browse.js';
 import * as feel from './feel.js';
 import * as media from './media.js';
@@ -340,7 +340,7 @@ async function library(id) {
     : lib?.kind === 'comics' ? [['title', 'A to Z'], ['added', 'Recently updated'], ['year', 'Newest first']]
       : [['title', 'A to Z'], ['added', 'Recently added'], ['year', 'Newest first'], ['score', 'Top rated']];
   view().innerHTML = String(html`<div class="page"><div class="lib-head">
-      ${lk.logo ? html`<img class="lib-logo" src="${lk.logo}" alt="${lib?.name || ''}">` : html`<h1>${lib?.name || 'Library'}</h1>`}
+      ${libTitle(lib, lk)}
       <span class="count"></span>${backdrop.button(lib)}
       <select data-sort aria-label="Sort">${sorts.map(([v, n]) => html`<option value="${v}">${n}</option>`)}</select>
     </div><div class="chips"></div><div class="grid"></div><div class="sentinel" style="height:1px"></div></div>`);
@@ -358,7 +358,7 @@ const cardSize = () => { try { return localStorage.getItem('hf_cardsize') || 'm'
 async function videoLibrary(lib, lk) {
   if (!base.tab) { try { base.tab = sessionStorage.getItem(`hf_tab_${lib.id}`) || 'home'; } catch { base.tab = 'home'; } }
   const home = base.tab === 'home';
-  const bar = html`<div class="vlib-bar">${lk.logo ? html`<img class="lib-logo" src="${lk.logo}" alt="${lib.name}">` : html`<h1>${lib.name}</h1>`}
+  const bar = html`<div class="vlib-bar">${libTitle(lib, lk)}
     <div class="tabs" role="tablist">${TABS.map(([k, n]) => html`<button role="tab" data-tab="${k}" aria-selected="${base.tab === k}" class="${base.tab === k ? 'on' : ''}">${n}</button>`)}</div>
     <span class="count"></span>${backdrop.button(lib)}</div>`;
   if (home) {

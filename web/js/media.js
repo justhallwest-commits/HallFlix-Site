@@ -1,7 +1,7 @@
 // Pages for books, comics and music: title pages for a book, a comic series, an album and an artist, and the
 // music library (albums, artists, songs).
 import * as backdrop from './backdrop.js';
-import { $, $$, api, html, raw, icons, state, fmtRuntime, fmtTime, toast } from './core.js';
+import { $, $$, api, html, raw, icons, state, fmtRuntime, fmtTime, toast, libTitle } from './core.js';
 import { cardHtml, syncArrows } from './views.js';
 import { musicHome } from './musichome.js';
 import * as music from './music.js';
@@ -138,7 +138,7 @@ export async function musicLibrary(view, lib, lk, base) {
   base.view ||= 'home';
   if (!['title', 'artist', 'year', 'added'].includes(base.sort)) base.sort = 'artist';
   view.innerHTML = String(html`<div class="page music-lib"><div class="lib-head">
-      ${lk.logo ? html`<img class="lib-logo" src="${lk.logo}" alt="${lib.name}">` : html`<h1>${lib.name}</h1>`}<span class="count"></span>${backdrop.button(lib)}
+      ${libTitle(lib, lk)}<span class="count"></span>${backdrop.button(lib)}
       <div class="tabs-row">${[['home', 'Listen now'], ['albums', 'Albums'], ['artists', 'Artists'], ['songs', 'Songs'], ['playlists', 'Playlists']].map(([v, n]) => html`<button class="chip ${base.view === v ? 'on' : ''}" data-view="${v}">${n}</button>`)}</div>
       <select data-msort aria-label="Sort" ${base.view === 'albums' ? '' : raw('hidden')}>${[['artist', 'Artist'], ['title', 'A to Z'], ['year', 'Newest first'], ['added', 'Recently added']].map(([v, n]) => html`<option value="${v}" ${base.sort === v ? raw('selected') : ''}>${n}</option>`)}</select>
     </div><div class="chips"></div><div class="mbody"></div></div>`);
