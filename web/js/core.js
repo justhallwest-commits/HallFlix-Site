@@ -160,6 +160,12 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   root.setProperty('--libs-min', `${Math.max(180, Math.min(900, +H.width || 320))}px`);
   root.setProperty('--libs-ratio', String(Math.max(20, Math.min(80, +H.height || 44)) / 100));
   root.setProperty('--tile-bright', String(Math.max(20, Math.min(160, +H.brightness || 100)) / 100));
+  // Remember the loading screen's look on this device for the next time the app opens (see splash.js).
+  try {
+    const S = t.splash || {};
+    localStorage.setItem('hf_splash', JSON.stringify({ img: S.image || t.logo?.image || '', size: Math.max(30, Math.min(250, +S.size || 100)) / 100,
+      motion: ['pulse', 'breathe', 'glow', 'still'].includes(S.motion) ? S.motion : 'pulse', bg: /^#[0-9a-f]{6}$/i.test(S.background || '') ? S.background : '' }));
+  } catch { /* private mode */ }
   root.setProperty('--banner-logo-k', String(Math.max(30, Math.min(250, +t.bannerLogo || 100)) / 100));
   const signedOut = !state.profile || !!state.signinPreview;
   const bg = signedOut ? (t.login?.image || t.background?.image) : (lib.background || t.background?.image);

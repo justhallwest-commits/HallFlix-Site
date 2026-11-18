@@ -657,6 +657,7 @@ export function login(boot) {
       try {
         await api('POST', '/api/login', { profileId: p?.id, name: f.get('name'), password: f.get('password') });
         feel.sound('signin');
+        try { sessionStorage.setItem('hf_welcome', 'signin'); } catch { /* private mode */ }
         await fadeOutLoginMusic(); // the sign-in music bows out before the app loads
         if (!/^#\/(party|pair)\//.test(location.hash)) location.hash = '#/';
         location.reload();

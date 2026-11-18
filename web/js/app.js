@@ -1,5 +1,5 @@
 // HallFlix web app entry: boot, routing, and the plugin API.
-import { $, api, state, applyLook, on, emit, toast, html, raw } from './core.js';
+import { $, api, state, applyLook, on, emit, toast, html, raw, themeNow } from './core.js';
 import * as views from './views.js';
 import { openPlayer, closePlayer, playerOpen } from './player.js';
 import { initNav } from './nav.js';
@@ -75,6 +75,40 @@ async function signinPreview() {
   views.login({ ...state.boot, look: state.look, profiles });
 }
 
+/**
+ * The welcome ident: a short video right after signing in, or each time the app opens (once per visit), as set in
+ * Studio → Look and feel → Sign-in page → After signing in. Any key, tap or the Skip button ends it.
+ */
+function welcome() {
+  const S = themeNow()?.splash || {};
+  let flag = '', seen = '';
+  try { flag = sessionStorage.getItem('hf_welcome') || ''; seen = sessionStorage.getItem('hf_welcomed') || ''; sessionStorage.removeItem('hf_welcome'); } catch { /* private mode */ }
+  const due = S.video && (S.when === 'open' ? !seen : S.when !== 'never' && flag === 'signin');
+  if (!due || state.preview) return Promise.resolve();
+  try { sessionStorage.setItem('hf_welcomed', '1'); } catch { /* private mode */ }
+  return new Promise((resolve) => {
+    document.body.insertAdjacentHTML('beforeend', `<div class="welcome"><video playsinline autoplay preload="auto"></video><button class="btn skip" type="button">Skip</button></div>`);
+    const box = document.querySelector('.welcome'), v = box.querySelector('video');
+    let done = false;
+    const end = () => {
+      if (done) return; done = true;
+      removeEventListener('keydown', key, true);
+      box.classList.add('out'); setTimeout(() => box.remove(), 460);
+      resolve();
+    };
+    const key = (e) => { e.preventDefault(); e.stopPropagation(); end(); };
+    v.src = S.video;
+    v.muted = S.sound === false;
+    v.addEventListener('ended', end);
+    v.addEventListener('error', end);
+    box.addEventListener('click', end);
+    addEventListener('keydown', key, true);
+    v.play().catch(() => { v.muted = true; v.play().catch(end); }); // a browser that blocks sound plays it silently
+    setTimeout(end, 30000); // never longer than half a minute
+    box.querySelector('.skip').focus();
+  });
+}
+
 async function boot() {
   const params = new URLSearchParams(location.search);
   if (/AFT|Android TV|GoogleTV|BRAVIA|SmartTV|Tizen|Web0S/i.test(navigator.userAgent) || params.has('tv')) document.body.classList.add('tv');
@@ -101,6 +135,7 @@ async function boot() {
   }
   if (b.setup) return views.setup();
   if (!b.profile) return views.login(b);
+  await welcome();
   loadPlugins(b.plugins);
   views.shell();
   initMore();
