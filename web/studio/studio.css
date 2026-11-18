@@ -303,3 +303,5 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 
 /* Ident list: a little moving thumbnail for each */
 .ident-row video { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: #000; flex: none; }
+
+.card h3.sub { font-size: 14px; margin: 18px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }

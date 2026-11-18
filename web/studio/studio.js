@@ -105,9 +105,12 @@ const logoCard = (o, base, lib) => {
   ${range(o, 'tileLogo.y', 'Move up or down', -45, 45, 1, base.y ?? 0)}
   ${choose(o, 'tileLogo.count', 'Title count under the logo', [['yes', 'Show'], ['no', 'Hide']], lib && 'Same as whole app')}
   <p class="muted small">The sliders move the logo from the chosen position, as a share of the tile: negative is left or up. The preview jumps to the Home tiles while you adjust.</p>
+  <h3 class="sub">${lib ? `At the top of the ${lib} page` : 'At the top of each library page'}</h3>
+  ${choose(o, 'libPage.place', 'Logo on the page', [['left', 'Left, beside the tabs (usual)'], ['center', 'Centred, above the tabs'], ['right', 'Right'], ['name', 'Show the name instead of the logo'], ['hidden', 'Hidden: no logo or name']], lib && 'Same as whole app')}
+  ${range(o, 'libPage.x', 'Move left or right (pixels)', -400, 400, 2, base.pageX ?? 0)}${range(o, 'libPage.y', 'Move up or down (pixels; down overlaps the banner)', -300, 300, 2, base.pageY ?? 0)}
   ${lib ? range(o, 'logoSize', `Logo height at the top of the ${lib} page (pixels, 0 = same as whole app)`, 0, 260, 2, 0)
     : range(o, 'libLogoSize', 'Logo height at the top of each library page (pixels, 0 = automatic)', 0, 260, 2, 0)}
-  ${lib && (o.tileLogo || o.logoSize) ? html`<button class="btn sm" data-logo-reset>Use the whole-app settings for ${lib}</button>` : ''}</div>`;
+  ${lib && (o.tileLogo || o.logoSize || o.libPage) ? html`<button class="btn sm" data-logo-reset>Use the whole-app settings for ${lib}</button>` : ''}</div>`;
 };
 const check = (o, p, label) => html`<label class="check"><input type="checkbox" data-path="${p}" ${get(o, p) ? 'checked' : ''}> ${label}</label>`;
 const image = (o, p, label) => html`<div class="f block"><span>${label}</span><div class="imgrow">
@@ -601,7 +604,7 @@ pages.look = async (main) => {
           ${choose(libs[lib.id], 'tileUse', 'With no tile background, the tile shows', [['', 'The library page’s background'], ['artwork', 'The newest artwork in the library']])}
           ${choose(libs[lib.id], 'tilePos', 'Which part of the picture shows', [['', 'Centre, a little high (usual)'], ['center', 'Centre'], ['top', 'Top'], ['bottom', 'Bottom'], ['left', 'Left'], ['right', 'Right']])}
           ${tileEditor(lib, libs[lib.id], theme.tileLogo || {}, theme.homeTiles?.brightness ?? 100)}</div>
-        ${logoCard(libs[lib.id], theme.tileLogo || {}, lib.name)}
+        ${logoCard(libs[lib.id], { ...(theme.tileLogo || {}), pageX: theme.libPage?.x, pageY: theme.libPage?.y }, lib.name)}
         ${coversCard(libs[lib.id], theme.tileCovers || {}, lib.name)}
         ${rowsCard(libs[lib.id], lib.name, !!theme.rows?.panel, theme.rows?.panelHeight ?? 60)}`
     : html`<div class="card"><h2>Start from a preset</h2><div class="presets">${L.presets.map((p) => html`<button class="preset ${theme.preset === p.id ? 'on' : ''}" data-preset="${p.id}" title="${p.description}">${swatch(p.theme, L.defaults)}<b>${p.name}</b></button>`)}</div></div>
@@ -791,10 +794,19 @@ pages.look = async (main) => {
     showTiles.t = setTimeout(() => frame.contentWindow?.postMessage({ type: 'hallflix-show', selector: '.libs' }, location.origin), 500);
   };
   box.addEventListener('input', (e) => { if (e.target.closest('[data-path^="tileCovers"], [data-path^="tileLogo"], [data-path^="homeTiles"], [data-path="bannerLogo"]')) showTiles(); });
+  // While the logo at the top of the library pages is being moved, the preview shows a library page.
+  const showLibPage = () => {
+    const sel = $('[data-pv-go]', main);
+    if (sel.value.startsWith('#/library/')) return;
+    const want = curLib() ? `#/library/${curLib().id}` : [...sel.options].find((o) => o.value.startsWith('#/library/'))?.value;
+    if (want) { sel.value = want; sel.onchange({ target: sel }); }
+  };
+  box.addEventListener('input', (e) => { if (e.target.closest('[data-path^="libPage"], [data-path="logoSize"], [data-path="libLogoSize"]')) showLibPage(); });
+  box.addEventListener('change', (e) => { if (e.target.closest('[data-path^="libPage"]')) showLibPage(); });
   box.addEventListener('click', async (e) => {
     const tl = e.target.closest('[data-tlpos]');
     if (tl) { const o = target(); o.tileLogo = { ...(o.tileLogo || {}), place: tl.dataset.tlpos }; dirty = true; draw(); send(); showTiles(); return; }
-    if (e.target.closest('[data-logo-reset]') && curLib()) { delete libs[curLib().id].tileLogo; delete libs[curLib().id].logoSize; dirty = true; draw(); send(); showTiles(); return; }
+    if (e.target.closest('[data-logo-reset]') && curLib()) { delete libs[curLib().id].tileLogo; delete libs[curLib().id].logoSize; delete libs[curLib().id].libPage; dirty = true; draw(); send(); showTiles(); return; }
     if (e.target.closest('[data-covers-reset]') && curLib()) { delete libs[curLib().id].tileCovers; dirty = true; draw(); send(); showTiles(); return; }
     const lp = e.target.closest('[data-lpos]');
     if (lp) {
