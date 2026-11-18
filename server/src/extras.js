@@ -233,6 +233,7 @@ export function routes(r) {
     const spot = home.spotlight?.length ? await q(`select id, title, year, kind, poster from items where id = any($1)`, [home.spotlight]) : [];
     return {
       order: home.order || [], hidden: home.hidden || [], announcement: home.announcement || { text: '', link: '' },
+      banner: { shuffle: 'visit', pickedOnly: true, favourNew: true, count: 8, ...(home.banner || {}) },
       spotlight: (home.spotlight || []).map((id) => spot.find((x) => x.id === id)).filter(Boolean).map((x) => ({ id: x.id, title: x.title, year: x.year, kind: x.kind, poster: img(x.poster, 'w185') })),
       sections: [['libraries', 'Library tiles'], ['continue', `Continue watching`], ['reading', 'Continue reading'], ['mylist', 'My List'], ['top10', 'Most watched this month'], ['foryou', 'Because you watched and Hidden gems'], ['recent', 'New in each library'], ['top', 'Top rated'], ['collections', 'Collections'], ['genres', 'Genre rows']].map(([id, name]) => ({ id, name })),
       me: profile.name,
@@ -244,6 +245,11 @@ export function routes(r) {
       order: (b.order || []).map(String).slice(0, 20), hidden: (b.hidden || []).map(String).slice(0, 20),
       spotlight: (b.spotlight || []).map(Number).filter(Boolean).slice(0, 8),
       announcement: { text: String(b.announcement?.text || '').slice(0, 200), link: String(b.announcement?.link || '').slice(0, 300) },
+      banner: {
+        shuffle: ['visit', 'hour', 'day'].includes(b.banner?.shuffle) ? b.banner.shuffle : 'visit',
+        pickedOnly: b.banner?.pickedOnly !== false, favourNew: b.banner?.favourNew !== false,
+        count: Math.max(3, Math.min(12, +b.banner?.count || 8)),
+      },
     });
     return { ok: true };
   }, admin);

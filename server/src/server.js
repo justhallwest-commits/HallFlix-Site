@@ -25,6 +25,7 @@ import * as archive from './archive.js';
 import * as profilesMod from './profiles.js';
 import * as lyricsMod from './lyrics.js';
 import * as musicMod from './music.js';
+import * as clips from './clips.js';
 import * as ratingsMod from './ratings.js';
 import * as videosMod from './videos.js';
 import * as subtitlesMod from './subtitles.js';
@@ -86,6 +87,7 @@ r.post('/api/password', async ({ req, profile }) => {
 });
 
 catalog.routes(r);
+clips.routes(r);
 playback.routes(r);
 studio.routes(r);
 manage.routes(r);

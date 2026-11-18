@@ -153,6 +153,7 @@ function startHero(list) {
     void c.offsetWidth; c.classList.add('swap');
     if (hadFocus) $('.btn.primary', c)?.focus();
     $$('.dots button', hero).forEach((d, k) => d.classList.toggle('on', k === i));
+    hero.dataset.showing = it.id;
     feel.tint(hero, it.backdrop); feel.wash(it.backdrop); feel.queueTrailer(hero, it);
   };
   hero.show = show;

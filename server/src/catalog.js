@@ -1,4 +1,5 @@
 // Browsing: home rows, libraries, title pages, search, watch progress and My List.
+import { warmClips } from './clips.js';
 import { q, q1, getSetting } from './db.js';
 import { MOODS, collectionCards } from './extras.js';
 import { smartSearch, top10Row, forYouRows, dedupe } from './more.js';
@@ -132,9 +133,8 @@ export function routes(r) {
       const got = await q(`select ${SEL} ${FROM} where i.id = any($2) and i.kind in ('movie','show')`, [pid, home.spotlight]);
       pinned = home.spotlight.map((id) => got.find((x) => x.id === id)).filter(Boolean);
     }
-    const spotlight = await q(
-      `select ${SEL} ${FROM} where i.kind in ('movie','show') and i.backdrop is not null
-       order by (i.added_at > now() - interval '45 days') desc, md5(i.id::text || $2) limit 6`, [pid, day]);
+    const B = bannerSettings(home);
+    const spotlight = B.pickedOnly && pinned.length ? [] : await shuffledSpotlight(`i.kind in ('movie','show')`, [pid], B);
     // Library tiles: each library's own background if it has one in its look, otherwise art from a recent title.
     const tiles = [];
     for (const l of libs) {
@@ -149,7 +149,9 @@ export function routes(r) {
         posters: art.filter((a) => a.poster).slice(0, 3).map((a) => img(a.poster, 'w342')),
       });
     }
-    const spot = [...pinned, ...spotlight.filter((x) => !pinned.some((p) => p.id === x.id))].slice(0, Math.max(6, pinned.length));
+    // Picked titles only (when some are picked and "only these" is on), or the picks first and shuffled titles after.
+    const spot = [...pinned, ...spotlight.filter((x) => !pinned.some((p) => p.id === x.id))].slice(0, Math.max(B.count, pinned.length));
+    warmClips(spot.map((x) => x.id));
     const moods = await q(`select distinct g from items i, unnest(i.genres) g where i.kind in ('movie','show')`);
     const have = new Set(moods.map((m) => m.g));
     const ann = home.announcement?.text ? { text: home.announcement.text, link: home.announcement.link || '' } : null;
@@ -427,5 +429,30 @@ async function shelfItem(pid, row) {
     out.albums = (await q(`select ${SEL} ${FROM} where i.kind='album' and i.parent_id=$2 order by i.year desc nulls last, i.sort_title`, [pid, row.id])).map(card);
     out.tracks = (await q(TRACKS(`i.show_id = $2 and i.kind='track'`) + ' order by al.year desc nulls last, al.sort_title, i.season_no, i.episode_no nulls last', [pid, row.id])).map(trackCard);
   }
+  return out;
+}
+
+/** How the spotlight banner chooses titles (Studio → Home screen → Spotlight). */
+export function bannerSettings(home = {}) {
+  const b = home.banner || {};
+  return {
+    shuffle: ['visit', 'hour', 'day'].includes(b.shuffle) ? b.shuffle : 'visit',
+    pickedOnly: b.pickedOnly !== false,
+    count: Math.max(3, Math.min(12, +b.count || 8)),
+    favourNew: b.favourNew !== false,
+  };
+}
+/**
+ * Spotlight titles, shuffled: a new mix each visit (or each hour or day). With "favour new", up to half are recent
+ * additions; the rest come from everything. `where` and `args` narrow it (args[0] is the profile, for SEL/FROM).
+ */
+export async function shuffledSpotlight(where, args, B) {
+  const seed = B.shuffle === 'visit' ? Math.random().toString(36).slice(2) : B.shuffle === 'hour' ? new Date().toISOString().slice(0, 13) : new Date().toISOString().slice(0, 10);
+  const n = args.length + 1;
+  const pool = await q(`select ${SEL}, (i.added_at > now() - interval '45 days') as fresh ${FROM} where ${where} and i.backdrop is not null
+    order by md5(i.id::text || $${n}) limit 80`, [...args, seed]);
+  const fresh = B.favourNew ? pool.filter((x) => x.fresh).slice(0, Math.ceil(B.count / 2)) : [];
+  const out = [...fresh, ...pool.filter((x) => !fresh.includes(x))].slice(0, B.count);
+  for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
   return out;
 }

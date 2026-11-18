@@ -58,6 +58,9 @@ A self-hosted media service with its own server, web app and design Studio. It r
 - **Library logos** (Studio → Look and feel): drag each library's logo (or name) to its own spot on a miniature of its Home tile, all tiles
   in one place under **Logo on each tile**, or use a 3×3 position grid and nudge sliders, resize it, hide the title count, and set the logo's height and place at the top of the library's own page (left, centre, right,
   the name instead, or hidden, nudged anywhere); for all libraries or one at a time.
+- **Banner clips from the films themselves:** the spotlight plays short clips cut from each title's own file, from a random moment in its
+  opening minutes (no YouTube needed), with a speaker button; the banner shuffles to a new mix each visit (or hour, or day), and shows only
+  your picked titles when you pick some.
 - **After signing in** (Studio → Look and feel → Sign-in page): the loading screen's picture (your HallFlix logo by default), size, motion and
   background, and a welcome ident video after signing in or each time HallFlix opens, skippable with any key or tap.
 - **Top rated numbers:** outline, solid, glowing, a small badge on the poster, or hidden; behind the poster or beside it; size, font, colour

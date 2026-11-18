@@ -357,12 +357,18 @@ function titlePicker(el, chosen, changed) {
 pages.home = async (main) => {
   const H = await api('GET', '/api/studio/home');
   const order = [...H.order.filter((id) => H.sections.some((s) => s.id === id)), ...H.sections.map((s) => s.id).filter((id) => !H.order.includes(id))];
-  const hidden = new Set(H.hidden), spot = [...H.spotlight], ann = { ...H.announcement };
-  const save = debounce(async () => { try { await api('PUT', '/api/studio/home', { order, hidden: [...hidden], spotlight: spot.map((x) => x.id), announcement: ann }); toast('Saved', 1200); } catch (e) { fail(e); } }, 350);
+  const hidden = new Set(H.hidden), spot = [...H.spotlight], ann = { ...H.announcement }, banner = { ...H.banner };
+  const save = debounce(async () => { try { await api('PUT', '/api/studio/home', { order, hidden: [...hidden], spotlight: spot.map((x) => x.id), announcement: ann, banner }); toast('Saved', 1200); } catch (e) { fail(e); } }, 350);
   main.innerHTML = String(html`${head('Home screen', 'Decide what Home shows and in what order. Changes save as you make them and show on every device.')}
     <div class="card"><h2>Sections, top to bottom</h2><div data-order></div>
       <p class="muted small" style="margin-top:10px">To limit how many titles each section shows, how many sections show before “Show more rows”, or to add a scroll bar, see <a href="#look">Look and feel → Rows on Home and in libraries</a>. It covers every library too.</p></div>
-    <div class="card"><h2>Spotlight</h2><p class="muted small" style="margin-bottom:10px">Pin titles to the big banner. They show first, in this order; HallFlix fills the rest with recent additions.</p><div data-spot></div></div>
+    <div class="card"><h2>Spotlight</h2><p class="muted small" style="margin-bottom:10px">Pick titles for the big banner on Home, in the order they should show. With none picked, HallFlix shuffles titles from your libraries.</p><div data-spot></div>
+      <div data-banner style="margin-top:14px">
+        ${check(banner, 'pickedOnly', 'When titles are picked, show only those (otherwise shuffled titles follow them)')}
+        ${choose(banner, 'shuffle', 'Shuffle to a new mix', [['visit', 'Every time Home opens'], ['hour', 'Every hour'], ['day', 'Once a day']])}
+        ${range(banner, 'count', 'How many titles the banner goes through', 3, 12, 1, 8)}
+        ${check(banner, 'favourNew', 'Favour recent additions (up to half the mix)')}
+        <p class="muted small">Library pages shuffle the same way. How the banner moves (clips from the films, trailers or still pictures) is under <a href="#look">Look and feel → Motion</a>.</p></div></div>
     <div class="card" data-ann><h2>Announcement</h2><p class="muted small">A banner above the rows, such as “New this week: three more seasons of…”. Leave empty for none.</p>
       ${text(ann, 'text', 'Message', 'New this week…')}${text(ann, 'link', 'Link (optional)', '#/library/1 or https://…')}</div>`);
   const drawOrder = () => {
@@ -379,6 +385,7 @@ pages.home = async (main) => {
   drawOrder();
   titlePicker($('[data-spot]', main), spot, save);
   bind($('[data-ann]', main), ann, save);
+  bind($('[data-banner]', main), banner, save);
 };
 
 // ---------- collections ----------
@@ -649,7 +656,14 @@ pages.look = async (main) => {
         ${coversCard(theme, theme.tileCovers || {}, '')}
         <div class="card"><h2>Motion</h2>
           ${check(theme, 'artColor', 'Colour follows the artwork in focus')}${check(theme, 'depth', 'Posters lean toward the pointer')}
-          ${select(theme, 'heroMotion', 'Spotlight', L.options.heroMotions)}<p class="muted small">“Trailer” plays a muted trailer behind the spotlight on computers. “Pan” moves the picture slowly.</p>
+          ${choose(theme, 'heroMotion', 'Spotlight banner', [['clip', 'Clips from the film itself'], ['trailer', 'YouTube trailers (computers only)'], ['pan', 'Pan the picture slowly'], ['none', 'Still picture']])}
+          ${(theme.heroMotion || 'clip') === 'clip' ? html`<p class="muted small">HallFlix cuts short clips from each banner title’s own file, from a random moment in the window below, and keeps a few per title so they vary. The first time a title comes up it shows its picture while its first clip is made.</p>
+            ${range(theme, 'heroClips.start', 'Clips start from (seconds in, to skip studio logos)', 0, 600, 10, 60)}
+            ${range(theme, 'heroClips.end', 'Clips come from before (seconds in; 600 = the first 10 minutes)', 60, 1800, 30, 600)}
+            ${range(theme, 'heroClips.length', 'Clip length (seconds)', 10, 60, 5, 30)}
+            ${check(theme, 'heroClips.sound', 'Play clips with sound (each device can switch it with the banner’s speaker button)')}
+            ${check(theme, 'heroClips.tv', 'Play clips on TVs too')}
+            <p class="muted small">Changing the window or the length makes fresh clips as the banner asks for them.</p>` : ''}
           ${check(theme, 'profileColors', 'Tint each profile’s session with its own colour')}
           ${check(theme, 'glass', 'Glass controls that pick up the picture behind them')}${check(theme, 'previews', 'Open a larger preview when the pointer rests on a title')}
           ${select(theme, 'screensaver', 'Screensaver after five idle minutes', L.options.screensavers)}<p class="muted small">“tv” shows drifting artwork on TVs only, “all” on every screen. Glass and previews switch themselves off on TVs to keep them fast.</p></div>
@@ -680,7 +694,7 @@ pages.look = async (main) => {
   // On the Sign-in page tab, some choices show or hide others (panel strength, how dark, where to blur).
   box.addEventListener('change', (e) => { if (tab === 'signin' && e.target.matches('select[data-path^="login."], [data-path="login.focusBlur"]')) draw(); });
   // Choices that show or hide others on the Whole app tab.
-  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"], [data-path="ranked.style"]')) draw(); });
+  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"], [data-path="ranked.style"], [data-path="heroMotion"]')) draw(); });
   // Sounds and sign-in music: test, upload, reorder and remove.
   const touched = (redraw = true) => { dirty = true; if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false; send(); };
   const music = () => { theme.login ||= {}; theme.login.music ||= {}; if (!Array.isArray(theme.login.music.tracks)) theme.login.music.tracks = []; return theme.login.music; };
