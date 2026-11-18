@@ -287,7 +287,8 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 /* Logo on each tile: a miniature of each library's Home tile with its logo to drag into place */
 .tl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; margin-top: 10px; }
 .tl-tile { position: relative; aspect-ratio: 16 / 7; border-radius: 10px; overflow: hidden; container-type: inline-size; cursor: crosshair; touch-action: none; user-select: none;
-  background: var(--bg, none) center 30% / cover no-repeat, linear-gradient(135deg, #3b2470, #0f3a44); box-shadow: inset 0 0 0 1px var(--line); }
+  background: linear-gradient(135deg, #3b2470, #0f3a44); box-shadow: inset 0 0 0 1px var(--line); }
+.tl-tile::before { content: ''; position: absolute; inset: 0; background: var(--bg, none) center 30% / cover no-repeat; filter: brightness(var(--b, 1)); }
 .tl-tile::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(10, 8, 20, 0.85), rgba(10, 8, 20, 0.45) 45%, rgba(10, 8, 20, 0.1)); }
 .tl-logo { position: absolute; z-index: 1; display: grid; gap: 2px; justify-items: var(--j, start); max-width: 94%; padding: 3px; border-radius: 6px; cursor: grab; outline: 1px dashed rgba(255, 255, 255, 0.35);
   left: calc(4% + var(--ax, 0) * 92%); top: calc(8% + var(--ay, 1) * 84%); transform: translate(calc(var(--ax, 0) * -100%), calc(var(--ay, 1) * -100%)); }
@@ -299,3 +300,6 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 .tl-ctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: 13px; }
 .tl-ctl > b { flex: 1 1 100%; }
 .tl-size { display: flex; align-items: center; gap: 6px; flex: 1; } .tl-size input { flex: 1; min-width: 80px; } .tl-size output { width: 40px; text-align: right; color: var(--muted); }
+
+/* Ident list: a little moving thumbnail for each */
+.ident-row video { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: #000; flex: none; }

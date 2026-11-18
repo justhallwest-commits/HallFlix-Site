@@ -108,7 +108,8 @@ function tilesHtml(list) {
     // A video plays on the tile while it is pointed at or in focus: the library's own tile video, or its background video.
     const video = isVid(lk.tileVideo) ? lk.tileVideo : isVid(lk.background) ? lk.background : '';
     // The slab carries the tile's thickness and 3D turn; the tile inside holds the layers that move at different depths.
-    return html`<div class="tile-slab"><a class="lib-tile" href="#/library/${l.id}" style="${style}" aria-label="${l.name}, ${l.count} ${noun}" ${video ? raw(`data-video="${esc(video)}"`) : ''}>
+    const bright = Number.isFinite(+lk.tileBrightness) && +lk.tileBrightness > 0 ? `;--tile-bright:${Math.max(20, Math.min(160, +lk.tileBrightness)) / 100}` : '';
+    return html`<div class="tile-slab"><a class="lib-tile" href="#/library/${l.id}" style="${style}${bright}" aria-label="${l.name}, ${l.count} ${noun}" ${video ? raw(`data-video="${esc(video)}"`) : ''}>
       <span class="tile-art"></span>
       ${coversHtml(l.posters, lk)}
       ${(() => { const ls = logoStyle(lk); return html`<span class="tile-text placed ${lk.logo ? 'has-logo' : ''}" data-align="${ls.align}" style="${ls.style}">${lk.logo ? html`<img class="tile-logo" src="${lk.logo}" alt="">` : html`<b class="tile-name">${l.name}</b>`}
@@ -136,7 +137,7 @@ function startHero(list) {
     const c = $('.content', hero);
     const hadFocus = c.contains(document.activeElement);
     c.classList.remove('swap');
-    c.innerHTML = String(html`${it.logo ? html`<img class="logo-art" src="${it.logo}" alt="${it.title}">` : html`<h1>${it.title}</h1>`}
+    c.innerHTML = String(html`${it.logo ? html`<img class="logo-art banner-logo" src="${it.logo}" alt="${it.title}">` : html`<h1>${it.title}</h1>`}
       ${metaLine(it)}<p class="overview">${it.tagline || it.overview || ''}</p>
       <div class="actions"><a class="btn primary" href="#/watch/${it.kind === 'movie' ? it.id : ''}" data-play="${it.id}">${icons.play} Play</a>
       <a class="btn" href="#/title/${it.id}">${icons.info} More info</a></div>`);

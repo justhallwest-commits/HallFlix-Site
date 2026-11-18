@@ -286,6 +286,7 @@ test('looks: theme, library looks, seasons, uploads', async () => {
   assert.deepEqual([d.glowStyle, d.focusRing, d.atmosphere, d.tiles3d.style, d.soundFx.volume, d.login.music.enabled], ['natural', 'glow', 'none', 'layered', 0.8, false]);
   assert.deepEqual(d.rows, { items: 15, sections: 8, scroll: 'arrows', panel: false, panelHeight: 60 });
   assert.deepEqual([d.tileLogo, d.libLogoSize], [{ place: 'bl', size: 100, x: 0, y: 0, count: 'yes' }, 0]);
+  assert.deepEqual([d.homeTiles, d.bannerLogo, d.ident.order], [{ width: 320, height: 44, brightness: 100 }, 100, 'shuffle']);
   // Each library comes with a recent picture for the Studio's mini tiles, and keeps its own dragged logo spot.
   assert.ok((await hf.api('GET', '/api/studio/look')).libraries.find((l) => l.id === lib.movies.id).art);
   await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: { tileLogo: { place: 'free', fx: 95, fy: 8, size: 140 } } });
@@ -436,6 +437,27 @@ test('skip marks, scrub previews, the ident, evening look, year in review and wa
   assert.equal(q.at(-2).url, up.url);
   assert.ok(!(await play(signal.id, { prerolls: false })).some((x) => x.kind === 'ident'));
   assert.ok(!(await play(signal.id, { start: 90 })).some((x) => x.kind === 'ident'));
+
+  // Several idents: shuffled never plays the same one twice in a row, "in turn" rotates through them, and the built-in
+  // animation can join the mix (no ident in the queue: the website draws its own).
+  const raw = fs.readFileSync(path.join(media, 'Prerolls', 'hallflix-ident.mp4'));
+  const up2 = await hf.api('POST', '/api/studio/upload?name=ident2.mp4', Buffer.concat([raw, Buffer.from('2')]));
+  const up3 = await hf.api('POST', '/api/studio/upload?name=ident3.mp4', Buffer.concat([raw, Buffer.from('3')]));
+  const idents = [up.url, up2.url, up3.url].map((url) => ({ url, name: 'x' }));
+  const identOf = async () => (await play(signal.id)).find((x) => x.kind === 'ident')?.url || 'built-in';
+  await hf.api('PUT', '/api/studio/theme', { theme: { ...theme, ident: { enabled: true, videos: idents, order: 'shuffle' } } });
+  const shuffled = []; for (let i = 0; i < 8; i++) shuffled.push(await identOf());
+  assert.ok(shuffled.every((u, i) => i === 0 || u !== shuffled[i - 1]), 'never the same ident twice in a row');
+  assert.ok(new Set(shuffled).size >= 2 && shuffled.every((u) => idents.some((v) => v.url === u)));
+  await hf.api('PUT', '/api/studio/theme', { theme: { ...theme, ident: { enabled: true, videos: idents, order: 'order' } } });
+  const turns = []; for (let i = 0; i < 6; i++) turns.push(await identOf());
+  assert.deepEqual(turns.slice(0, 3).map((u) => idents.findIndex((v) => v.url === u)).sort(), [0, 1, 2]);
+  assert.deepEqual(turns.slice(3), turns.slice(0, 3), 'in turn: the same order each lap');
+  await hf.api('PUT', '/api/studio/theme', { theme: { ...theme, ident: { enabled: true, videos: idents.slice(0, 1), order: 'order', builtIn: true } } });
+  const mixed = [await identOf(), await identOf(), await identOf(), await identOf()];
+  assert.deepEqual([...new Set(mixed)].sort(), ['built-in', up.url].sort());
+  assert.ok(mixed.every((u, i) => i === 0 || u !== mixed[i - 1]), 'the uploaded ident and the built-in one take turns');
+  await hf.api('PUT', '/api/studio/theme', { theme: { ...theme, ident: { enabled: true, video: up.url }, night: { enabled: true, from: '00:00', to: '23:59', theme: { colors: { accent: '#e8b84a' } } } } });
 
   // The evening look rides along for each device to apply by its own clock; a season switches it off.
   let b = await hf.api('GET', '/api/boot');

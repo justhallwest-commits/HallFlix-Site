@@ -145,6 +145,12 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   body.classList.toggle('tiles-sway', T.sway !== false);
   root.setProperty('--tile-depth', String(Math.max(0, Math.min(1, T.depth ?? 0.6))));
   root.setProperty('--tile-thick', `${Math.max(0, Math.min(16, T.thickness ?? 6))}px`);
+  // Library tiles on Home: width before another fits in a row, height for their width, picture brightness; and the banner logo.
+  const H = t.homeTiles || {};
+  root.setProperty('--libs-min', `${Math.max(180, Math.min(900, +H.width || 320))}px`);
+  root.setProperty('--libs-ratio', String(Math.max(20, Math.min(80, +H.height || 44)) / 100));
+  root.setProperty('--tile-bright', String(Math.max(20, Math.min(160, +H.brightness || 100)) / 100));
+  root.setProperty('--banner-logo-k', String(Math.max(30, Math.min(250, +t.bannerLogo || 100)) / 100));
   const signedOut = !state.profile || !!state.signinPreview;
   const bg = signedOut ? (t.login?.image || t.background?.image) : (lib.background || t.background?.image);
   const dim = signedOut ? (t.login?.dim ?? 0.45) : (lib.dim ?? t.background?.dim ?? 0.6);
