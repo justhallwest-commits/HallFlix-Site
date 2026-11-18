@@ -286,6 +286,11 @@ test('looks: theme, library looks, seasons, uploads', async () => {
   assert.deepEqual([d.glowStyle, d.focusRing, d.atmosphere, d.tiles3d.style, d.soundFx.volume, d.login.music.enabled], ['natural', 'glow', 'none', 'layered', 0.8, false]);
   assert.deepEqual(d.rows, { items: 15, sections: 8, scroll: 'arrows', panel: false, panelHeight: 60 });
   assert.deepEqual([d.tileLogo, d.libLogoSize], [{ place: 'bl', size: 100, x: 0, y: 0, count: 'yes' }, 0]);
+  // Each library comes with a recent picture for the Studio's mini tiles, and keeps its own dragged logo spot.
+  assert.ok((await hf.api('GET', '/api/studio/look')).libraries.find((l) => l.id === lib.movies.id).art);
+  await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: { tileLogo: { place: 'free', fx: 95, fy: 8, size: 140 } } });
+  assert.deepEqual((await hf.api('GET', '/api/boot')).look.libraries[lib.movies.id].tileLogo, { place: 'free', fx: 95, fy: 8, size: 140 });
+  await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: {} });
   // A library's own row limits ride along with its look; empty choices mean "same as the whole app".
   await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: { rows: { items: '6', sections: '', panel: 'yes' } } });
   assert.deepEqual((await hf.api('GET', '/api/boot')).look.libraries[lib.movies.id].rows, { items: '6', panel: 'yes' });

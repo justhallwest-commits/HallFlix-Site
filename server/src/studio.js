@@ -133,7 +133,10 @@ export function routes(r) {
     defaults: look.DEFAULT_THEME, theme: await getSetting('theme', {}), options: look.OPTIONS,
     presets: [...look.PRESETS, ...(await plugins.listPlugins()).filter((p) => p.enabled).flatMap((p) => p.themes)],
     seasons: await q('select * from seasons order by starts, id'),
-    libraries: await q(`select id, name, kind, look from libraries where kind <> 'prerolls' order by position, id`),
+    // Each library with a recent picture from it, for the Studio's mini tiles (where logos are dragged into place).
+    libraries: (await q(`select l.id, l.name, l.kind, l.look,
+        (select i.backdrop from items i where i.library_id = l.id and i.backdrop is not null order by i.added_at desc, i.id desc limit 1) as art
+      from libraries l where l.kind <> 'prerolls' order by l.position, l.id`)).map(({ art, ...l }) => ({ ...l, art: img(art, 'w780') })),
     active: (await look.currentLook()).season,
   }), admin);
   r.put('/api/studio/theme', async ({ req }) => { await setSetting('theme', (await readJson(req)).theme || {}); return { ok: true }; }, admin);

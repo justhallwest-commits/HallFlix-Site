@@ -73,10 +73,14 @@ const PLACES = { br: [1, 1], mr: [1, 0.5], tr: [1, 0], bc: [0.5, 1], tc: [0.5, 0
 /** Where the logo (or name) sits on a library tile and how big it is, set up in Studio → Look and feel (whole app, then each library). */
 function logoStyle(lk) {
   const c = { place: 'bl', size: 100, x: 0, y: 0, count: 'yes', ...(themeNow()?.tileLogo || {}), ...(lk.tileLogo || {}) };
-  const [ax, ay] = PLACES[c.place] || PLACES.bl;
+  // "free": dragged into place in the Studio. fx/fy say where on the tile (0–100% across and down); the logo leans
+  // toward that side, so it never runs off the edge.
+  const free = c.place === 'free' && Number.isFinite(+c.fx) && Number.isFinite(+c.fy);
+  const [ax, ay] = free ? [Math.max(0, Math.min(100, +c.fx)) / 100, Math.max(0, Math.min(100, +c.fy)) / 100] : PLACES[c.place] || PLACES.bl;
   const k = Math.max(30, Math.min(300, +c.size || 100)) / 100;
-  const style = `--tl-ax:${ax};--tl-ay:${ay};--tl-x:${Math.max(-45, Math.min(45, +c.x || 0))}%;--tl-y:${Math.max(-45, Math.min(45, +c.y || 0))}%;--tl-k:${k};--tl-maxw:${Math.round(Math.max(30, Math.min(94, 58 * Math.max(1, k))))}%`;
-  return { style, align: ax === 0 ? 'start' : ax === 1 ? 'end' : 'center', count: c.count !== 'no' };
+  const nx = free ? 0 : Math.max(-45, Math.min(45, +c.x || 0)), ny = free ? 0 : Math.max(-45, Math.min(45, +c.y || 0));
+  const style = `--tl-ax:${ax.toFixed(3)};--tl-ay:${ay.toFixed(3)};--tl-x:${nx}%;--tl-y:${ny}%;--tl-k:${k};--tl-maxw:${Math.round(Math.max(30, Math.min(94, 58 * Math.max(1, k))))}%`;
+  return { style, align: ax < 0.34 ? 'start' : ax > 0.66 ? 'end' : 'center', count: c.count !== 'no' };
 }
 /** The covers on a library tile, set up in Studio → Look and feel (whole app, then each library). */
 function coversHtml(posters, lk) {
