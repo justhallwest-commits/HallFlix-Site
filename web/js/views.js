@@ -69,6 +69,13 @@ const rowHtml = (r) => html`<section class="row ${r.shape === 'wide' ? 'keep' : 
 
 const isVid = (u) => /\.(mp4|webm|m4v|mov)(\?|$)/i.test(u || '');
 // Where each place puts the covers on the tile: [across, down], 0 = left/top, 1 = right/bottom.
+const TILE_POS = { center: 'center', top: 'center top', bottom: 'center bottom', left: 'left center', right: 'right center' };
+/** The still picture on a library's Home tile (a tile background that is a video plays on the tile instead). */
+function tileBg(lk, artwork) {
+  if (lk.tileBackground && !isVid(lk.tileBackground)) return lk.tileBackground;
+  if (lk.tileUse !== 'artwork' && lk.background && !isVid(lk.background)) return lk.background;
+  return artwork;
+}
 const PLACES = { br: [1, 1], mr: [1, 0.5], tr: [1, 0], bc: [0.5, 1], tc: [0.5, 0], tl: [0, 0], bl: [0, 1], ml: [0, 0.5], mc: [0.5, 0.5] };
 /** Where the logo (or name) sits on a library tile and how big it is, set up in Studio → Look and feel (whole app, then each library). */
 function logoStyle(lk) {
@@ -101,12 +108,14 @@ function tilesHtml(list) {
   lastTiles = list;
   return html`<section class="libs" data-count="${list.length}">${list.map((l) => {
     const lk = libraryLook(l.id);
-    const bg = lk.background && !isVid(lk.background) ? lk.background : l.backdrop;
-    const style = [bg ? `--tile-bg:url("${String(bg).replace(/"/g, '%22')}")` : '', lk.accent ? `--tile-accent:${lk.accent}` : ''].filter(Boolean).join(';');
+    // The tile's picture is its own: the tile background if one is set, else (unless the tile is told to use the library's
+    // artwork) the library page's background, else the newest artwork in the library.
+    const bg = tileBg(lk, l.backdrop);
+    const style = [bg ? `--tile-bg:url("${String(bg).replace(/"/g, '%22')}")` : '', lk.accent ? `--tile-accent:${lk.accent}` : '', TILE_POS[lk.tilePos] ? `--tile-pos:${TILE_POS[lk.tilePos]}` : ''].filter(Boolean).join(';');
     const [one, many] = NOUN[l.kind] || ['title', 'titles'];
     const noun = l.count === 1 ? one : many;
     // A video plays on the tile while it is pointed at or in focus: the library's own tile video, or its background video.
-    const video = isVid(lk.tileVideo) ? lk.tileVideo : isVid(lk.background) ? lk.background : '';
+    const video = isVid(lk.tileVideo) ? lk.tileVideo : isVid(lk.tileBackground) ? lk.tileBackground : lk.tileUse !== 'artwork' && !lk.tileBackground && isVid(lk.background) ? lk.background : '';
     // The slab carries the tile's thickness and 3D turn; the tile inside holds the layers that move at different depths.
     const bright = Number.isFinite(+lk.tileBrightness) && +lk.tileBrightness > 0 ? `;--tile-bright:${Math.max(20, Math.min(160, +lk.tileBrightness)) / 100}` : '';
     return html`<div class="tile-slab"><a class="lib-tile" href="#/library/${l.id}" style="${style}${bright}" aria-label="${l.name}, ${l.count} ${noun}" ${video ? raw(`data-video="${esc(video)}"`) : ''}>

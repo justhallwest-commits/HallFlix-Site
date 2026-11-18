@@ -291,6 +291,10 @@ test('looks: theme, library looks, seasons, uploads', async () => {
   assert.ok((await hf.api('GET', '/api/studio/look')).libraries.find((l) => l.id === lib.movies.id).art);
   await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: { tileLogo: { place: 'free', fx: 95, fy: 8, size: 140 } } });
   assert.deepEqual((await hf.api('GET', '/api/boot')).look.libraries[lib.movies.id].tileLogo, { place: 'free', fx: 95, fy: 8, size: 140 });
+  // The tile's background is its own, separate from the library page's background.
+  await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: { background: '/uploads/page.jpg', tileBackground: '/uploads/tile.jpg', tilePos: 'top' } });
+  const both = (await hf.api('GET', '/api/boot')).look.libraries[lib.movies.id];
+  assert.deepEqual([both.background, both.tileBackground, both.tilePos], ['/uploads/page.jpg', '/uploads/tile.jpg', 'top']);
   await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: {} });
   // A library's own row limits ride along with its look; empty choices mean "same as the whole app".
   await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: { rows: { items: '6', sections: '', panel: 'yes' } } });
