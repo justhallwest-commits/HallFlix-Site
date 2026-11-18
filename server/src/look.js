@@ -63,6 +63,10 @@ export const DEFAULT_THEME = {
   // The numbers in the Top rated row: style (outline | solid | glow | badge | hidden), where (behind the poster or beside it),
   // size (% of usual), font ('theme' = the display font), colour (text | accent | gradient), strength (%), and whether the
   // row shows the scroll bar when the other rows do.
+  // The loading screen (shown while the app opens, including just after signing in): its picture (blank = the HallFlix
+  // logo set above), size (%), motion (pulse | breathe | glow | still) and background colour (blank = the theme's). And a
+  // welcome ident: a short video that plays after signing in ('signin') or each time the app opens ('open'), or never.
+  splash: { image: '', size: 100, motion: 'pulse', background: '', video: '', when: 'signin', sound: true },
   ranked: { style: 'outline', place: 'behind', size: 100, font: 'theme', color: 'text', strength: 62, scrollbar: false },
   // The covers on each library's Home tile: where they sit, how big, how many and how they stand. A library can override any of it.
   tileCovers: { show: 'yes', place: 'br', size: 56, count: 3, style: 'angled', x: 0, y: 0 },

@@ -1788,3 +1788,16 @@ body.rank-hidden .row.ranked .scroller { gap: clamp(8px, 1vw, 16px); }
 /* No scroll bar on the Top rated row, even when the other rows show one (unless it is asked for). */
 body.rows-bar:not(.rank-bar) .row.ranked > .scroller { scrollbar-width: none; }
 body.rows-bar:not(.rank-bar) .row.ranked > .scroller::-webkit-scrollbar { display: none; }
+
+/* ---------- The loading screen's motion (Studio → Sign-in page → After signing in) ---------- */
+.splash[data-motion="still"] img { animation: none; }
+.splash[data-motion="breathe"] img { animation: splash-breathe 3.2s ease-in-out infinite; }
+.splash[data-motion="glow"] img { animation: splash-glow 2.4s ease-in-out infinite; }
+@keyframes splash-breathe { 0%, 100% { transform: scale(0.96); opacity: 0.85; } 50% { transform: scale(1.04); opacity: 1; } }
+@keyframes splash-glow { 0%, 100% { filter: drop-shadow(0 0 4px rgba(var(--accent-rgb), 0.3)); } 50% { filter: drop-shadow(0 0 28px rgba(var(--accent-rgb), 0.85)); } }
+/* ---------- The welcome ident after signing in ---------- */
+.welcome { position: fixed; inset: 0; z-index: 200; background: #000; display: grid; place-items: center; animation: fade-in 0.3s ease both; }
+.welcome video { width: 100%; height: 100%; object-fit: contain; }
+.welcome .skip { position: absolute; right: max(24px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom)); }
+.welcome.out { opacity: 0; transition: opacity 0.45s; }
+@keyframes fade-in { from { opacity: 0; } }

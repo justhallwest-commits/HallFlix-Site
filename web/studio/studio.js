@@ -569,6 +569,17 @@ function signinCards(theme) {
     <div class="card"><h2>Background</h2>${image(theme, 'login.image', 'Sign-in background picture or video')}
       ${range(theme, 'login.dim', 'Darken the whole screen', 0, 0.95, 0.05)}${range(theme, 'login.blur', 'Blur the whole picture', 0, 30, 1)}</div>
     ${musicCard(theme)}
+    <div class="card"><h2>After signing in</h2>
+      <p class="muted small">The loading screen shows for a moment while HallFlix opens, including right after someone signs in. Each device picks up a change the next time it opens HallFlix.</p>
+      ${image(theme, 'splash.image', 'Loading screen picture (empty = your HallFlix logo from Logo above)')}
+      ${range(theme, 'splash.size', 'Size (% of the usual size)', 30, 250, 5, 100)}
+      ${choose(theme, 'splash.motion', 'Motion', [['pulse', 'Pulse (the usual)'], ['breathe', 'Breathe slowly'], ['glow', 'Glow on and off'], ['still', 'Still']])}
+      ${color(theme, 'splash.background', 'Background colour (empty = the theme’s)')}
+      <h3 class="sub">Welcome ident</h3>
+      ${image(theme, 'splash.video', 'A short video that plays after signing in (MP4 or WebM; a GIF works as the loading picture instead)')}
+      ${choose(theme, 'splash.when', 'When it plays', [['signin', 'Right after someone signs in'], ['open', 'Each time HallFlix opens (once per visit)'], ['never', 'Never (keep it for later)']])}
+      ${check(theme, 'splash.sound', 'With its sound (a browser that blocks sound plays it silently)')}
+      <p class="muted small">Anyone can skip it with any key, a tap, or the Skip button. It never runs longer than 30 seconds.</p></div>
     <div class="card"><h2>Logo</h2>${choose(theme, 'login.logoPlace', 'Where', LOGO_PLACES)}${range(theme, 'login.logoSize', 'Size (pixels tall)', 40, 340, 5)}
       ${image(theme, 'login.logo', 'A different logo for this page (empty uses the site logo)')}
       ${text(theme, 'login.title', 'Heading over the profiles', 'Who’s watching?')}</div>
