@@ -62,7 +62,7 @@ export const DEFAULT_THEME = {
   // Where the logo (or name) sits at the top of each library's page: left, center or right of the bar, 'name' (the name
   // instead of the logo) or 'hidden'; x/y nudge it in pixels (it may overlap the banner). A library can set its own.
   libPage: { place: 'left', x: 0, y: 0 },
-  // The numbers in the Top rated row: style (outline | solid | glow | badge | hidden), where (behind the poster or beside it),
+  // The numbers in the Top rated row: style (outline | solid | glow | badge | hidden), where (behind the poster, in front of it, or beside it),
   // size (% of usual), font ('theme' = the display font), colour (text | accent | gradient), strength (%), and whether the
   // row shows the scroll bar when the other rows do.
   // The loading screen (shown while the app opens, including just after signing in): its picture (blank = the HallFlix

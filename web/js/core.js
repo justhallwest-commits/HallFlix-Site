@@ -127,7 +127,7 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   const bd = document.body;
   bd.className = bd.className.replace(/\brank-\S+/g, '').trim();
   bd.classList.add(`rank-${['outline', 'solid', 'glow', 'badge', 'hidden'].includes(RK.style) ? RK.style : 'outline'}`,
-    `rank-at-${RK.place === 'beside' ? 'beside' : 'behind'}`, `rank-c-${['accent', 'gradient'].includes(RK.color) ? RK.color : 'text'}`);
+    `rank-at-${['beside', 'front'].includes(RK.place) ? RK.place : 'behind'}`, `rank-c-${['accent', 'gradient'].includes(RK.color) ? RK.color : 'text'}`);
   bd.classList.toggle('rank-bar', RK.scrollbar === true);
   root.setProperty('--rank-k', String(Math.max(40, Math.min(160, +RK.size || 100)) / 100));
   root.setProperty('--rank-a', String(Math.max(15, Math.min(100, +RK.strength || 62)) / 100));
