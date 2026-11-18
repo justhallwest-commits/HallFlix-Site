@@ -67,10 +67,12 @@ const tlStyle = ([x, y], k) => `--ax:${(x / 100).toFixed(3)};--ay:${(y / 100).to
 function tileEditor(l, own, base, bright = 100) {
   base = { ...base, brightness: bright };
   const c = { place: 'bl', size: 100, count: 'yes', ...base, ...(own.tileLogo || {}) };
-  const pic = own.background && !/\.(mp4|webm|m4v|mov)(\?|$)/i.test(own.background) ? own.background : l.art;
+  const vid = (u) => /\.(mp4|webm|m4v|mov)(\?|$)/i.test(u || '');
+  const pic = own.tileBackground && !vid(own.tileBackground) ? own.tileBackground
+    : own.tileUse !== 'artwork' && own.background && !vid(own.background) ? own.background : l.art;
   const k = Math.max(30, Math.min(300, +c.size || 100)) / 100;
   return html`<div class="tl-edit" data-tl-lib="${l.id}">
-    <div class="tl-tile" style="${pic ? `--bg:url('${encodeURI(pic)}');` : ''}--b:${(+own.tileBrightness || +base.brightness || 100) / 100}" title="Drag the logo to where it should sit on the ${l.name} tile">
+    <div class="tl-tile" style="${pic ? `--bg:url('${encodeURI(pic)}');` : ''}--bgpos:${({ top: 'center top', bottom: 'center bottom', left: 'left center', right: 'right center' })[own.tilePos] || 'center 30%'};--b:${(+own.tileBrightness || +base.brightness || 100) / 100}" title="Drag the logo to where it should sit on the ${l.name} tile">
       <span class="tl-logo" tabindex="0" role="button" aria-label="${l.name} logo: drag, or use the arrow keys, to move it" style="${tlStyle(tileSpot(c), k)}">${own.logo ? html`<img src="${own.logo}" alt="" draggable="false">` : html`<b>${l.name}</b>`}${c.count !== 'no' ? html`<small>Title count</small>` : ''}</span></div>
     <div class="tl-ctl"><b>${l.name}</b>
       <label class="tl-size">Size <input type="range" min="30" max="300" step="5" value="${Math.round(k * 100)}" data-tl-size><output>${Math.round(k * 100)}%</output></label>
@@ -587,14 +589,18 @@ pages.look = async (main) => {
     box.innerHTML = String(html`${head('Look and feel', 'Changes show in the preview straight away. Nothing goes live until you save.')}
       <div class="tabs"><button data-tab="theme" class="${tab === 'theme' ? 'on' : ''}">Whole app</button><button data-tab="signin" class="${tab === 'signin' ? 'on' : ''}">Sign-in page</button>${L.libraries.map((l) => html`<button data-tab="lib-${l.id}" class="${tab === `lib-${l.id}` ? 'on' : ''}">${l.name}</button>`)}</div>
       ${tab === 'signin' ? signinCards(theme) : lib ? html`<div class="card" data-form="lib"><h2>${lib.name} only</h2><p class="muted small">Leave anything empty to use the whole-app look.</p>
-          ${image(libs[lib.id], 'background', 'Background picture or video')}${range(libs[lib.id], 'dim', 'Darken background', 0, 0.95, 0.05, theme.background.dim)}
+          ${image(libs[lib.id], 'background', 'Library page background (picture or video). The Home tile has its own setting below.')}${range(libs[lib.id], 'dim', 'Darken background', 0, 0.95, 0.05, theme.background.dim)}
           ${range(libs[lib.id], 'blur', 'Blur background', 0, 30, 1, theme.background.blur || 0)}${choose(libs[lib.id], 'shade', 'Shade', BG_SHADES, 'Same as whole app')}${choose(libs[lib.id], 'position', 'Keep in view', BG_PLACES, 'Same as whole app')}
           <p class="muted small">You can also change this on the ${lib.name} page itself: admins see a picture button next to the library name.</p>
           ${image(libs[lib.id], 'logo', 'Logo shown instead of the library name')}
           ${image(libs[lib.id], 'tileVideo', 'Tile video: plays on the Home tile while it is pointed at or in focus (MP4 or WebM, short and silent)')}
           ${check(libs[lib.id], 'useAccent', 'Give this library its own accent colours')}
           ${libs[lib.id].useAccent ? html`${color(libs[lib.id], 'accent', 'Accent')}${color(libs[lib.id], 'accent2', 'Second accent')}` : ''}</div>
-        <div class="card"><h2>${lib.name} tile</h2><p class="muted small">Drag the logo to where it should sit on the ${lib.name} tile on Home, and set its size.</p>${tileEditor(lib, libs[lib.id], theme.tileLogo || {}, theme.homeTiles?.brightness ?? 100)}</div>
+        <div class="card"><h2>${lib.name} tile</h2><p class="muted small">The ${lib.name} tile on Home has its own background, separate from the background of the ${lib.name} page above. Drag the logo to where it should sit, and set its size.</p>
+          ${image(libs[lib.id], 'tileBackground', 'Tile background: a picture (or a short video) for the Home tile only')}
+          ${choose(libs[lib.id], 'tileUse', 'With no tile background, the tile shows', [['', 'The library page’s background'], ['artwork', 'The newest artwork in the library']])}
+          ${choose(libs[lib.id], 'tilePos', 'Which part of the picture shows', [['', 'Centre, a little high (usual)'], ['center', 'Centre'], ['top', 'Top'], ['bottom', 'Bottom'], ['left', 'Left'], ['right', 'Right']])}
+          ${tileEditor(lib, libs[lib.id], theme.tileLogo || {}, theme.homeTiles?.brightness ?? 100)}</div>
         ${logoCard(libs[lib.id], theme.tileLogo || {}, lib.name)}
         ${coversCard(libs[lib.id], theme.tileCovers || {}, lib.name)}
         ${rowsCard(libs[lib.id], lib.name, !!theme.rows?.panel, theme.rows?.panelHeight ?? 60)}`
@@ -646,7 +652,7 @@ pages.look = async (main) => {
   // On the Sign-in page tab, some choices show or hide others (panel strength, how dark, where to blur).
   box.addEventListener('change', (e) => { if (tab === 'signin' && e.target.matches('select[data-path^="login."], [data-path="login.focusBlur"]')) draw(); });
   // Choices that show or hide others on the Whole app tab.
-  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"]')) draw(); });
+  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"]')) draw(); });
   // Sounds and sign-in music: test, upload, reorder and remove.
   const touched = (redraw = true) => { dirty = true; if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false; send(); };
   const music = () => { theme.login ||= {}; theme.login.music ||= {}; if (!Array.isArray(theme.login.music.tracks)) theme.login.music.tracks = []; return theme.login.music; };
