@@ -1809,3 +1809,11 @@ body.rows-bar:not(.rank-bar) .row.ranked > .scroller::-webkit-scrollbar { displa
 .hero.playing .clip-sound { opacity: 1; }
 .hero .clip-sound:hover, .hero .clip-sound:focus-visible { border-color: var(--accent); box-shadow: var(--glow-shadow); outline: none; }
 body.ui-hud .hero .clip-sound { border-radius: 0; }
+
+/* ---------- Banner text stays readable on bright pictures ---------- */
+/* A soft shade right behind the words (wherever they sit and however wide the screen), and a light shadow on the details line. */
+.hero .content::before { content: ''; position: absolute; z-index: -1; inset: -28% -22% -24% -18%; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(var(--bg-rgb), 0.62), rgba(var(--bg-rgb), 0.28) 62%, transparent); }
+.hero .meta { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75), 0 0 14px rgba(0, 0, 0, 0.5); }
+.hero .meta .tag { background: rgba(var(--bg-rgb), 0.35); }
+@media (max-width: 700px) { .hero .content::before { inset: -18% -12% -16% -12%; background: radial-gradient(closest-side, rgba(var(--bg-rgb), 0.72), rgba(var(--bg-rgb), 0.35) 65%, transparent); } }

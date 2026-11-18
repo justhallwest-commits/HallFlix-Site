@@ -42,7 +42,7 @@ export async function musicHome(box, lib, syncArrows) {
     ${row('Rediscover', d.rediscover.map((x) => cardHtml(x)), 'mh-redis', 'Albums you have not played in a while')}
     ${row('Something different', d.something.map((x) => cardHtml(x)), 'mh-diff', 'Albums you have never played')}
   </div>`);
-  for (const r of $$('.row', box)) syncArrows?.(r);
+  syncArrows?.(...$$('.row', box));
   box.onclick = (e) => {
     const mix = e.target.closest('[data-mix]');
     if (mix) { e.preventDefault(); music.startRadio(mix.dataset.mix, { library: lib.id, keep: false }); return; }

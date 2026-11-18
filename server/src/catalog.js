@@ -145,7 +145,7 @@ export function routes(r) {
       const pick = art.filter((a) => a.backdrop);
       tiles.push({
         id: l.id, name: l.name, kind: l.kind, count: stats.n, fresh: stats.fresh,
-        backdrop: pick.length ? img(pick[Math.abs(hash(day + l.id)) % pick.length].backdrop, 'w1280') : null,
+        backdrop: pick.length ? img(pick[Math.abs(hash(day + l.id)) % pick.length].backdrop, 'w780') : null, // a tile is far narrower than the screen
         posters: art.filter((a) => a.poster).slice(0, 3).map((a) => img(a.poster, 'w342')),
       });
     }

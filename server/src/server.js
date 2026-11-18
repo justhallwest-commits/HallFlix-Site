@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { cfg } from './config.js';
 import { migrate, q, q1, getSetting, setSetting } from './db.js';
-import { Router, HttpError, json, readJson, sendFile, safeJoin } from './http.js';
+import { Router, HttpError, json, readJson, sendFile, sendText, safeJoin } from './http.js';
 import * as auth from './auth.js';
 import * as catalog from './catalog.js';
 import * as playback from './playback.js';
@@ -26,6 +26,7 @@ import * as profilesMod from './profiles.js';
 import * as lyricsMod from './lyrics.js';
 import * as musicMod from './music.js';
 import * as clips from './clips.js';
+import { versionedPage } from './webpage.js';
 import * as ratingsMod from './ratings.js';
 import * as videosMod from './videos.js';
 import * as subtitlesMod from './subtitles.js';
@@ -152,10 +153,13 @@ async function serveStatic(req, res, pathname) {
   let rel = pathname;
   if (rel === '/' || rel === '') rel = '/index.html';
   else if (rel === '/studio' || rel === '/studio/') rel = '/studio/index.html';
+  // The pages carry each script's version (see webpage.js); a versioned file never changes, so it is kept for good.
+  if (rel === '/index.html' || rel === '/studio/index.html') return sendText(req, res, versionedPage(cfg.webDir, rel));
+  const versioned = /[?&]v=[0-9a-f]{6,}/.test(req.url || '');
   const long = rel.startsWith('/assets/fonts/') || rel.startsWith('/vendor/');
-  try { return await sendFile(req, res, safeJoin(cfg.webDir, rel), { cache: long ? 'public, max-age=2592000' : 'no-cache' }); }
+  try { return await sendFile(req, res, safeJoin(cfg.webDir, rel), { cache: versioned ? 'public, max-age=31536000, immutable' : long ? 'public, max-age=2592000' : 'no-cache' }); }
   catch (e) {
-    if (e.status === 404 && !path.extname(rel)) return sendFile(req, res, path.join(cfg.webDir, 'index.html'));
+    if (e.status === 404 && !path.extname(rel)) return sendText(req, res, versionedPage(cfg.webDir, '/index.html'));
     throw e;
   }
 }

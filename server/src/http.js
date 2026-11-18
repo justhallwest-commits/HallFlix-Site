@@ -1,6 +1,7 @@
 // A small HTTP toolkit: router, JSON helpers and range-aware file serving.
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 
 export class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -16,11 +17,40 @@ const MIME = {
 };
 export const mime = (file) => MIME[path.extname(file).slice(1).toLowerCase()] || 'application/octet-stream';
 
+const gzipOk = (req) => /\bgzip\b/.test(req?.headers?.['accept-encoding'] || '');
 export function json(res, status, obj, headers = {}) {
-  const body = Buffer.from(JSON.stringify(obj));
-  res.writeHead(status, { 'Content-Type': MIME.json, 'Content-Length': body.length, 'Cache-Control': 'no-store', ...headers });
+  let body = Buffer.from(JSON.stringify(obj));
+  const extra = {};
+  // Bigger answers (Home, a library page) are about a sixth of their size gzipped: quicker over Wi-Fi and the internet.
+  if (body.length > 1400 && gzipOk(res.req)) { body = zlib.gzipSync(body, { level: 5 }); extra['Content-Encoding'] = 'gzip'; extra.Vary = 'Accept-Encoding'; }
+  res.writeHead(status, { 'Content-Type': MIME.json, 'Content-Length': body.length, 'Cache-Control': 'no-store', ...extra, ...headers });
   res.end(body);
 }
+
+// Text files (scripts, styles, pages) are sent gzipped from memory; the packed copy is kept until the file changes.
+const PACK = /^(text\/|application\/(json|manifest\+json|javascript)|image\/svg)/;
+const packed = new Map(); // file → { key, buf }
+function packedCopy(file, st) {
+  const key = `${st.size}:${st.mtimeMs}`;
+  const hit = packed.get(file);
+  if (hit?.key === key) return hit.buf;
+  const buf = zlib.gzipSync(fs.readFileSync(file), { level: 7 });
+  packed.set(file, { key, buf });
+  if (packed.size > 400) packed.delete(packed.keys().next().value);
+  return buf;
+}
+/** Send text the server built itself (a page with its script versions filled in), gzipped when the browser accepts it. */
+export function sendText(req, res, text, { type = MIME.html, cache = 'no-cache' } = {}) {
+  let body = Buffer.from(text);
+  const etag = `"${crypto_hash(body)}"`;
+  const headers = { 'Content-Type': type, 'Cache-Control': cache, ETag: etag, Vary: 'Accept-Encoding' };
+  if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); return res.end(); }
+  if (gzipOk(req)) { body = zlib.gzipSync(body, { level: 7 }); headers['Content-Encoding'] = 'gzip'; }
+  headers['Content-Length'] = body.length;
+  res.writeHead(200, headers);
+  res.end(req.method === 'HEAD' ? undefined : body);
+}
+const crypto_hash = (buf) => { let h = 2166136261; for (let i = 0; i < buf.length; i++) { h ^= buf[i]; h = Math.imul(h, 16777619); } return (h >>> 0).toString(36) + buf.length.toString(36); };
 
 export function readBody(req, limit = 2e6) {
   return new Promise((resolve, reject) => {
@@ -53,6 +83,15 @@ export async function sendFile(req, res, file, { cache = 'no-cache', type } = {}
   };
   const range = req.headers.range;
   if (!range && req.headers['if-none-match'] === etag) { res.writeHead(304, headers); return res.end(); }
+  if (!range && PACK.test(headers['Content-Type']) && st.size > 1000 && st.size < 4e6) {
+    headers.Vary = 'Accept-Encoding';
+    if (gzipOk(req)) {
+      const buf = packedCopy(file, st);
+      headers['Content-Encoding'] = 'gzip'; headers['Content-Length'] = buf.length;
+      res.writeHead(200, headers);
+      return res.end(req.method === 'HEAD' ? undefined : buf);
+    }
+  }
   let start = 0, end = st.size - 1, status = 200;
   if (range) {
     const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
