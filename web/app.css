@@ -1817,3 +1817,14 @@ body.ui-hud .hero .clip-sound { border-radius: 0; }
 .hero .meta { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75), 0 0 14px rgba(0, 0, 0, 0.5); }
 .hero .meta .tag { background: rgba(var(--bg-rgb), 0.35); }
 @media (max-width: 700px) { .hero .content::before { inset: -18% -12% -16% -12%; background: radial-gradient(closest-side, rgba(var(--bg-rgb), 0.72), rgba(var(--bg-rgb), 0.35) 65%, transparent); } }
+
+/* In front of the poster: the number sits over the poster's bottom-left corner, with a dark edge so it reads on any artwork.
+   It never takes clicks, so the poster underneath still opens. */
+body.rank-at-front .rank .num { z-index: 3; bottom: 0.05em; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 18px rgba(0, 0, 0, 0.45)); }
+body.rank-at-front .rank { padding-left: calc(clamp(40px, 4vw, 66px) * var(--rank-k, 1)); }
+body.rank-at-front .rank:nth-child(n+10) { padding-left: calc(clamp(62px, 6.6vw, 110px) * var(--rank-k, 1)); }
+body.rank-at-front.rank-outline .rank .num { -webkit-text-stroke-width: 3px; -webkit-text-stroke-color: rgba(var(--text-rgb), max(0.85, var(--rank-a, 0.62))); }
+body.rank-at-front.rank-outline.rank-c-accent .rank .num { -webkit-text-stroke-color: var(--accent); }
+body.rank-at-front.rank-outline.rank-c-gradient .rank .num { -webkit-text-stroke-color: rgb(var(--accent2-rgb)); }
+body.rank-at-front:is(.rank-solid, .rank-glow) .rank .num { color: rgba(var(--text-rgb), max(0.9, var(--rank-a, 0.62))); }
+body.rank-at-front:is(.rank-solid, .rank-glow).rank-c-accent .rank .num { color: var(--accent); }

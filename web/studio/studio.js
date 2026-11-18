@@ -536,7 +536,7 @@ const rankedCard = (theme, fonts) => {
   const st = theme.ranked?.style || 'outline';
   return html`<div class="card"><h2>Top rated numbers</h2>
   ${choose(theme, 'ranked.style', 'Style', [['outline', 'Outline (the usual)'], ['solid', 'Solid'], ['glow', 'Glowing'], ['badge', 'A small badge on the poster’s bottom corner'], ['hidden', 'Hidden: posters only']])}
-  ${st === 'badge' || st === 'hidden' ? '' : choose(theme, 'ranked.place', 'Where', [['behind', 'Behind the poster, partly covered (the usual)'], ['beside', 'Beside the poster, not covered']])}
+  ${st === 'badge' || st === 'hidden' ? '' : choose(theme, 'ranked.place', 'Where', [['behind', 'Behind the poster, partly covered (the usual)'], ['front', 'In front of the poster, overlapping its corner'], ['beside', 'Beside the poster, not covered']])}
   ${st === 'hidden' ? '' : html`${range(theme, 'ranked.size', 'Size (% of the usual size)', 40, 160, 5, 100)}
     ${choose(theme, 'ranked.font', 'Font', [['theme', 'Same as the titles'], ...fonts.map((f) => [f, f])])}
     ${choose(theme, 'ranked.color', 'Colour', [['text', 'Like the text'], ['accent', 'Accent colour'], ['gradient', 'Accent gradient (second accent for outlines)']])}
