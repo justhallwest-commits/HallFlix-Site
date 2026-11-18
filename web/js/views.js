@@ -69,7 +69,15 @@ const rowHtml = (r) => html`<section class="row ${r.shape === 'wide' ? 'keep' : 
 
 const isVid = (u) => /\.(mp4|webm|m4v|mov)(\?|$)/i.test(u || '');
 // Where each place puts the covers on the tile: [across, down], 0 = left/top, 1 = right/bottom.
-const PLACES = { br: [1, 1], mr: [1, 0.5], tr: [1, 0], bc: [0.5, 1], tc: [0.5, 0], tl: [0, 0] };
+const PLACES = { br: [1, 1], mr: [1, 0.5], tr: [1, 0], bc: [0.5, 1], tc: [0.5, 0], tl: [0, 0], bl: [0, 1], ml: [0, 0.5], mc: [0.5, 0.5] };
+/** Where the logo (or name) sits on a library tile and how big it is, set up in Studio → Look and feel (whole app, then each library). */
+function logoStyle(lk) {
+  const c = { place: 'bl', size: 100, x: 0, y: 0, count: 'yes', ...(themeNow()?.tileLogo || {}), ...(lk.tileLogo || {}) };
+  const [ax, ay] = PLACES[c.place] || PLACES.bl;
+  const k = Math.max(30, Math.min(300, +c.size || 100)) / 100;
+  const style = `--tl-ax:${ax};--tl-ay:${ay};--tl-x:${Math.max(-45, Math.min(45, +c.x || 0))}%;--tl-y:${Math.max(-45, Math.min(45, +c.y || 0))}%;--tl-k:${k};--tl-maxw:${Math.round(Math.max(30, Math.min(94, 58 * Math.max(1, k))))}%`;
+  return { style, align: ax === 0 ? 'start' : ax === 1 ? 'end' : 'center', count: c.count !== 'no' };
+}
 /** The covers on a library tile, set up in Studio → Look and feel (whole app, then each library). */
 function coversHtml(posters, lk) {
   const c = { show: 'yes', place: 'br', size: 56, count: 3, style: 'angled', x: 0, y: 0, ...(themeNow()?.tileCovers || {}), ...(lk.tileCovers || {}) };
@@ -99,8 +107,8 @@ function tilesHtml(list) {
     return html`<div class="tile-slab"><a class="lib-tile" href="#/library/${l.id}" style="${style}" aria-label="${l.name}, ${l.count} ${noun}" ${video ? raw(`data-video="${esc(video)}"`) : ''}>
       <span class="tile-art"></span>
       ${coversHtml(l.posters, lk)}
-      <span class="tile-text">${lk.logo ? html`<img class="tile-logo" src="${lk.logo}" alt="">` : html`<b class="tile-name">${l.name}</b>`}
-        <span class="tile-count">${l.count} ${noun}${l.fresh ? html`<em>${l.fresh} new</em>` : ''}</span></span>
+      ${(() => { const ls = logoStyle(lk); return html`<span class="tile-text placed ${lk.logo ? 'has-logo' : ''}" data-align="${ls.align}" style="${ls.style}">${lk.logo ? html`<img class="tile-logo" src="${lk.logo}" alt="">` : html`<b class="tile-name">${l.name}</b>`}
+        ${ls.count ? html`<span class="tile-count">${l.count} ${noun}${l.fresh ? html`<em>${l.fresh} new</em>` : ''}</span>` : ''}</span>`; })()}
       <span class="tile-sweep"></span><span class="tile-shine"></span><span class="tile-ring"></span></a></div>`;
   })}</section>`;
 }

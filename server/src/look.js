@@ -46,6 +46,11 @@ export const DEFAULT_THEME = {
   // how many rows show before "Show more rows" (0 = all), arrows or a visible scroll bar under each row, and whether the
   // rows sit in their own scrolling panel so the background stays in view.
   rows: { items: 15, sections: 8, scroll: 'arrows', panel: false, panelHeight: 60 },
+  // The logo (or name) on each library's Home tile: where it sits, how big (% of the usual size), a nudge from there,
+  // and whether the title count shows under it. A library can override any of it.
+  tileLogo: { place: 'bl', size: 100, x: 0, y: 0, count: 'yes' },
+  // How tall a library's logo is at the top of its own page, in pixels (0 = automatic). A library can set its own.
+  libLogoSize: 0,
   // The covers on each library's Home tile: where they sit, how big, how many and how they stand. A library can override any of it.
   tileCovers: { show: 'yes', place: 'br', size: 56, count: 3, style: 'angled', x: 0, y: 0 },
 };
