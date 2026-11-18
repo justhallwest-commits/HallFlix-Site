@@ -142,7 +142,9 @@ function startHero(list) {
     const it = list[i], bgs = $$('.bg', hero);
     layer = 1 - layer;
     bgs[layer].style.backgroundImage = `url("${it.backdrop}")`;
-    bgs[layer].classList.remove('on'); void bgs[layer].offsetWidth; bgs[layer].classList.add('on'); bgs[1 - layer].classList.remove('on');
+    // Restart the fade on the next frame instead of forcing a layout now.
+    const next = bgs[layer]; next.classList.remove('on'); bgs[1 - layer].classList.remove('on');
+    requestAnimationFrame(() => requestAnimationFrame(() => next.classList.add('on')));
     const c = $('.content', hero);
     const hadFocus = c.contains(document.activeElement);
     c.classList.remove('swap');
@@ -150,10 +152,13 @@ function startHero(list) {
       ${metaLine(it)}<p class="overview">${it.tagline || it.overview || ''}</p>
       <div class="actions"><a class="btn primary" href="#/watch/${it.kind === 'movie' ? it.id : ''}" data-play="${it.id}">${icons.play} Play</a>
       <a class="btn" href="#/title/${it.id}">${icons.info} More info</a></div>`);
-    void c.offsetWidth; c.classList.add('swap');
+    requestAnimationFrame(() => requestAnimationFrame(() => c.classList.add('swap')));
     if (hadFocus) $('.btn.primary', c)?.focus();
     $$('.dots button', hero).forEach((d, k) => d.classList.toggle('on', k === i));
     hero.dataset.showing = it.id;
+    // Fetch the next title's picture now, so it is ready when the banner moves on (no picture popping in mid-fade).
+    const nx = list[(i + 1) % list.length];
+    if (nx && nx !== it) { const pre = new Image(); pre.decoding = 'async'; pre.src = nx.backdrop; }
     feel.tint(hero, it.backdrop); feel.wash(it.backdrop); feel.queueTrailer(hero, it);
   };
   hero.show = show;
@@ -161,11 +166,16 @@ function startHero(list) {
   if (list.length > 1) heroTimer = setInterval(() => { if (feel.trailerPlaying() && (hero.beats = (hero.beats || 0) + 1) < 5) return; hero.beats = 0; if (!hero.matches(':hover') && !hero.contains(document.activeElement) && !document.hidden && !$('#overlay').childElementCount && $('#player').hidden && !$('.surprise')) show(i + 1); }, 9000);
 }
 
-export function syncArrows(row) {
-  const sc = $('.scroller', row);
-  if (!sc) return;
-  $('.arrow.l', row).hidden = sc.scrollLeft < 10;
-  $('.arrow.r', row).hidden = sc.scrollLeft + sc.clientWidth > sc.scrollWidth - 10;
+/** Show or hide each row's arrows. All the measuring happens before any change, so the page is laid out once, not once per row. */
+export function syncArrows(...rows) {
+  // A whole page of rows waits until it has been drawn, so measuring it costs nothing and never delays the first paint.
+  if (rows.length > 1 && !syncArrows.now) { requestAnimationFrame(() => setTimeout(() => { syncArrows.now = true; syncArrows(...rows.filter((r) => r.isConnected)); syncArrows.now = false; }, 0)); return; }
+  const seen = rows.map((row) => { const sc = $('.scroller', row); return sc && [row, sc.scrollLeft, sc.clientWidth, sc.scrollWidth]; }).filter(Boolean);
+  for (const [row, left, width, full] of seen) {
+    const l = $('.arrow.l', row), r = $('.arrow.r', row);
+    if (l) l.hidden = left < 10;
+    if (r) r.hidden = left + width > full - 10;
+  }
 }
 
 // ---------- shell ----------
@@ -187,7 +197,14 @@ export function shell() {
     timer = setTimeout(() => { location.hash = qv ? `#/search/${encodeURIComponent(qv)}` : '#/'; }, 160);
   });
   app().addEventListener('click', onClick);
-  app().addEventListener('scroll', (e) => { const row = e.target.closest?.('.row'); if (row) syncArrows(row); }, true);
+  // Rows scrolled sideways update their arrows at most once a frame.
+  const moved = new Set(); let frame = 0;
+  app().addEventListener('scroll', (e) => {
+    const row = e.target.closest?.('.row');
+    if (!row) return;
+    moved.add(row);
+    frame ||= requestAnimationFrame(() => { frame = 0; syncArrows(...moved); moved.clear(); });
+  }, { capture: true, passive: true });
   app().addEventListener('change', (e) => {
     if (e.target.matches('[data-sort]')) { base.sort = e.target.value; loadLibrary(true); }
     if (e.target.matches('[data-decade]')) { base.decade = e.target.value; loadLibrary(true); }
@@ -269,7 +286,7 @@ export async function show(name, arg) {
   const draw = async () => {
    try {
     if (name === 'library') await library(+arg);
-    else if (name === 'me') { setNav('me'); applyLook(state.look, null); await more.hub(view(), rowHtml); for (const r of $$('.row')) syncArrows(r); }
+    else if (name === 'me') { setNav('me'); applyLook(state.look, null); await more.hub(view(), rowHtml); syncArrows(...$$('.row')); }
     else if (name === 'person') { setNav(''); applyLook(state.look, null); await more.person(view(), decodeURIComponent(arg || '')); }
     else if (name === 'remote') { setNav(''); applyLook(state.look, null); await more.remote(view()); }
     else if (name === 'pair') { setNav(''); applyLook(state.look, null); await more.pairApprove(view(), arg || ''); }
@@ -327,7 +344,7 @@ async function drawRows() {
   }
   if (!$('#homerows')) return;
   box.innerHTML = String(html`${out}`);
-  for (const r of $$('.row')) syncArrows(r);
+  syncArrows(...$$('.row'));
 }
 
 async function library(id) {
@@ -371,7 +388,7 @@ async function videoLibrary(lib, lk) {
       <div class="${d.spotlight.length ? 'rows' : 'page rows-plain'}">${d.rows.map((r) => (r.genre ? { ...r, title: raw(`${esc(r.title)} <button class="seeall" data-seegenre="${esc(r.genre)}">See all ›</button>`) } : r)).map(rowHtml)}</div></div>`);
     $('.vlib .count').textContent = plural(d.total, NOUN[lib.kind]);
     startHero(d.spotlight);
-    for (const r of $$('.row')) syncArrows(r);
+    syncArrows(...$$('.row'));
     return;
   }
   const size = cardSize();

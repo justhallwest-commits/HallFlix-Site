@@ -301,6 +301,13 @@ test('looks: theme, library looks, seasons, uploads', async () => {
   assert.deepEqual(d.libPage, { place: 'left', x: 0, y: 0 });
   assert.deepEqual(d.splash, { image: '', size: 100, motion: 'pulse', background: '', video: '', when: 'signin', sound: true });
   assert.equal((await fetch(`${hf.base}/js/splash.js`)).status, 200, 'the loading screen script is served');
+  // Pages carry versioned module addresses (cached for good) and everything text-based is gzipped.
+  const pageHtml = await (await fetch(`${hf.base}/`)).text();
+  const coreV = /"\/js\/core\.js":"(\/js\/core\.js\?v=[0-9a-f]{10})"/.exec(pageHtml)?.[1];
+  assert.ok(coreV && pageHtml.includes('rel="modulepreload"'), 'an import map and preload links');
+  const cv = await fetch(hf.base + coreV, { headers: { 'Accept-Encoding': 'gzip' } });
+  assert.deepEqual([cv.headers.get('cache-control'), cv.headers.get('content-encoding')], ['public, max-age=31536000, immutable', 'gzip']);
+  assert.equal((await fetch(`${hf.base}/api/home`, { headers: { Cookie: hf.getCookie(), 'Accept-Encoding': 'gzip' } })).headers.get('content-encoding'), 'gzip');
   assert.deepEqual(d.ranked, { style: 'outline', place: 'behind', size: 100, font: 'theme', color: 'text', strength: 62, scrollbar: false });
   // Each library comes with a recent picture for the Studio's mini tiles, and keeps its own dragged logo spot.
   assert.ok((await hf.api('GET', '/api/studio/look')).libraries.find((l) => l.id === lib.movies.id).art);

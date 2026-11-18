@@ -76,7 +76,7 @@ export async function comicsLibrary(view, lib, lk, base, syncArrows) {
       <select data-cpub aria-label="Publisher" hidden></select></div>
       <div class="chips cx-status">${[['', 'All'], ['unread', 'Unread'], ['reading', 'In progress'], ['read', 'Finished']].map(([v, n]) => html`<button class="chip ${st.status === v ? 'on' : ''}" data-cstatus="${v}">${n}</button>`)}</div>
       <div class="chips cx-genres"></div><div class="grid cx-grid-all"></div><div class="cx-sentinel" style="height:1px"></div></section></div>`);
-  for (const r of $$('.row', view)) syncArrows?.(r);
+  syncArrows?.(...$$('.row', view));
 
   const load = async (reset) => {
     if (st.loading || (!reset && st.done)) return;

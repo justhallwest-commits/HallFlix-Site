@@ -29,6 +29,7 @@ function rgbOf(h, s, l) {
 function vivid(img) {
   try {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, 16, 16);
     ctx.drawImage(img, 0, 0, 16, 16);
     const px = ctx.getImageData(0, 0, 16, 16).data;
     const bins = new Array(12).fill(0).map(() => [0, 0, 0, 0]); // weight, r, g, b per 30° of hue
@@ -46,12 +47,36 @@ function vivid(img) {
     return rgbOf(h, Math.min(0.9, Math.max(0.55, s)), dark ? 0.62 : 0.42);
   } catch { return null; }
 }
+// Colours already worked out are kept on this device, so a picture is only read once, not on every visit.
+const COLOURS_KEY = 'hf_colours';
+let stored = null;
+function storedColours() {
+  if (stored) return stored;
+  try { stored = new Map(JSON.parse(localStorage.getItem(COLOURS_KEY) || '[]')); } catch { stored = new Map(); }
+  return stored;
+}
+let saveTimer = 0;
+function rememberColour(url, c) {
+  const m = storedColours();
+  m.delete(url); m.set(url, c);
+  while (m.size > 400) m.delete(m.keys().next().value);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { try { localStorage.setItem(COLOURS_KEY, JSON.stringify([...m])); } catch { /* full or private */ } }, 1500);
+}
 export function colourOf(url) {
   if (!url) return Promise.resolve(null);
   if (seen.has(url)) return Promise.resolve(seen.get(url));
+  const known = storedColours().get(url);
+  if (known !== undefined) { seen.set(url, known); return Promise.resolve(known); }
   return new Promise((resolve) => {
     const img = new Image();
-    img.onload = () => { const c = vivid(img); seen.set(url, c); resolve(c); };
+    img.decoding = 'async';
+    const done = (c) => { seen.set(url, c); rememberColour(url, c); resolve(c); };
+    img.onload = async () => {
+      // Shrink the picture off the main thread first, so reading its colours never holds up scrolling.
+      try { if (window.createImageBitmap) { const bm = await createImageBitmap(img, { resizeWidth: 16, resizeHeight: 16, resizeQuality: 'low' }); const c = vivid(bm); bm.close?.(); return done(c); } } catch { /* fall back below */ }
+      done(vivid(img));
+    };
     img.onerror = () => resolve(null);
     img.src = url;
   });

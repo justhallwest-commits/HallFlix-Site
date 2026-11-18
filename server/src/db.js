@@ -98,6 +98,10 @@ const MIGRATIONS = [
    create table subtitles (id serial primary key, item_id bigint not null references items on delete cascade, lang text, label text not null,
      provider text, file text not null, hi boolean not null default false, created_at timestamptz not null default now());
    create index subtitles_item on subtitles (item_id);`,
+  // Home and the library pages ask for the newest titles all the time; these keep that quick in big libraries.
+  `create index if not exists items_lib_kind_added on items (library_id, kind, added_at desc);
+   create index if not exists items_kind_added on items (kind, added_at desc);
+   create index if not exists progress_profile_updated on progress (profile_id, updated_at desc);`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {

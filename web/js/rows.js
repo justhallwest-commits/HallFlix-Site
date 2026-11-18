@@ -43,13 +43,6 @@ function moreTile(row, extra) {
   return el;
 }
 
-function arrows(row) {
-  const sc = row.querySelector(':scope > .scroller'), l = row.querySelector(':scope > .arrow.l'), r = row.querySelector(':scope > .arrow.r');
-  if (!sc || !l || !r) return;
-  l.hidden = sc.scrollLeft < 10;
-  r.hidden = sc.scrollLeft + sc.clientWidth > sc.scrollWidth - 10;
-}
-
 /** Apply the limits to the page as it stands. Safe to run again at any time: it undoes its own changes first. */
 export function tidy() {
   const view = $('#view');
@@ -90,7 +83,13 @@ export function tidy() {
       // Only a container that holds just the rows: never one with the page's own heading in it.
       if (p && p !== view && !p.querySelector(':scope > h1, :scope > * > h1, .lib-head, .vlib-bar, .hero')) { p.classList.add('cap-panel'); p.style.setProperty('--rows-panel-h', `${s.panelHeight}vh`); }
     }
-    for (const r of rows) arrows(r);
+    // Measure every row first, then show or hide arrows, so the page is laid out once.
+    const m = rows.map((r) => { const sc = r.querySelector(':scope > .scroller'); return [r, sc.scrollLeft, sc.clientWidth, sc.scrollWidth]; });
+    for (const [r, left, width, full] of m) {
+      const l = r.querySelector(':scope > .arrow.l'), rt = r.querySelector(':scope > .arrow.r');
+      if (l) l.hidden = left < 10;
+      if (rt) rt.hidden = left + width > full - 10;
+    }
   }
   obs?.takeRecords(); // our own changes are not news
 }
