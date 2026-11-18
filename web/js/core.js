@@ -117,6 +117,10 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   root.setProperty('--glow', String(Math.max(0, Math.min(1, +t.glow || 0))));
   root.setProperty('--hero-h', `${Math.max(40, Math.min(100, +t.heroHeight || 80))}vh`);
   root.setProperty('--logo-h', `${Math.max(20, Math.min(120, +t.logo?.height || 46))}px`);
+  // The library's logo at the top of its own page: the library's size, else the whole app's, else automatic.
+  const ll = +(lib.logoSize || t.libLogoSize || 0);
+  if (ll > 0) { const h = Math.max(30, Math.min(260, ll)); root.setProperty('--lib-logo-h', `${h}px`); root.setProperty('--lib-logo-w', `min(85vw, ${h * 4}px)`); }
+  else { root.removeProperty('--lib-logo-h'); root.removeProperty('--lib-logo-w'); }
   root.setProperty('--font-display', FONT[t.fonts?.display] || FONT.Outfit);
   root.setProperty('--font-body', FONT[t.fonts?.body] || FONT.Inter);
   const body = document.body;

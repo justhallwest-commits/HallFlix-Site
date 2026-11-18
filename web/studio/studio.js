@@ -55,6 +55,23 @@ const coversCard = (o, base, lib) => html`<div class="card"><h2>Covers on the Ho
   ${range(o, 'tileCovers.y', 'Move up or down', -40, 40, 1, base.y)}
   <p class="muted small">The two last sliders move the covers from the chosen position, as a share of the tile: negative is left or up.</p>
   ${lib && o.tileCovers ? html`<button class="btn sm" data-covers-reset>Use the whole-app settings for ${lib}</button>` : ''}</div>`;
+const LOGO_GRID = [['tl', 'Top left'], ['tc', 'Top centre'], ['tr', 'Top right'], ['ml', 'Middle left'], ['mc', 'Centre'], ['mr', 'Middle right'], ['bl', 'Bottom left'], ['bc', 'Bottom centre'], ['br', 'Bottom right']];
+/** The logo (or name) on a library's Home tile, and the logo on its own page: for the whole app, or one library. */
+const logoCard = (o, base, lib) => {
+  const place = o.tileLogo?.place || (lib ? '' : 'bl');
+  const shown = place || base.place || 'bl';
+  return html`<div class="card"><h2>${lib ? `${lib} logo` : 'Library logos'}</h2>
+  <p class="muted small">${lib ? `Where the ${lib} logo (or its name, if it has no logo) sits on its Home tile, and how big it is. Untouched settings follow the Whole app tab.` : 'Where each library’s logo (or its name) sits on its Home tile, and how big it is. Each library’s tab can change any of this.'}</p>
+  <div class="f"><span>Position on the tile${lib && !place ? ' (same as whole app)' : ''}</span><div class="posgrid" role="group" aria-label="Where the logo sits on the tile">${LOGO_GRID.map(([v, n]) => html`<button type="button" data-tlpos="${v}" class="${shown === v ? 'on' : ''}" aria-label="${n}" title="${n}"><i></i></button>`)}</div></div>
+  ${range(o, 'tileLogo.size', 'Size on the tile (% of the usual size)', 30, 300, 5, base.size ?? 100)}
+  ${range(o, 'tileLogo.x', 'Move left or right', -45, 45, 1, base.x ?? 0)}
+  ${range(o, 'tileLogo.y', 'Move up or down', -45, 45, 1, base.y ?? 0)}
+  ${choose(o, 'tileLogo.count', 'Title count under the logo', [['yes', 'Show'], ['no', 'Hide']], lib && 'Same as whole app')}
+  <p class="muted small">The sliders move the logo from the chosen position, as a share of the tile: negative is left or up. The preview jumps to the Home tiles while you adjust.</p>
+  ${lib ? range(o, 'logoSize', `Logo height at the top of the ${lib} page (pixels, 0 = same as whole app)`, 0, 260, 2, 0)
+    : range(o, 'libLogoSize', 'Logo height at the top of each library page (pixels, 0 = automatic)', 0, 260, 2, 0)}
+  ${lib && (o.tileLogo || o.logoSize) ? html`<button class="btn sm" data-logo-reset>Use the whole-app settings for ${lib}</button>` : ''}</div>`;
+};
 const check = (o, p, label) => html`<label class="check"><input type="checkbox" data-path="${p}" ${get(o, p) ? 'checked' : ''}> ${label}</label>`;
 const image = (o, p, label) => html`<div class="f block"><span>${label}</span><div class="imgrow">
   <div class="thumb" style="background-image:url('${encodeURI(get(o, p) || '')}')"></div>
@@ -518,6 +535,7 @@ pages.look = async (main) => {
           ${image(libs[lib.id], 'tileVideo', 'Tile video: plays on the Home tile while it is pointed at or in focus (MP4 or WebM, short and silent)')}
           ${check(libs[lib.id], 'useAccent', 'Give this library its own accent colours')}
           ${libs[lib.id].useAccent ? html`${color(libs[lib.id], 'accent', 'Accent')}${color(libs[lib.id], 'accent2', 'Second accent')}` : ''}</div>
+        ${logoCard(libs[lib.id], theme.tileLogo || {}, lib.name)}
         ${coversCard(libs[lib.id], theme.tileCovers || {}, lib.name)}
         ${rowsCard(libs[lib.id], lib.name, !!theme.rows?.panel, theme.rows?.panelHeight ?? 60)}`
     : html`<div class="card"><h2>Start from a preset</h2><div class="presets">${L.presets.map((p) => html`<button class="preset ${theme.preset === p.id ? 'on' : ''}" data-preset="${p.id}" title="${p.description}">${swatch(p.theme, L.defaults)}<b>${p.name}</b></button>`)}</div></div>
@@ -531,6 +549,7 @@ pages.look = async (main) => {
           <p class="muted small">The sign-in screen has its own background and layout: see the Sign-in page tab.</p></div>
         ${tilesCard(theme)}
         ${rowsCard(theme, '')}
+        ${logoCard(theme, theme.tileLogo || {}, '')}
         ${coversCard(theme, theme.tileCovers || {}, '')}
         <div class="card"><h2>Motion</h2>
           ${check(theme, 'artColor', 'Colour follows the artwork in focus')}${check(theme, 'depth', 'Posters lean toward the pointer')}
@@ -623,8 +642,11 @@ pages.look = async (main) => {
     clearTimeout(showTiles.t);
     showTiles.t = setTimeout(() => frame.contentWindow?.postMessage({ type: 'hallflix-show', selector: '.libs' }, location.origin), 500);
   };
-  box.addEventListener('input', (e) => { if (e.target.closest('[data-path^="tileCovers"]')) showTiles(); });
+  box.addEventListener('input', (e) => { if (e.target.closest('[data-path^="tileCovers"], [data-path^="tileLogo"]')) showTiles(); });
   box.addEventListener('click', async (e) => {
+    const tl = e.target.closest('[data-tlpos]');
+    if (tl) { const o = target(); o.tileLogo = { ...(o.tileLogo || {}), place: tl.dataset.tlpos }; dirty = true; draw(); send(); showTiles(); return; }
+    if (e.target.closest('[data-logo-reset]') && curLib()) { delete libs[curLib().id].tileLogo; delete libs[curLib().id].logoSize; dirty = true; draw(); send(); showTiles(); return; }
     if (e.target.closest('[data-covers-reset]') && curLib()) { delete libs[curLib().id].tileCovers; dirty = true; draw(); send(); showTiles(); return; }
     const lp = e.target.closest('[data-lpos]');
     if (lp) {
