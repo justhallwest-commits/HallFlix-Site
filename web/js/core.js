@@ -122,6 +122,16 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   if (ll > 0) { const h = Math.max(30, Math.min(260, ll)); root.setProperty('--lib-logo-h', `${h}px`); root.setProperty('--lib-logo-w', `min(85vw, ${h * 4}px)`); }
   else { root.removeProperty('--lib-logo-h'); root.removeProperty('--lib-logo-w'); }
   root.setProperty('--font-display', FONT[t.fonts?.display] || FONT.Outfit);
+  // The Top rated numbers.
+  const RK = t.ranked || {};
+  const bd = document.body;
+  bd.className = bd.className.replace(/\brank-\S+/g, '').trim();
+  bd.classList.add(`rank-${['outline', 'solid', 'glow', 'badge', 'hidden'].includes(RK.style) ? RK.style : 'outline'}`,
+    `rank-at-${RK.place === 'beside' ? 'beside' : 'behind'}`, `rank-c-${['accent', 'gradient'].includes(RK.color) ? RK.color : 'text'}`);
+  bd.classList.toggle('rank-bar', RK.scrollbar === true);
+  root.setProperty('--rank-k', String(Math.max(40, Math.min(160, +RK.size || 100)) / 100));
+  root.setProperty('--rank-a', String(Math.max(15, Math.min(100, +RK.strength || 62)) / 100));
+  root.setProperty('--rank-font', RK.font && RK.font !== 'theme' && FONT[RK.font] ? FONT[RK.font] : 'var(--font-display)');
   root.setProperty('--font-body', FONT[t.fonts?.body] || FONT.Inter);
   const body = document.body;
   body.className = body.className.replace(/\btex-\S+/g, '').trim();
