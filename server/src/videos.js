@@ -1,8 +1,9 @@
 // The front page of a movie or show library: a spotlight, then rows (what you're watching, new, top rated, hidden gems,
 // short ones, by decade and by genre), like the library pages of the big streaming apps.
-import { q, q1 } from './db.js';
+import { q, q1, getSetting } from './db.js';
 import { HttpError } from './http.js';
-import { SEL, FROM, card, img, continueRow, RATED } from './catalog.js';
+import { SEL, FROM, card, img, continueRow, RATED, shuffledSpotlight, bannerSettings } from './catalog.js';
+import { warmClips } from './clips.js';
 
 export function routes(r) {
   r.get('/api/videos/:id', async ({ profile, params, query }) => {
@@ -33,8 +34,9 @@ export function routes(r) {
       group by g having count(*) >= 4 order by count(*) desc, g limit ${lite ? 4 : 8}`, [lib.id]);
     for (const g of genres) add(`genre-${g.g}`, g.g, await pick('$3 = any(i.genres)', `md5(i.id::text || $4)`, [g.g, day]), { genre: g.g });
 
-    const spot = await q(`select ${SEL} ${FROM} where ${W} and i.backdrop is not null
-      order by (i.added_at > now() - interval '30 days') desc, (not coalesce(p.watched, false)) desc, md5(i.id::text || $3) limit 6`, [pid, lib.id, day]);
+    // The banner shuffles the same way as Home's (Studio → Home screen → Spotlight); a library has no picks of its own.
+    const spot = await shuffledSpotlight(W, [pid, lib.id], { ...bannerSettings(await getSetting('home', {})), pickedOnly: false });
+    warmClips(spot.map((x) => x.id));
     const total = (await q1(`select count(*)::int as n from items i where i.library_id = $1 and i.kind = $2`, [lib.id, kind])).n;
     return {
       library: lib, total, rows,

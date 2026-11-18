@@ -117,6 +117,17 @@ test('libraries scan into movies, shows, episodes and clips', async () => {
 test('home, title pages and search', async () => {
   const home = await hf.api('GET', '/api/home');
   assert.ok(home.spotlight.length >= 3 && home.spotlight.every((s) => s.backdrop));
+  // Banner clips come from the film itself: the first ask says "not yet" and starts one; then a short MP4 is served.
+  const night = home.spotlight.find((x) => x.title === 'Night Drive') || home.spotlight.find((x) => x.kind === 'movie');
+  let clip = await hf.api('GET', `/api/clips/${night.id}`);
+  for (let i = 0; i < 60 && !clip.url; i++) { await new Promise((r) => setTimeout(r, 500)); clip = await hf.api('GET', `/api/clips/${night.id}`); }
+  assert.match(clip.url || '', new RegExp(`^/api/clips/${night.id}/file/\\d$`), 'a clip was made from the file');
+  const cr = await fetch(hf.base + clip.url, { headers: { Cookie: hf.getCookie(), Range: 'bytes=0-99' } });
+  assert.deepEqual([cr.status, cr.headers.get('content-type')], [206, 'video/mp4']);
+  assert.equal((await fetch(hf.base + clip.url)).status, 401, 'clips need a signed-in profile');
+  // A show's clip comes from one of its episodes.
+  const show = home.spotlight.find((x) => x.kind === 'show');
+  if (show) { let sc = await hf.api('GET', `/api/clips/${show.id}`); for (let i = 0; i < 60 && !sc.url; i++) { await new Promise((r) => setTimeout(r, 500)); sc = await hf.api('GET', `/api/clips/${show.id}`); } assert.ok(sc.url); }
   assert.deepEqual(home.rows.map((r) => r.id).slice(0, 2), [`recent-${lib.movies.id}`, `recent-${lib.shows.id}`]);
   assert.deepEqual(home.libraries.map((l) => [l.name, l.kind, l.count]), [['Movies', 'movies', 4], ['Shows', 'shows', 1]]);
   assert.ok(home.libraries[0].backdrop && home.libraries[0].posters.length === 3 && home.libraries[0].fresh === 4);
@@ -405,7 +416,14 @@ test('moods, Surprise Me, timeline, collections and the Home layout', async () =
   // Home layout: order, hidden sections, a pinned spotlight and an announcement.
   await hf.api('PUT', '/api/studio/home', { order: ['top', 'recent', 'libraries'], hidden: ['genres', 'collections'], spotlight: [harbor.id, deep.id], announcement: { text: 'New this week', link: '#/timeline' } });
   home = await hf.api('GET', '/api/home');
-  assert.deepEqual(home.spotlight.slice(0, 2).map((x) => x.title), ['Harbor Lights', 'Deep Field']);
+  assert.deepEqual(home.spotlight.map((x) => x.title), ['Harbor Lights', 'Deep Field'], 'only the picked titles, in order');
+  // With "only these" off, shuffled titles follow the picks.
+  await hf.api('PUT', '/api/studio/home', { order: ['top', 'recent', 'libraries'], hidden: ['genres', 'collections'], spotlight: [harbor.id, deep.id], announcement: { text: 'New this week', link: '#/timeline' }, banner: { pickedOnly: false, shuffle: 'visit', count: 4 } });
+  const mixed = (await hf.api('GET', '/api/home')).spotlight;
+  assert.ok(mixed.length > 2 && mixed.length <= 4 && mixed[0].title === 'Harbor Lights' && mixed[1].title === 'Deep Field');
+  assert.deepEqual((await hf.api('GET', '/api/studio/home')).banner, { shuffle: 'visit', pickedOnly: false, favourNew: true, count: 4 });
+  await hf.api('PUT', '/api/studio/home', { order: ['top', 'recent', 'libraries'], hidden: ['genres', 'collections'], spotlight: [harbor.id, deep.id], announcement: { text: 'New this week', link: '#/timeline' } });
+  home = await hf.api('GET', '/api/home');
   assert.ok(!home.rows.some((r) => r.id.startsWith('genre-')) && !home.collections.length);
   assert.equal(home.layout.tilesAt, home.rows.findIndex((r) => r.id.startsWith('recent-')) + 2);
   assert.deepEqual(home.announcement, { text: 'New this week', link: '#/timeline' });

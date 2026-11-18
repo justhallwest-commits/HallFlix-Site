@@ -1,7 +1,7 @@
 // How HallFlix feels: colour drawn from the artwork in focus, depth on posters, the living spotlight,
 // navigation sounds, and the open animation. Everything here is optional polish: it switches itself off on
 // TVs and for people who ask for reduced motion, and never runs during playback.
-import { $, state, themeNow, applyLook, on } from './core.js';
+import { $, state, themeNow, applyLook, on, api } from './core.js';
 import { playSound, preload } from './sounds.js';
 
 const tv = () => document.body.classList.contains('tv');
@@ -77,12 +77,36 @@ let trailerTimer = 0;
 export function stopTrailer(hero = $('.hero')) {
   clearTimeout(trailerTimer);
   const f = hero?.querySelector('.trailer');
-  if (f) { hero.classList.remove('playing'); f.remove(); }
+  if (f) { hero.classList.remove('playing'); f.querySelector('video')?.pause(); f.remove(); }
+  hero?.querySelector('.clip-sound')?.remove();
 }
-/** A few seconds after a spotlight title settles, its trailer fades in behind the text, muted. */
+/**
+ * A few seconds after a spotlight title settles, a clip of the film itself (cut by the server from its opening minutes)
+ * fades in behind the text, or its YouTube trailer if the look asks for that. Muted unless sound is on.
+ */
 export function queueTrailer(hero, item) {
   stopTrailer(hero);
-  if (!item?.trailer || theme().heroMotion !== 'trailer' || tv() || calm() || state.preview || innerWidth < 900 || navigator.connection?.saveData) return;
+  const t = theme(), mode = t.heroMotion || 'clip', C = t.heroClips || {};
+  if (!item || calm() || state.preview || navigator.connection?.saveData) return;
+  if (mode === 'clip') {
+    if (!['movie', 'show'].includes(item.kind) || (tv() && C.tv === false)) return;
+    trailerTimer = setTimeout(async () => {
+      const r = await api('GET', `/api/clips/${item.id}`).catch(() => null);
+      if (!r?.url || !hero.isConnected || hero.dataset.showing !== String(item.id) || document.hidden || $('#overlay').childElementCount || !$('#player').hidden || scrollY > innerHeight * 0.5) return;
+      const box = document.createElement('div');
+      box.className = 'trailer clip';
+      box.innerHTML = '<video playsinline preload="auto" tabindex="-1" aria-hidden="true"></video>';
+      const v = box.querySelector('video');
+      v.muted = !clipSound(); v.src = r.url;
+      v.addEventListener('playing', () => { hero.classList.add('playing'); soundButton(hero, v); }, { once: true });
+      v.addEventListener('ended', () => { hero.classList.remove('playing'); setTimeout(() => box.remove(), 900); hero.beats = 99; }); // let the banner move on
+      v.addEventListener('error', () => box.remove());
+      hero.querySelector('.content').before(box);
+      v.play().catch(() => { v.muted = true; v.play().catch(() => box.remove()); });
+    }, 3000);
+    return;
+  }
+  if (mode !== 'trailer' || !item.trailer || tv() || innerWidth < 900) return;
   if (!/^[\w-]{6,20}$/.test(item.trailer)) return;
   trailerTimer = setTimeout(() => {
     if (!hero.isConnected || document.hidden || $('#overlay').childElementCount || !$('#player').hidden || scrollY > innerHeight * 0.5) return;
@@ -93,6 +117,20 @@ export function queueTrailer(hero, item) {
     hero.querySelector('.content').before(box);
     setTimeout(() => { if (box.isConnected) hero.classList.add('playing'); }, 2600); // hide the player's loading frame
   }, 3800);
+}
+const SPEAKER_ON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+const SPEAKER_OFF = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 6 6M22 9l-6 6"/></svg>';
+/** Clip sound: the look's choice, unless this device has turned it on or off with the banner's button. */
+function clipSound() {
+  try { const d = localStorage.getItem('hf_clip_sound'); if (d === '1' || d === '0') return d === '1'; } catch { /* private mode */ }
+  return theme().heroClips?.sound === true;
+}
+function soundButton(hero, v) {
+  let b = hero.querySelector('.clip-sound');
+  if (!b) { hero.insertAdjacentHTML('beforeend', '<button class="clip-sound" type="button"></button>'); b = hero.querySelector('.clip-sound'); }
+  const paint = () => { b.innerHTML = v.muted ? SPEAKER_OFF : SPEAKER_ON; b.setAttribute('aria-label', v.muted ? 'Turn the sound on' : 'Turn the sound off'); b.title = b.getAttribute('aria-label'); };
+  b.onclick = (e) => { e.stopPropagation(); v.muted = !v.muted; try { localStorage.setItem('hf_clip_sound', v.muted ? '0' : '1'); } catch { /* private mode */ } paint(); };
+  paint();
 }
 export const trailerPlaying = () => !!$('.hero .trailer');
 addEventListener('scroll', () => { if (scrollY > innerHeight * 0.6) stopTrailer(); }, { passive: true });

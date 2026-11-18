@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { clearClips } from './clips.js';
 import { cfg } from './config.js';
 import { q, q1, getSetting, setSetting } from './db.js';
 import { HttpError, readJson, readBody } from './http.js';
@@ -139,7 +140,15 @@ export function routes(r) {
       from libraries l where l.kind <> 'prerolls' order by l.position, l.id`)).map(({ art, ...l }) => ({ ...l, art: img(art, 'w780') })),
     active: (await look.currentLook()).season,
   }), admin);
-  r.put('/api/studio/theme', async ({ req }) => { await setSetting('theme', (await readJson(req)).theme || {}); return { ok: true }; }, admin);
+  r.put('/api/studio/theme', async ({ req }) => {
+    const theme = (await readJson(req)).theme || {};
+    const before = (await getSetting('theme', {})).heroClips || {};
+    await setSetting('theme', theme);
+    // New clip window or length: the old clips no longer fit, so they are made again as the banner asks for them.
+    const after = theme.heroClips || {};
+    if (['start', 'end', 'length'].some((k) => (before[k] ?? null) !== (after[k] ?? null))) clearClips();
+    return { ok: true };
+  }, admin);
   r.post('/api/studio/look/preview', async ({ req }) => {
     const b = await readJson(req);
     const libraries = (await q('select id, look from libraries')).map((l) => (b.libraries?.[l.id] ? { id: l.id, look: b.libraries[l.id] } : l));

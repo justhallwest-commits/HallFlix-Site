@@ -31,7 +31,9 @@ export const DEFAULT_THEME = {
   logo: { image: '', height: 46 },
   effect: 'none', // none | snow | embers | hearts | leaves | confetti | stars | bats
   artColor: true, // the accent follows the artwork in focus
-  heroMotion: 'trailer', // none | pan | trailer: what the spotlight does after a moment
+  heroMotion: 'clip', // none | pan | clip | trailer: what the spotlight does after a moment (clip = a piece of the film itself; trailer = YouTube)
+  // Spotlight clips: cut from a random moment between `start` and `end` seconds into the film, `length` seconds long.
+  heroClips: { start: 60, end: 600, length: 30, sound: false, tv: true },
   depth: true, // posters tilt toward the pointer
   sounds: 'off', // off | soft | arcade | cinema | glass | scifi | custom: the navigation sound pack ("custom" = only uploaded sounds)
   // Each sound can be swapped for an uploaded file, given its own volume, or switched off.
@@ -110,7 +112,7 @@ export const OPTIONS = {
   effects: ['none', 'snow', 'embers', 'hearts', 'leaves', 'confetti', 'stars', 'bats'],
   cardShapes: ['poster', 'wide'],
   interfaces: ['futuristic', 'classic'],
-  heroMotions: ['none', 'pan', 'trailer'],
+  heroMotions: ['none', 'pan', 'clip', 'trailer'],
   sounds: ['off', 'soft', 'arcade', 'cinema', 'glass', 'scifi', 'custom'],
   glowStyles: ['neon', 'natural', 'ambient'],
   focusRings: ['glow', 'line', 'aurora'],

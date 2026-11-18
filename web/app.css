@@ -1801,3 +1801,11 @@ body.rows-bar:not(.rank-bar) .row.ranked > .scroller::-webkit-scrollbar { displa
 .welcome .skip { position: absolute; right: max(24px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom)); }
 .welcome.out { opacity: 0; transition: opacity 0.45s; }
 @keyframes fade-in { from { opacity: 0; } }
+
+/* ---------- Spotlight clips cut from the film itself ---------- */
+.hero .trailer.clip video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hero .clip-sound { position: absolute; z-index: 3; right: var(--pad); bottom: clamp(70px, 9vh, 110px); width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid rgba(var(--text-rgb), 0.35); background: rgba(var(--bg-rgb), 0.45); color: var(--text); cursor: pointer; opacity: 0; transition: opacity 0.6s, border-color 0.2s; }
+.hero.playing .clip-sound { opacity: 1; }
+.hero .clip-sound:hover, .hero .clip-sound:focus-visible { border-color: var(--accent); box-shadow: var(--glow-shadow); outline: none; }
+body.ui-hud .hero .clip-sound { border-radius: 0; }
