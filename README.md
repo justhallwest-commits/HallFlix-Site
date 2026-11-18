@@ -58,6 +58,8 @@ A self-hosted media service with its own server, web app and design Studio. It r
 - **Library logos** (Studio → Look and feel): drag each library's logo (or name) to its own spot on a miniature of its Home tile, all tiles
   in one place under **Logo on each tile**, or use a 3×3 position grid and nudge sliders, resize it, hide the title count, and set the logo's height and place at the top of the library's own page (left, centre, right,
   the name instead, or hidden, nudged anywhere); for all libraries or one at a time.
+- **Top rated numbers:** outline, solid, glowing, a small badge on the poster, or hidden; behind the poster or beside it; size, font, colour
+  and strength. The Top rated row leaves out the scroll bar unless asked.
 - **Tidy rows** (Studio → Look and feel → Rows): limit how many titles each row shows (the last tile becomes “See all”), how many rows show
   before “Show more rows”, add a scroll bar under each row, or hold the rows in their own scrolling panel so the background stays in view. It applies
   to Home and every library, and each library can set its own.

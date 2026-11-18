@@ -288,6 +288,7 @@ test('looks: theme, library looks, seasons, uploads', async () => {
   assert.deepEqual([d.tileLogo, d.libLogoSize], [{ place: 'bl', size: 100, x: 0, y: 0, count: 'yes' }, 0]);
   assert.deepEqual([d.homeTiles, d.bannerLogo, d.ident.order], [{ width: 320, height: 44, brightness: 100 }, 100, 'shuffle']);
   assert.deepEqual(d.libPage, { place: 'left', x: 0, y: 0 });
+  assert.deepEqual(d.ranked, { style: 'outline', place: 'behind', size: 100, font: 'theme', color: 'text', strength: 62, scrollbar: false });
   // Each library comes with a recent picture for the Studio's mini tiles, and keeps its own dragged logo spot.
   assert.ok((await hf.api('GET', '/api/studio/look')).libraries.find((l) => l.id === lib.movies.id).art);
   await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: { tileLogo: { place: 'free', fx: 95, fy: 8, size: 140 } } });

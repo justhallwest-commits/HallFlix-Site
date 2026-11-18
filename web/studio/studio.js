@@ -524,6 +524,19 @@ function identList(theme) {
 /** Rows on Home and in the libraries: for the whole app, or one library (where empty means "same as the whole app"). */
 const ROW_ITEMS = [['6', '6'], ['8', '8'], ['10', '10'], ['12', '12'], ['15', '15'], ['20', '20'], ['0', 'All of them']];
 const ROW_COUNT = [['3', '3'], ['4', '4'], ['5', '5'], ['6', '6'], ['8', '8'], ['10', '10'], ['12', '12'], ['0', 'All of them']];
+/** The numbers in the Top rated row. */
+const rankedCard = (theme, fonts) => {
+  const st = theme.ranked?.style || 'outline';
+  return html`<div class="card"><h2>Top rated numbers</h2>
+  ${choose(theme, 'ranked.style', 'Style', [['outline', 'Outline (the usual)'], ['solid', 'Solid'], ['glow', 'Glowing'], ['badge', 'A small badge on the poster’s bottom corner'], ['hidden', 'Hidden: posters only']])}
+  ${st === 'badge' || st === 'hidden' ? '' : choose(theme, 'ranked.place', 'Where', [['behind', 'Behind the poster, partly covered (the usual)'], ['beside', 'Beside the poster, not covered']])}
+  ${st === 'hidden' ? '' : html`${range(theme, 'ranked.size', 'Size (% of the usual size)', 40, 160, 5, 100)}
+    ${choose(theme, 'ranked.font', 'Font', [['theme', 'Same as the titles'], ...fonts.map((f) => [f, f])])}
+    ${choose(theme, 'ranked.color', 'Colour', [['text', 'Like the text'], ['accent', 'Accent colour'], ['gradient', 'Accent gradient (second accent for outlines)']])}
+    ${range(theme, 'ranked.strength', 'Strength (how solid the number looks, %)', 15, 100, 1, 62)}`}
+  ${check(theme, 'ranked.scrollbar', 'Show the scroll bar under this row too (when the other rows have one)')}
+  <p class="muted small">The preview jumps to the Top rated row while you adjust.</p></div>`;
+};
 const rowsCard = (o, lib, wholePanel = false, wholeHeight = 60) => {
   const same = lib && 'Same as whole app';
   const panel = lib ? String(o.rows?.panel ?? '') : '';
@@ -618,6 +631,7 @@ pages.look = async (main) => {
           <p class="muted small">The sign-in screen has its own background and layout: see the Sign-in page tab.</p></div>
         ${tilesCard(theme)}
         ${rowsCard(theme, '')}
+        ${rankedCard(theme, L.options.fonts || [])}
         ${homeCard(theme)}
         ${tilesEditorCard(L.libraries, libs, theme.tileLogo || {}, theme.homeTiles?.brightness ?? 100)}
         ${logoCard(theme, theme.tileLogo || {}, '')}
@@ -655,7 +669,7 @@ pages.look = async (main) => {
   // On the Sign-in page tab, some choices show or hide others (panel strength, how dark, where to blur).
   box.addEventListener('change', (e) => { if (tab === 'signin' && e.target.matches('select[data-path^="login."], [data-path="login.focusBlur"]')) draw(); });
   // Choices that show or hide others on the Whole app tab.
-  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"]')) draw(); });
+  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"], [data-path="ranked.style"]')) draw(); });
   // Sounds and sign-in music: test, upload, reorder and remove.
   const touched = (redraw = true) => { dirty = true; if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false; send(); };
   const music = () => { theme.login ||= {}; theme.login.music ||= {}; if (!Array.isArray(theme.login.music.tracks)) theme.login.music.tracks = []; return theme.login.music; };
@@ -802,6 +816,13 @@ pages.look = async (main) => {
     if (want) { sel.value = want; sel.onchange({ target: sel }); }
   };
   box.addEventListener('input', (e) => { if (e.target.closest('[data-path^="libPage"], [data-path="logoSize"], [data-path="libLogoSize"]')) showLibPage(); });
+  const showRanked = () => {
+    const sel = $('[data-pv-go]', main), frame = $('iframe', main);
+    if (sel.value !== '#/') { sel.value = '#/'; sel.onchange({ target: sel }); }
+    clearTimeout(showRanked.t);
+    showRanked.t = setTimeout(() => frame.contentWindow?.postMessage({ type: 'hallflix-show', selector: '.row.ranked' }, location.origin), 500);
+  };
+  box.addEventListener('input', (e) => { if (e.target.closest('[data-path^="ranked."]')) showRanked(); });
   box.addEventListener('change', (e) => { if (e.target.closest('[data-path^="libPage"]')) showLibPage(); });
   box.addEventListener('click', async (e) => {
     const tl = e.target.closest('[data-tlpos]');
