@@ -7,6 +7,7 @@
 // - Back closes what is open, then goes to the previous page, then to the sidebar, then lets the app close;
 // - holding a key moves steadily instead of piling up presses; Play/Pause on a title plays it, ⏪ ⏩ jump along a row.
 import { openOptions, initTV } from './tv.js';
+import { restore } from './lean.js';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]';
 const DIR = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
@@ -114,6 +115,34 @@ export function move(key) {
     const items = candidates(rail()).sort((x, y) => x[1].top - y[1].top).map(([el]) => el); // top to bottom as shown
     const i = items.indexOf(from);
     return focusEl(items[Math.max(0, Math.min(items.length - 1, i + dy))]);
+  }
+  // TVs, in a grid of titles (a library, My List, search): step by one or by a whole line, from the grid's own order,
+  // instead of measuring every title on the page (a big library is thousands of them).
+  if (tv()) {
+    const grid = from.closest('.grid');
+    if (grid && from.parentElement === grid) {
+      // Every cell counts, titles and the placeholders standing in for titles far off screen (see lean.js).
+      const items = [...grid.children].filter((x) => x.classList.contains('lean-ph') || (x.matches(FOCUSABLE) && x.tabIndex >= 0 && !x.hidden));
+      const i = items.indexOf(from);
+      const go = (el) => focusEl(el.classList.contains('lean-ph') ? restore(el) : el);
+      if (i >= 0 && items.length) {
+        const top0 = items[0].offsetTop;
+        let cols = items.findIndex((x) => x.offsetTop !== top0);
+        if (cols < 1) cols = items.length;
+        const col = i % cols;
+        if (dx) {
+          const j = i + dx;
+          if (dx > 0 && col < cols - 1 && items[j]) return go(items[j]);
+          if (dx < 0 && col > 0) return go(items[j]);
+          if (dx > 0) return true; // the end of a line
+          // the first column, going left: on to the sidebar as usual (below)
+        } else if (dy > 0) {
+          if (items[i + cols]) return go(items[i + cols]);
+          if (Math.floor(i / cols) < Math.floor((items.length - 1) / cols)) return go(items.at(-1)); // a short last line
+          // the last line: on to whatever is below the grid (below)
+        } else if (dy < 0 && i >= cols) return go(items[i - cols]);
+      }
+    }
   }
   // TVs, sideways along a row: the next title in the row, without measuring the whole page (a Fire TV Stick feels each one).
   if (tv() && dx) {

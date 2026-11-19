@@ -2009,3 +2009,6 @@ body.tv .sheet .similar { display: flex; flex-wrap: nowrap; gap: 14px; overflow-
 body.tv .sheet .similar::-webkit-scrollbar { display: none; }
 body.tv .sheet .similar .card { flex: none; width: 150px; }
 body.tv .sheet .cast { padding: 10px 6px 14px !important; }
+
+/* Only what's on screen (web/js/lean.js): a title far off screen is a plain block of the same height. */
+.grid > .lean-ph { min-width: 0; }

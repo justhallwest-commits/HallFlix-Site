@@ -211,6 +211,32 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
 
 /** Lay out the sign-in page from the look: where the box sits, the logo, the panel, and darkening or blur to set the box off. */
 /** A TV (the Fire TV and Android TV apps, smart TVs, or ?tv). */
+// ---------- Right-sized pictures (like Plex: a 250 px slot gets a ~250 px picture, not the 2000 px original) ----------
+const TMDB = /^\/img\/t\/(w\d+|original)(\/.+)$/;
+const LOCAL = /^\/img\/l\/[\w-]+$/;
+const FAMILY = { poster: [185, 342, 500, 780], wide: [300, 500, 780, 1280], backdrop: [300, 780, 1280] };
+const LOCAL_W = { poster: [240, 360, 480, 720], wide: [360, 480, 720, 1080], backdrop: [720, 1080, 1280, 1920] };
+const FALLBACK = { poster: '220px', wide: '420px', backdrop: '100vw' };
+/**
+ * srcset + sizes for an <img>, so the browser fetches the copy that fits the slot it lays the picture out in
+ * (sizes="auto" where supported, a sensible width otherwise). '' for pictures that can't be resized.
+ */
+export function pic(url, kind = 'poster') {
+  if (!url) return '';
+  const t = TMDB.exec(url);
+  const set = t ? FAMILY[kind].map((w) => `/img/t/w${w}${t[2]} ${w}w`) : LOCAL.test(url) ? LOCAL_W[kind].map((w) => `${url}?w=${w} ${w}w`) : null;
+  return raw(set ? ` srcset="${set.map((x) => x.replace(/&/g, '&amp;').replace(/"/g, '&quot;')).join(', ')}" sizes="auto, ${FALLBACK[kind]}"` : '');
+}
+/** One URL for a picture shown across the screen (a CSS background): screen-wide, never the full original on a TV. */
+export function wide(url) {
+  if (!url) return url;
+  const need = Math.min(2560, Math.round(screen.width * Math.min(2, devicePixelRatio || 1)));
+  const t = TMDB.exec(url);
+  if (t) return `/img/t/${need > 1600 && !isTV() ? 'original' : need > 800 ? 'w1280' : 'w780'}${t[2]}`;
+  if (LOCAL.test(url)) return `${url}?w=${isTV() ? Math.min(need, 1920) : need}`;
+  return url;
+}
+
 export const isTV = () => /AFT|Android TV|GoogleTV|BRAVIA|SmartTV|Tizen|Web0S/i.test(navigator.userAgent) || new URLSearchParams(location.search).has('tv');
 /** On a TV, a picture comes as a still JPEG no wider than needed (see server/src/fit.js); elsewhere, as it is. */
 export function tvPic(url, w = 1920) {

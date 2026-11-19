@@ -366,3 +366,23 @@ test('pre-roll tags: kept apart from metadata tags, folder tags, tagging many cl
   assert.deepEqual([after.tags, after.locked.tags, after.edits.tags], [[], undefined, undefined]);
   assert.deepEqual((await hf.api('GET', '/api/studio/prerolls')).clips.find((c) => c.id === spooky.id).tags, ['halloween', 'jump scare']);
 });
+
+test('local artwork comes right-sized: /img/l/…?w= sends a smaller copy, made once and kept', async () => {
+  const { q } = await import('../src/db.js');
+  const row = (await q(`select poster from items where poster like 'local:%' limit 1`))[0];
+  assert.ok(row, 'the test library has a local poster');
+  const url = `/img/l/${Buffer.from(row.poster.slice(6)).toString('base64url')}`;
+  const full = Buffer.from(await (await fetch(hf.base + url)).arrayBuffer());
+  const small = await fetch(`${hf.base}${url}?w=200`);
+  assert.equal(small.status, 200);
+  assert.match(small.headers.get('content-type'), /image\/jpeg/);
+  const body = Buffer.from(await small.arrayBuffer());
+  assert.deepEqual([body[0], body[1]], [0xff, 0xd8]);
+  // JPEG width from its SOF marker: no wider than the 240 px bucket that 200 falls in.
+  let i = 2, width = 0;
+  while (i < body.length) { const m = body[i + 1], len = body.readUInt16BE(i + 2); if (m >= 0xc0 && m <= 0xc3) { width = body.readUInt16BE(i + 7); break; } i += 2 + len; }
+  assert.ok(width > 0 && width <= 240, `resized to ${width}px`);
+  assert.ok(body.length <= full.length, 'not bigger than the original');
+  const again = await fetch(`${hf.base}${url}?w=230`); // same bucket: the kept copy
+  assert.equal(Buffer.from(await again.arrayBuffer()).length, body.length);
+});
