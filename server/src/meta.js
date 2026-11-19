@@ -211,7 +211,10 @@ function where(f, args) {
   const w = ['true'];
   const arg = (v) => { args.push(v); return `$${args.length}`; };
   const kinds = splitList(f.kinds).filter((k) => KINDS[k]);
-  w.push(kinds.length ? `i.kind = any(${arg(kinds)})` : `i.kind not in ('clip')`);
+  // Pre-roll clips (bumpers, idents) stay out of the everything-everywhere list, but show up as soon as you pick
+  // their type, their library, or search for them by name.
+  if (kinds.length) w.push(`i.kind = any(${arg(kinds)})`);
+  else if (!f.library && !f.q?.trim()) w.push(`i.kind not in ('clip')`);
   if (f.library) w.push(`i.library_id = ${arg(+f.library)}`);
   if (f.q?.trim()) { const like = `%${f.q.trim().replace(/[%_\\]/g, '\\$&')}%`; w.push(`(i.title ilike ${arg(like)} or i.sort_title ilike $${args.length} or i.path ilike $${args.length} or s.title ilike $${args.length} or p.title ilike $${args.length})`); }
   if (f.series?.trim()) w.push(`coalesce(s.title, p.title) ilike ${arg(`%${f.series.trim()}%`)}`);

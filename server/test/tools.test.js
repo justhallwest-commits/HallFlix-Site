@@ -224,6 +224,12 @@ test('Artwork Studio: slots, every source, backdrop order, fill from online, bul
 test('pre-roll tools: clips, presets, test, frequency, skipped profiles, health, activity and backup', async () => {
   let pr = await hf.api('GET', '/api/studio/prerolls');
   const ident = pr.clips.find((c) => c.title === 'hallflix ident'), spooky = pr.clips.find((c) => c.title === 'spooky bump');
+  // The metadata editor finds pre-roll clips by their library, by name, or by type (not in the default list of everything).
+  const titles = async (f) => (await hf.api('POST', '/api/studio/meta/search', f)).items.map((x) => x.title).sort();
+  assert.deepEqual(await titles({ library: lib.prerolls.id }), ['hallflix ident', 'spooky bump']);
+  assert.deepEqual(await titles({ q: 'bump' }), ['spooky bump']);
+  assert.deepEqual(await titles({ kinds: 'clip' }), ['hallflix ident', 'spooky bump']);
+  assert.ok(!(await titles({})).includes('spooky bump'));
   assert.ok(pr.health.some((h) => /no rules/.test(h.text)));
   // Tag the ident as a logo, and use the cinema line-up.
   await hf.api('PUT', `/api/studio/prerolls/clips/${ident.id}`, { tags: ['Logo'] });
