@@ -8,7 +8,9 @@ import * as comics from './comics.js';
 import * as profileEdit from './profile.js';
 import * as ratings from './ratings.js';
 import * as backdrop from './backdrop.js';
-import { startLoginMusic, fadeOutLoginMusic } from './loginmusic.js';
+import { startLoginMusic, fadeOutLoginMusic, musicNow } from './loginmusic.js';
+/** How the welcome ident sounds: its own audio, silent with the sign-in music carrying on, or silent. */
+export const splashAudio = (S = {}) => (['own', 'music', 'silent'].includes(S.audio) ? S.audio : S.sound === false ? 'silent' : 'own');
 import { initRows } from './rows.js';
 
 export const extraRows = []; // rows added by plugins through HallFlix.addHomeRow()
@@ -681,7 +683,11 @@ export function login(boot) {
         await api('POST', '/api/login', { profileId: p?.id, name: f.get('name'), password: f.get('password') });
         feel.sound('signin');
         try { sessionStorage.setItem('hf_welcome', 'signin'); } catch { /* private mode */ }
-        await fadeOutLoginMusic(); // the sign-in music bows out before the app loads
+        // The welcome ident can keep the sign-in music going (it picks up where it was after the page reloads);
+        // otherwise the music bows out before the app loads.
+        const S = themeNow()?.splash || {}, carry = S.video && S.when !== 'never' && S.when !== 'open' && splashAudio(S) === 'music' ? musicNow() : null;
+        if (carry) { try { sessionStorage.setItem('hf_music_carry', JSON.stringify(carry)); } catch { /* private mode */ } }
+        else await fadeOutLoginMusic();
         if (!/^#\/(party|pair)\//.test(location.hash)) location.hash = '#/';
         location.reload();
       }

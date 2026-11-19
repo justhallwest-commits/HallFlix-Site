@@ -585,7 +585,8 @@ function signinCards(theme) {
       <h3 class="sub">Welcome ident</h3>
       ${image(theme, 'splash.video', 'A short video that plays after signing in (MP4 or WebM; a GIF works as the loading picture instead)')}
       ${choose(theme, 'splash.when', 'When it plays', [['signin', 'Right after someone signs in'], ['open', 'Each time HallFlix opens (once per visit)'], ['never', 'Never (keep it for later)']])}
-      ${check(theme, 'splash.sound', 'With its sound (a browser that blocks sound plays it silently)')}
+      ${choose(theme, 'splash.audio', 'Sound while it plays', [['own', 'Its own sound'], ['music', 'Keep the sign-in music playing (the video is silent)'], ['silent', 'Silent']])}
+      <p class="muted small">It plays without any player controls, on TVs too. A browser that blocks sound plays it silently.</p>
       <p class="muted small">Anyone can skip it with any key, a tap, or the Skip button. It never runs longer than 30 seconds.</p></div>
     <div class="card"><h2>Logo</h2>${choose(theme, 'login.logoPlace', 'Where', LOGO_PLACES)}${range(theme, 'login.logoSize', 'Size (pixels tall)', 40, 340, 5)}
       ${image(theme, 'login.logo', 'A different logo for this page (empty uses the site logo)')}
@@ -687,7 +688,7 @@ pages.look = async (main) => {
           <label class="f"><span>Until</span><input type="time" data-path="night.to" value="${theme.night?.to || '06:00'}"></label>
           <label class="f"><span>Look</span><select data-path="night.preset"><option value="">Choose a look</option>${L.presets.map((p) => html`<option value="${p.id}" ${theme.night?.preset === p.id ? 'selected' : ''}>${p.name}</option>`)}</select></label>
           <p class="muted small">Each device goes by its own clock. A running season takes priority.</p></div>
-        <div class="card"><h2>Name and logo</h2>${text(theme, 'siteName', 'Site name')}${image(theme, 'logo.image', 'Logo (empty uses the HallFlix neon logo)')}${range(theme, 'logo.height', 'Logo size', 20, 120, 2)}</div></div>`}
+        <div class="card"><h2>Name and logo</h2>${text(theme, 'siteName', 'Site name')}${image(theme, 'logo.image', 'Logo (empty uses the HallFlix neon logo)')}${range(theme, 'logo.height', 'Logo size', 20, 120, 2)}${image(theme, 'logo.favicon', 'Browser tab icon (a small square picture; empty uses the HallFlix crown)')}</div></div>`}
       <div class="savebar"><button class="btn primary" data-save ${dirty ? '' : 'disabled'}>Save and go live</button><button class="btn" data-undo ${dirty ? '' : 'disabled'}>Undo changes</button></div>`);
   };
   const curLib = () => L.libraries.find((l) => `lib-${l.id}` === tab);

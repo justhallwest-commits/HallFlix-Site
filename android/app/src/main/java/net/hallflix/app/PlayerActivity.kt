@@ -36,6 +36,8 @@ class PlayerActivity : Activity() {
     /** One queue entry, ready to play. `offset` is where a converted stream starts in the film, in seconds. */
     private class Entry(val json: JSONObject, var uri: String, var hls: Boolean, var offset: Double, var sid: String?) {
         val main get() = json.optString("kind") == "main"
+        /** The HallFlix ident before a feature: shown as a clean interlude, not as a video with player controls. */
+        val interlude get() = json.optString("kind") == "ident"
         val itemId get() = json.getLong("itemId")
         val duration get() = json.optDouble("duration", 0.0)
     }
@@ -110,6 +112,7 @@ class PlayerActivity : Activity() {
                     entries = list
                     resumeAt = list.lastOrNull()?.json?.optDouble("resumeAt", 0.0) ?: 0.0
                     resumed = false
+                    list.firstOrNull()?.let { interludeMode(it.interlude) } // before playback starts, so the controls never flash up
                     exo.setMediaItems(list.mapIndexed { i, e -> mediaItem(e, i) })
                     exo.prepare()
                     exo.playWhenReady = true
@@ -144,8 +147,21 @@ class PlayerActivity : Activity() {
         return b.build()
     }
 
+    /**
+     * The ident plays like a channel ident on TV: full screen, no seek bar, no buffering spinner, no title. OK, Right or
+     * fast-forward skip it; Back leaves as usual. Everything else plays with the normal controls.
+     */
+    private fun interludeMode(on: Boolean) {
+        view.useController = !on
+        view.controllerAutoShow = !on
+        if (on) view.hideController()
+        view.setShowBuffering(if (on) PlayerView.SHOW_BUFFERING_NEVER else PlayerView.SHOW_BUFFERING_ALWAYS)
+        findViewById<View>(R.id.title).visibility = if (on) View.GONE else findViewById<View>(R.id.title).visibility
+    }
+
     private fun onEntryChanged() {
         val e = current() ?: return
+        interludeMode(e.interlude)
         val title = findViewById<TextView>(R.id.title)
         findViewById<View>(R.id.badge).visibility = if (e.main || e.json.optString("kind") == "ident") View.GONE else View.VISIBLE
         title.text = if (e.main) listOf(e.json.optString("title"), e.json.optString("subtitle")).filter { it.isNotEmpty() }.joinToString("  ·  ") else ""
@@ -328,6 +344,11 @@ class PlayerActivity : Activity() {
         val msg = findViewById<View>(R.id.message).visibility == View.VISIBLE
         if (event.keyCode == KeyEvent.KEYCODE_BACK) return super.dispatchKeyEvent(event)
         if (msg) return super.dispatchKeyEvent(event)
+        if (current()?.interlude == true) {
+            val skip = event.keyCode in listOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_MEDIA_NEXT)
+            if (skip && event.action == KeyEvent.ACTION_UP && exo.hasNextMediaItem()) { exo.seekToNextMediaItem(); exo.playWhenReady = true }
+            return true // no controls appear during the ident
+        }
         return view.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
     }
 

@@ -88,18 +88,38 @@ function welcome() {
   if (!due || state.preview) return Promise.resolve();
   try { sessionStorage.setItem('hf_welcomed', '1'); } catch { /* private mode */ }
   return new Promise((resolve) => {
-    document.body.insertAdjacentHTML('beforeend', `<div class="welcome"><video playsinline autoplay preload="auto"></video><button class="btn skip" type="button">Skip</button></div>`);
+    // No player look: no controls, no grey play-button poster, no picture-in-picture or casting button, and the
+    // video stays invisible until its first frame is on screen (the sign-in logo shows beneath until then).
+    const logo = S.image || themeNow()?.logo?.image || '/assets/logo.png';
+    document.body.insertAdjacentHTML('beforeend', `<div class="welcome"><img class="welcome-logo" alt="" src="${logo.replace(/"/g, '&quot;')}"><video playsinline autoplay preload="auto" disablepictureinpicture disableremoteplayback controlslist="nodownload nofullscreen noremoteplayback" poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></video><button class="btn skip" type="button">Skip</button></div>`);
     const box = document.querySelector('.welcome'), v = box.querySelector('video');
+    const audioMode = views.splashAudio(S);
+    // "Keep the sign-in music playing": the ident is silent and the song carries on from where it was.
+    let carry = null;
+    try { carry = JSON.parse(sessionStorage.getItem('hf_music_carry') || 'null'); sessionStorage.removeItem('hf_music_carry'); } catch { /* private mode */ }
+    let music = null;
+    if (audioMode === 'music' && carry?.url) {
+      music = new Audio(carry.url);
+      music.currentTime = carry.time || 0;
+      music.volume = Math.max(0, Math.min(1, carry.volume ?? 0.5));
+      music.play().catch(() => { music = null; }); // a browser that blocks sound: the ident just plays silently
+    }
     let done = false;
     const end = () => {
       if (done) return; done = true;
       removeEventListener('keydown', key, true);
       box.classList.add('out'); setTimeout(() => box.remove(), 460);
+      if (music) { // the music bows out with the ident
+        const m = music, from = m.volume, t0 = performance.now();
+        const step = (now) => { const k = Math.min(1, (now - t0) / 700); try { m.volume = from * (1 - k); } catch { /* fixed volume */ } if (k < 1) requestAnimationFrame(step); else { m.pause(); m.removeAttribute('src'); } };
+        requestAnimationFrame(step);
+      }
       resolve();
     };
     const key = (e) => { e.preventDefault(); e.stopPropagation(); end(); };
+    v.addEventListener('playing', () => box.classList.add('on'), { once: true });
     v.src = S.video;
-    v.muted = S.sound === false;
+    v.muted = audioMode !== 'own';
     v.addEventListener('ended', end);
     v.addEventListener('error', end);
     box.addEventListener('click', end);

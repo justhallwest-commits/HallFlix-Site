@@ -113,6 +113,7 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   state.look = look; currentLibrary = libraryId;
   state.night = isNight(look);
   const t = themeNow(look), lib = (libraryId != null && look.libraries?.[libraryId]) || {};
+  tabIcon(t);
   const root = document.documentElement.style;
   const colors = { ...t.colors };
   if (lib.accent) colors.accent = lib.accent;
@@ -310,6 +311,13 @@ export function styleLogin(t = themeNow()) {
     f.hidden = !txt;
     f.innerHTML = !txt ? '' : link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(txt)}</a>` : esc(txt);
   }
+}
+/** The browser tab icon: Studio → Look and feel → Logo → Browser tab icon, or the HallFlix crown. */
+function tabIcon(t) {
+  const el = document.querySelector('link[data-tab-icon]');
+  if (!el) return;
+  const want = t?.logo?.favicon || '/assets/favicon-32.png';
+  if (el.getAttribute('href') !== want) el.setAttribute('href', want);
 }
 export const logoUrl = () => themeNow()?.logo?.image || '/assets/logo.png';
 export const libraryLook = (id) => state.look?.libraries?.[id] || {};

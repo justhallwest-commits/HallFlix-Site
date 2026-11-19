@@ -28,7 +28,7 @@ export const DEFAULT_THEME = {
     // Music on the sign-in page: uploaded songs, played in order or shuffled, faded in, with a button to pause.
     music: { enabled: false, tracks: [], volume: 0.5, shuffle: false, fade: 3, button: 'corner', showTitle: true },
     tileShape: 'theme', tileMotion: true, tileSize: 132, tileColumns: 0, buttons: 'links', manualButton: true, manualLabel: '', phoneLabel: '', footer: '', footerLink: '' },
-  logo: { image: '', height: 46 },
+  logo: { image: '', height: 46, favicon: '' },
   effect: 'none', // none | snow | embers | hearts | leaves | confetti | stars | bats
   artColor: true, // the accent follows the artwork in focus
   heroMotion: 'clip', // none | pan | clip | trailer: what the spotlight does after a moment (clip = a piece of the film itself; trailer = YouTube)
@@ -71,7 +71,7 @@ export const DEFAULT_THEME = {
   // The loading screen (shown while the app opens, including just after signing in): its picture (blank = the HallFlix
   // logo set above), size (%), motion (pulse | breathe | glow | still) and background colour (blank = the theme's). And a
   // welcome ident: a short video that plays after signing in ('signin') or each time the app opens ('open'), or never.
-  splash: { image: '', size: 100, motion: 'pulse', background: '', video: '', when: 'signin', sound: true },
+  splash: { image: '', size: 100, motion: 'pulse', background: '', video: '', when: 'signin', sound: true, audio: '' },
   ranked: { style: 'outline', place: 'behind', size: 100, font: 'theme', color: 'text', strength: 62, scrollbar: false },
   // The covers on each library's Home tile: where they sit, how big, how many and how they stand. A library can override any of it.
   tileCovers: { show: 'yes', place: 'br', size: 56, count: 3, style: 'angled', x: 0, y: 0 },
