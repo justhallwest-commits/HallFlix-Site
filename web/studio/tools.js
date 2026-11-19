@@ -496,6 +496,7 @@ export async function metadata(main, k) {
         <div class="checks" data-cols>${C.fields.map((f) => html`<label class="check"><input type="checkbox" value="${f.key}" ${['title', 'sort_title', 'year', 'rating', 'genres', 'tags', 'studios'].includes(f.key) ? 'checked' : ''}> ${f.label}</label>`)}<label class="check"><input type="checkbox" value="library" checked> Library</label><label class="check"><input type="checkbox" value="type" checked> Type</label><label class="check"><input type="checkbox" value="path"> File path</label></div>
         <div class="tools" style="margin-top:12px"><button class="btn primary" data-export>Download CSV</button></div></div>
       <div class="card"><h2>Import a spreadsheet</h2><p class="muted">Keep the id column. Only cells that differ are changed, and read-only columns (library, type, path) are ignored. You see every change before anything is saved.</p>
+        <p class="muted small"><b>From Jellyfin:</b> a CSV from the Jellyfin Bulk Metadata plugin (Spreadsheet → Download CSV, with the Path column on) works here too. Each row is matched to a HallFlix title by its file, then its TMDb id, then show + season + episode, then title and year. Titles, sort titles, overviews, taglines, genres, tags, studios, ratings, scores, years, dates, TMDb ids and authors come across.</p>
         <label class="check"><input type="checkbox" data-blank> Blank cells clear the field (otherwise blank cells are skipped)</label>
         <label class="check"><input type="checkbox" data-ilock checked> Lock the fields that change</label>
         <label class="drop" style="margin-top:10px"><input type="file" accept=".csv,text/csv" hidden data-csv><b>Choose a CSV file</b><span class="muted small">or drop it here</span></label></div>`));
@@ -503,7 +504,12 @@ export async function metadata(main, k) {
       const text = await file.text(), blank = $('[data-blank]', main).checked ? '1' : '0', lock = $('[data-ilock]', main).checked ? '1' : '0';
       const res = await fetch(`/api/studio/meta/import?blank=${blank}`, { method: 'POST', body: text, credentials: 'same-origin' });
       const r = await res.json(); if (!res.ok) return k.fail(new Error(r.error));
-      k.dialog(`Import ${file.name}`, html`<p><b>${plural(r.items, 'title')}</b> change (${plural(r.changes, 'field')})${r.errors ? html`, <span class="bad">${plural(r.errors, 'problem')}</span>` : ''}${r.unknown ? html`<span class="muted"> · ${plural(r.unknown, 'row')} with an id HallFlix doesn't know</span>` : ''}.</p>${r.planned.length ? diffTable(r.planned) : html`<p class="muted">Nothing would change.</p>`}`,
+      const jf = r.source === 'jellyfin' ? (() => {
+        const m = r.matched, found = m.path + m.tmdb + m.episode + m.title;
+        return html`<p class="muted small"><b>From Jellyfin:</b> ${found} of ${plural(r.rows, 'row')} matched to HallFlix titles (${m.path} by file, ${m.tmdb} by TMDb id, ${m.episode} by episode, ${m.title} by title).${r.unknown ? ` ${plural(r.unknown, 'row')} matched nothing here and ${r.unknown === 1 ? 'is' : 'are'} skipped.` : ''}</p>
+          ${r.missed?.length ? html`<details><summary class="muted small">Rows with no match</summary><div class="small" style="max-height:200px;overflow:auto">${r.missed.map((x) => html`<div>${x.type ? html`<span class="muted">${x.type}</span> · ` : ''}${x.series ? `${x.series} S${x.season}E${x.episode} · ` : ''}${x.name}${x.path ? html` <span class="muted">${x.path}</span>` : ''}</div>`)}</div></details>` : ''}`;
+      })() : '';
+      k.dialog(`Import ${file.name}`, html`<p><b>${plural(r.items, 'title')}</b> change (${plural(r.changes, 'field')})${r.errors ? html`, <span class="bad">${plural(r.errors, 'problem')}</span>` : ''}${r.unknown && !jf ? html`<span class="muted"> · ${plural(r.unknown, 'row')} with an id HallFlix doesn't know</span>` : ''}.</p>${jf}${r.planned.length ? diffTable(r.planned) : html`<p class="muted">Nothing would change.</p>`}`,
         { ok: r.items ? `Apply to ${plural(r.items, 'title')}` : '', wide: true, onOk: async () => {
           const a = await (await fetch(`/api/studio/meta/import?apply=1&blank=${blank}&lock=${lock}`, { method: 'POST', body: text, credentials: 'same-origin' })).json();
           toast(a.saved ? `Changed ${plural(a.saved.items, 'title')}` : 'Nothing changed');

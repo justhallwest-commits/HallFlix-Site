@@ -265,3 +265,45 @@ test('pre-roll tools: clips, presets, test, frequency, skipped profiles, health,
   pr = await hf.api('GET', '/api/studio/prerolls');
   assert.equal(pr.rules.length, 4); assert.deepEqual(pr.settings.skipProfiles, [kid.id]);
 });
+
+test('metadata import from the Jellyfin Bulk Metadata plugin: matched by path, TMDb id, episode and title', async () => {
+  const movies = (await hf.api('POST', '/api/studio/meta/search', { kinds: 'movie', limit: 50 })).items;
+  const eps = (await hf.api('POST', '/api/studio/meta/search', { kinds: 'episode', sort: 'series', limit: 50 })).items;
+  const [byPath, byTmdb, byTitle] = movies.filter((m) => m.tmdb_id);
+  assert.ok(byPath && byTmdb && byTitle, 'three matched movies in the test library');
+  const ep2 = eps.find((e) => e.season_no === 1 && e.episode_no === 2);
+  const pathOf = async (id) => { const x = await hf.api('GET', `/api/studio/meta/item/${id}`); return x.path ?? x.item?.path; };
+  const tail = (p) => p.split('/').slice(-2).join('/');
+  byPath.path = await pathOf(byPath.id);
+  const cell = (v) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const csv = [
+    ['Id', 'Library', 'Type', 'SeriesName', 'Season', 'Episode', 'Name', 'ForcedSortName', 'ProductionYear', 'OfficialRating', 'CommunityRating', 'Genres', 'Tags', 'Tagline', 'Overview', 'ProviderIds.Tmdb', 'LockedFields', 'IsLocked', 'Path'],
+    ['a1b2c3d4e5f60718293a4b5c6d7e8f90', 'Movies', 'Movie', '', '', '', byPath.title, '', '', 'PG-13', '7.5', 'Drama|Noir', 'From Jellyfin', "'=Not a formula", '', '', 'Genres', 'false', `/jellyfin/media/Movies/${tail(byPath.path)}`],
+    ['b1b2c3d4e5f60718293a4b5c6d7e8f90', 'Movies', 'Movie', '', '', '', byTmdb.title, '', '', '', '', '', 'Jellyfin TMDb', '', '', String(byTmdb.tmdb_id), '', 'false', '/somewhere/else/entirely.mkv'],
+    ['c1b2c3d4e5f60718293a4b5c6d7e8f90', 'Shows', 'Episode', ep2.series, '1', '2', ep2.title, '', '', '', '', '', '', '', 'Written in Jellyfin, "quoted", too.', '', '', 'false', ''],
+    ['d1b2c3d4e5f60718293a4b5c6d7e8f90', 'Movies', 'Movie', '', '', '', byTitle.title, '', String(byTitle.year ?? ''), '', '', '', 'Jellyfin title', '', '', '', '', 'false', ''],
+    ['e1b2c3d4e5f60718293a4b5c6d7e8f90', 'Movies', 'Movie', '', '', '', 'Not In HallFlix', '', '1999', '', '', '', 'x', '', '', '', '', 'false', '/x/Not In HallFlix (1999)/n.mkv'],
+    ['f1b2c3d4e5f60718293a4b5c6d7e8f90', 'Collections', 'BoxSet', '', '', '', 'Some Collection', '', '', '', '', '', 'y', '', '', '', '', 'false', ''],
+  ].map((r) => r.map(cell).join(',')).join('\r\n');
+  const post = async (qs) => (await fetch(`${hf.base}/api/studio/meta/import${qs}`, { method: 'POST', body: '﻿' + csv, headers: { Cookie: hf.getCookie() } })).json();
+  const pv = await post('?blank=0');
+  assert.equal(pv.source, 'jellyfin');
+  assert.deepEqual(pv.matched, { path: 1, tmdb: 1, episode: 1, title: 1 });
+  assert.equal(pv.unknown, 1, 'one row matches nothing; the collection is skipped');
+  assert.equal(pv.missed[0].name, 'Not In HallFlix');
+  const ch = (id) => Object.fromEntries(pv.planned.find((p) => p.id === id).changes.map((c) => [c.field, c.after]));
+  assert.deepEqual(ch(byPath.id).genres, ['Drama', 'Noir']);
+  assert.deepEqual([ch(byPath.id).rating, ch(byPath.id).score, ch(byPath.id).tagline], ['PG-13', 7.5, '=Not a formula']);
+  assert.deepEqual(ch(byTmdb.id).tags, ['Jellyfin TMDb']);
+  assert.equal(ch(ep2.id).overview, 'Written in Jellyfin, "quoted", too.');
+  assert.deepEqual(ch(byTitle.id).tags, ['Jellyfin title']);
+  assert.ok(!('title' in ch(byTitle.id)), 'an unchanged title is not a change');
+  const done = await post('?apply=1&blank=0&lock=1');
+  assert.equal(done.saved.items, 4);
+  const item = await hf.api('GET', `/api/studio/meta/item/${byPath.id}`);
+  assert.deepEqual(item.values.genres, ["Drama", "Noir"]);
+  assert.ok(item.locked.includes("genres"), "imported fields are locked so rescans keep them");
+  const h = (await hf.api('GET', '/api/studio/meta/history'))[0];
+  assert.match(h.label, /Imported from Jellyfin \(4 titles\)/);
+  await hf.api('POST', `/api/studio/meta/history/${h.id}/undo`);
+});

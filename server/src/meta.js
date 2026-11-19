@@ -5,6 +5,7 @@ import { q, q1 } from './db.js';
 import { HttpError, readJson, readBody } from './http.js';
 import * as names from './names.js';
 import * as guard from './guard.js';
+import * as jf from './jfimport.js';
 
 const admin = { admin: true };
 
@@ -253,10 +254,40 @@ export function parseCsv(text) {
   if (f !== '' || row.length) { row.push(f); rows.push(row); }
   return rows.filter((r) => r.some((x) => x.trim() !== ''));
 }
+/** Changes one spreadsheet row makes to one title: `get(field)` gives the row's text for a field, or undefined if absent. */
+function rowChanges(it, fields, get, blankClears) {
+  const cur = current(it), changes = [];
+  let error = null;
+  for (const field of fields) {
+    const raw = get(field) ?? '';
+    if (String(raw).trim() === '' && !blankClears) continue;
+    try {
+      const next = coerce(field, raw);
+      if (!same(next, cur[field])) changes.push({ field, before: cur[field], after: next });
+    } catch (e) { error = `${FIELDS[field].label}: ${e.message}`; }
+  }
+  return { changes, error };
+}
+
+/** A CSV from the Jellyfin Bulk Metadata plugin: rows are matched to HallFlix titles by path, TMDb id, episode or title. */
+async function jellyfinPlan(rows, blankClears) {
+  const m = await jf.match(rows);
+  const items = await load(m.rows.map((r) => r.id));
+  const vals = new Map(m.rows.map((r) => [r.id, r.values]));
+  const out = [];
+  for (const it of items) {
+    const v = vals.get(it.id);
+    const { changes, error } = rowChanges(it, Object.keys(v), (f) => v[f], blankClears);
+    if (changes.length || error) out.push({ id: it.id, title: it.title, kind: it.kind, library: it.library_name, changes, error });
+  }
+  return { planned: out, unknown: m.unmatched, source: 'jellyfin', rows: m.total, matched: m.matched, missed: m.missed };
+}
+
 async function csvPlan(text, blankClears) {
   const rows = parseCsv(text);
   if (rows.length < 2) throw new HttpError(400, 'That file has no rows');
   const head = rows[0].map((h) => h.trim().toLowerCase());
+  if (jf.isJellyfin(head)) return jellyfinPlan(rows, blankClears);
   const idAt = head.indexOf('id');
   if (idAt < 0) throw new HttpError(400, 'The first row needs an “id” column (export a file from here to get the right layout)');
   const cols = head.map((h, i) => ({ h, i })).filter((c) => FIELDS[c.h] && !READONLY.has(c.h));
@@ -391,9 +422,10 @@ export function routes(r) {
   }, admin);
   r.post('/api/studio/meta/import', async ({ req, query }) => {
     const text = (await readBody(req, 30e6)).toString('utf8');
-    const { planned, unknown } = await csvPlan(text, query.blank === '1');
-    if (query.apply !== '1') return { ...summary(planned), unknown, planned: planned.slice(0, 500) };
-    return { saved: await commit(planned, `Imported a spreadsheet (${summary(planned).items} titles)`, { lock: query.lock !== '0' }), ...summary(planned) };
+    const { planned, unknown, ...from } = await csvPlan(text, query.blank === '1');
+    if (query.apply !== '1') return { ...summary(planned), unknown, ...from, planned: planned.slice(0, 500) };
+    const label = from.source === 'jellyfin' ? `Imported from Jellyfin (${summary(planned).items} titles)` : `Imported a spreadsheet (${summary(planned).items} titles)`;
+    return { saved: await commit(planned, label, { lock: query.lock !== '0' }), ...summary(planned), ...from };
   }, admin);
 
   // ----- online refresh
