@@ -92,7 +92,7 @@ export function rgb(hex) {
   const h = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1];
   return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)).join(', ');
 }
-const isVideo = (u) => /\.(mp4|webm)(\?|$)/i.test(u || '');
+const isVideo = (u) => !/^\/api\/fit\?/.test(u || '') && /\.(mp4|webm)(\?|$)/i.test(u || ''); // a TV still made from a video is a picture
 let currentLibrary = null;
 
 const mins = (hm) => +hm.slice(0, 2) * 60 + +hm.slice(3);
@@ -173,7 +173,18 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   } catch { /* private mode */ }
   root.setProperty('--banner-logo-k', String(Math.max(30, Math.min(250, +t.bannerLogo || 100)) / 100));
   const signedOut = !state.profile || !!state.signinPreview;
-  const bg = signedOut ? (t.login?.image || t.background?.image) : (lib.background || t.background?.image);
+  // TVs: lay the page out at the chosen width, and keep the extras that cost a Fire TV Stick the most off unless asked for.
+  const TV = t.tv || {};
+  if (isTV()) {
+    const w = Math.max(960, Math.min(1920, +TV.width || 1600));
+    try { localStorage.setItem('hf_tvw', String(w)); } catch { /* private mode */ }
+    $('meta[name=viewport]')?.setAttribute('content', `width=${w}, viewport-fit=cover`);
+    document.body.classList.toggle('tv-notex', TV.textures !== true);
+    document.body.classList.toggle('tv-noglow', TV.glow !== true);
+  }
+  let bg = signedOut ? (t.login?.image || t.background?.image) : (lib.background || t.background?.image);
+  // A TV gets a still, TV-sized copy: a background video would vanish behind the page in the TV app, and a huge picture may not show at all.
+  if (bg && isTV()) bg = tvPic(bg, Math.min(1920, (+TV.width || 1600) * 1.2));
   const dim = signedOut ? (t.login?.dim ?? 0.45) : (lib.dim ?? t.background?.dim ?? 0.6);
   const layer = $('#backdrop');
   layer.classList.toggle('has-image', !!bg);
@@ -191,12 +202,20 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   $('meta[name=theme-color]')?.setAttribute('content', colors.bg);
   document.title = t.siteName || 'HallFlix';
   for (const img of $$('img[data-site-logo]')) img.src = logoUrl();
-  startEffect(t.effect || 'none');
+  startEffect(isTV() && TV.effects !== true ? 'none' : t.effect || 'none');
   styleLogin(t);
   emit('look', look);
 }
 
 /** Lay out the sign-in page from the look: where the box sits, the logo, the panel, and darkening or blur to set the box off. */
+/** A TV (the Fire TV and Android TV apps, smart TVs, or ?tv). */
+export const isTV = () => /AFT|Android TV|GoogleTV|BRAVIA|SmartTV|Tizen|Web0S/i.test(navigator.userAgent) || new URLSearchParams(location.search).has('tv');
+/** On a TV, a picture comes as a still JPEG no wider than needed (see server/src/fit.js); elsewhere, as it is. */
+export function tvPic(url, w = 1920) {
+  if (!url || !isTV() || /^data:/.test(url) || /^\/img\/t\//.test(url)) return url; // TMDB pictures are already sized
+  return `/api/fit?w=${Math.round(w)}&src=${encodeURIComponent(url)}`;
+}
+
 export function styleLogin(t = themeNow()) {
   const el = $('.login.signin');
   const root = document.documentElement;

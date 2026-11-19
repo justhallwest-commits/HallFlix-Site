@@ -1916,3 +1916,10 @@ body.tv .nav .navbtn svg { margin-left: 2px; width: 24px; height: 24px; flex: no
 body.tv .nav .avatar { width: 40px; height: 40px !important; padding: 0; margin: 6px 0 0 6px; justify-content: center; border-radius: 10px; color: #fff; font-size: 18px;
   background: linear-gradient(135deg, var(--a1, var(--accent)), var(--a2, var(--accent2))); }
 body.tv .nav .avatar:focus { outline: 3px solid var(--accent); outline-offset: 3px; background: linear-gradient(135deg, var(--a1, var(--accent)), var(--a2, var(--accent2))); transform: scale(1.06); }
+
+/* TV light mode (Studio → Look and feel → TVs). Each layer here costs a full-screen repaint on a Fire TV Stick. */
+body.tv.tv-notex::after{display:none!important}
+body.tv::before{display:none!important}
+body.tv #backdrop::before{filter:none!important}
+body.tv.tv-noglow{--glow-shadow:0 0 0 3px var(--accent);--text-glow:none;--glow-drop:none}
+body.tv .card,body.tv .poster,body.tv .tile{will-change:auto}

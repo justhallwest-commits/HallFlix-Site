@@ -273,6 +273,16 @@ test('looks: theme, library looks, seasons, uploads', async () => {
   assert.match(up.url, /^\/uploads\/[a-f0-9]{16}\.jpg$/);
   assert.equal((await fetch(hf.base + up.url)).status, 200);
   assert.equal((await hf.api('POST', '/api/studio/upload?name=evil.html', Buffer.from('<script>'))).$status, 400);
+  // TVs get uploads as plain JPEG stills at a TV-friendly size, cached; anything the look doesn't use is refused.
+  const still = await fetch(`${hf.base}/api/fit?w=640&src=${encodeURIComponent(up.url)}`);
+  assert.equal(still.status, 200);
+  assert.match(still.headers.get('content-type'), /image\/jpeg/);
+  const sb = Buffer.from(await still.arrayBuffer());
+  assert.deepEqual([sb[0], sb[1]], [0xff, 0xd8]);
+  assert.equal((await fetch(`${hf.base}/api/fit?src=${encodeURIComponent('https://example.com/x.jpg')}`)).status, 404);
+  assert.equal((await fetch(`${hf.base}/api/fit?src=${encodeURIComponent('/uploads/../config.json')}`)).status, 404);
+  const tvd = (await hf.api('GET', '/api/boot')).look.theme;
+  assert.deepEqual([tvd.tv.width, tvd.tv.effects, tvd.tv.rowItems, tvd.heroClips.tv], [1600, false, 12, false], 'TVs start light');
   await hf.api('PUT', '/api/studio/theme', { theme: { colors: { accent: '#ff00aa' }, radius: 4 } });
   await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: { background: up.url, accent: '#00ff00' } });
   let b = await hf.api('GET', '/api/boot');
