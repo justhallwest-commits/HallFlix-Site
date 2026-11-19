@@ -305,3 +305,30 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 .ident-row video { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: #000; flex: none; }
 
 .card h3.sub { font-size: 14px; margin: 18px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+/* Pre-roll rules written as a sentence: each underlined part opens a small panel */
+.sentence { font-size: 19px; line-height: 2.1; padding: 16px 18px; margin: 6px 0 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+.sentence button.slot { display: inline; padding: 0 2px; border: 0; background: none; font: inherit; cursor: pointer; color: var(--cyan); font-weight: 600; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 5px; }
+.sentence button.slot.on { text-decoration-style: solid; background: rgba(53, 208, 208, 0.12); border-radius: 6px; }
+.slotpanel { margin: -6px 0 14px; padding: 14px 16px; border: 1px solid var(--cyan); border-radius: 12px; background: var(--panel2); max-height: 320px; overflow: auto; }
+.slotpanel .f { margin-bottom: 8px; }
+.sentence select.inl { display: inline-block; width: auto; font: inherit; font-size: 17px; font-weight: 600; color: var(--cyan); padding: 2px 8px; margin: 0 2px; border-radius: 8px; background: rgba(255, 255, 255, 0.04); }
+.rule-row .rule-no { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, 0.07); font-weight: 700; font-size: 13px; }
+.rule-row .rule-sentence { white-space: normal; color: var(--text); font-size: 15px; }
+.rule-row.off { opacity: 0.55; }
+/* Pre-roll tags bar, bulk tagging and clip selection */
+.tagbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.tagpill-wrap { display: inline-flex; align-items: center; gap: 2px; }
+.tagpill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+.tagpill b { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: var(--muted); }
+.tagpill.on { background: var(--cyan); border-color: var(--cyan); color: #06121a; } .tagpill.on b { background: rgba(0, 0, 0, 0.18); color: #06121a; }
+.tagx { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 4px 5px; border-radius: 6px; } .tagx:hover { color: var(--text); background: rgba(255, 255, 255, 0.07); }
+.clips-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.bulkbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; margin-bottom: 10px; border-radius: 12px; background: var(--panel2); border: 1px solid var(--cyan); }
+.bulkbar[hidden] { display: none; }
+.clip-pick { position: relative; cursor: pointer; display: block; }
+.clip-pick input { position: absolute; top: 6px; left: 6px; z-index: 2; width: 20px; height: 20px; accent-color: var(--cyan); }
+.clip.sel { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan) inset; }
+.cliptags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cliptags .chips-in { flex: 1; min-width: 200px; }
+.chip.fixed { opacity: 0.85; border-style: dashed; }

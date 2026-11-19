@@ -14,6 +14,22 @@ export const DEFAULTS = { enabled: true, max: 2, onResume: false, order: 'shuffl
 export async function settings() { return { ...DEFAULTS, ...((await getSetting('prerolls', {})) || {}) }; }
 
 const lower = (list) => (list || []).map((x) => String(x).toLowerCase());
+
+// ---------- Pre-roll tags: only the pre-roll tool uses them (not the metadata tags) ----------
+/** Clips with their pre-roll tags: the sub-folders they sit in ("halloween/bump.mp4" → "halloween") plus tags typed in the Studio. */
+const CLIPS = `select i.*, l.path as lib_path, coalesce((select array_agg(t.tag order by t.tag) from preroll_tags t where t.clip_id = i.id), '{}') as own_tags
+  from items i left join libraries l on l.id = i.library_id where i.kind = 'clip'`;
+export function folderTags(clip) {
+  if (!clip.lib_path || !clip.path) return [];
+  const rel = path.relative(clip.lib_path, path.dirname(clip.path));
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel.split(path.sep).filter(Boolean).map((t) => t.toLowerCase()) : [];
+}
+function withTags(c) {
+  const folder = folderTags(c), own = c.own_tags || [];
+  return { ...c, folderTags: folder, ownTags: own, tags: [...new Set([...folder, ...own])], lib_path: undefined, own_tags: undefined };
+}
+export async function loadClips(where = '', args = []) { return (await q(`${CLIPS} ${where}`, args)).map(withTags); }
+const cleanTag = (t) => String(t ?? '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 40);
 /** The wall-clock date and time in the chosen time zone (or the server's). */
 export function wallClock(date = new Date(), tz = '') {
   if (!tz) return date;
@@ -111,7 +127,7 @@ export async function forPlay(profile, item, resumeAt, { record = true, at = new
   }
   const rules = await q('select * from preroll_rules order by position, id');
   if (!rules.length) return note('There are no pre-roll rules yet');
-  const clips = await q(`select * from items where kind='clip' order by id`);
+  const clips = await loadClips('order by i.id');
   const target = { kind: item.kind, library_id: item.library_id, title: item.title, show_title: item.show_title,
     genres: item.genres?.length ? item.genres : item.show_genres, studios: item.studios?.length ? item.studios : item.show_studios, rating: item.rating || item.show_rating };
   const deck = (await getSetting('prerollDecks', {})) || {};
@@ -139,8 +155,9 @@ const PRESETS = {
 async function overview() {
   const s = await settings();
   const rules = await q('select * from preroll_rules order by position, id');
-  const clips = await q(`select i.id, i.title, i.tags, i.runtime_s, i.library_id, i.extra, i.path, (select count(*)::int from preroll_plays p where p.clip_id = i.id) as plays,
-      (select max(played_at) from preroll_plays p where p.clip_id = i.id) as last_played from items i where i.kind='clip' order by i.sort_title`);
+  const plays = new Map((await q(`select clip_id, count(*)::int as plays, max(played_at) as last_played from preroll_plays group by clip_id`)).map((x) => [x.clip_id, x]));
+  const clips = (await loadClips('order by i.sort_title')).map((c) => ({ id: c.id, title: c.title, tags: c.tags, folderTags: c.folderTags, ownTags: c.ownTags, runtime_s: c.runtime_s,
+    library_id: c.library_id, extra: c.extra, path: c.path, plays: plays.get(c.id)?.plays || 0, last_played: plays.get(c.id)?.last_played || null }));
   const deck = (await getSetting('prerollDecks', {})) || {};
   return { settings: s, rules, clips: clips.map((c) => ({ ...c, off: !!c.extra?.off, extra: undefined, path: undefined, folder: c.path ? path.basename(path.dirname(c.path)) : '' })), deck, presets: PRESETS };
 }
@@ -234,17 +251,49 @@ export function routes(r) {
       [p.name, first - 1, JSON.stringify({ mode: 'tag', tag: p.tag }), JSON.stringify({ ...p.match, stop: true })]);
     return { ok: true, created: 1, rule: row, tags: [p.tag] };
   }, admin);
-  // A clip's tags and on/off switch. Tags typed here stick through rescans.
+  // A clip's pre-roll tags and on/off switch. `tags` is the full list shown on the clip: its folder tags can't be
+  // removed here (they come from where the file sits), the rest are stored as the clip's own pre-roll tags.
   r.put('/api/studio/prerolls/clips/:id', async ({ req, params }) => {
     const b = await readJson(req);
-    const c = await q1(`select * from items where id=$1 and kind='clip'`, [params.id]);
+    const [c] = await loadClips('and i.id = $1', [params.id]);
     if (!c) throw new HttpError(404, 'Clip not found');
-    const extra = { ...(c.extra || {}) }, locked = { ...(c.locked || {}) }, edits = { ...(c.edits || {}) };
-    let tags = c.tags;
-    if (b.tags) { tags = [...new Set(b.tags.map((t) => String(t).trim().toLowerCase()).filter(Boolean))]; locked.tags = true; edits.tags = tags; }
-    if (b.off !== undefined) { extra.off = !!b.off; edits['extra.off'] = extra.off; }
-    await q('update items set tags=$1, extra=$2::jsonb, locked=$3::jsonb, edits=$4::jsonb where id=$5', [tags, JSON.stringify(extra), JSON.stringify(locked), JSON.stringify(edits), c.id]);
-    return { ok: true, tags, off: !!extra.off };
+    if (b.tags) {
+      const own = [...new Set(b.tags.map(cleanTag).filter((t) => t && !c.folderTags.includes(t)))];
+      await q('delete from preroll_tags where clip_id = $1', [c.id]);
+      if (own.length) await q('insert into preroll_tags (clip_id, tag) select $1, unnest($2::text[]) on conflict do nothing', [c.id, own]);
+    }
+    if (b.off !== undefined) {
+      const extra = { ...(c.extra || {}), off: !!b.off }, edits = { ...(c.edits || {}), 'extra.off': !!b.off };
+      await q('update items set extra=$1::jsonb, edits=$2::jsonb where id=$3', [JSON.stringify(extra), JSON.stringify(edits), c.id]);
+    }
+    const [now] = await loadClips('and i.id = $1', [c.id]);
+    return { ok: true, tags: now.tags, folderTags: now.folderTags, off: !!now.extra?.off };
+  }, admin);
+  // Tags across clips: add a tag to several clips, take it off them, rename a tag everywhere (rules follow), or delete it.
+  r.post('/api/studio/prerolls/tags', async ({ req }) => {
+    const b = await readJson(req);
+    const tag = cleanTag(b.tag), ids = (b.clips || []).map(Number).filter(Boolean);
+    if (!tag) throw new HttpError(400, 'Which tag?');
+    if (b.action === 'add') {
+      if (!ids.length) throw new HttpError(400, 'Pick some clips first');
+      await q(`insert into preroll_tags (clip_id, tag) select id, $2 from items where id = any($1) and kind = 'clip' on conflict do nothing`, [ids, tag]);
+      return { ok: true, clips: ids.length };
+    }
+    if (b.action === 'remove') {
+      await q('delete from preroll_tags where tag = $2 and clip_id = any($1)', [ids, tag]);
+      return { ok: true };
+    }
+    if (b.action === 'rename' || b.action === 'delete') {
+      const to = b.action === 'rename' ? cleanTag(b.to) : null;
+      if (b.action === 'rename' && !to) throw new HttpError(400, 'Give the new name');
+      if (to) await q(`insert into preroll_tags (clip_id, tag) select clip_id, $2 from preroll_tags where tag = $1 on conflict do nothing`, [tag, to]);
+      await q('delete from preroll_tags where tag = $1', [tag]);
+      // Rules that played this tag follow the rename; a deleted tag leaves them for the health check to point out.
+      if (to) await q(`update preroll_rules set clips = jsonb_set(clips, '{tag}', to_jsonb($2::text)) where lower(clips->>'tag') = $1`, [tag, to]);
+      const folder = (await loadClips()).filter((c) => c.folderTags.includes(tag)).length;
+      return { ok: true, folder };
+    }
+    throw new HttpError(400, 'Unknown action');
   }, admin);
   // A still frame for each clip, made once.
   r.get('/api/studio/prerolls/clips/:id/still.jpg', async ({ req, res, params }) => {
@@ -295,7 +344,10 @@ export function routes(r) {
     const rules = (await q('select * from preroll_rules order by position, id')).map((x) => ({ ...x, id: undefined, match: { ...x.match, libraries: (x.match?.libraries || []).map((id) => libs.find((l) => l.id === +id)?.name).filter(Boolean) } }));
     const s = await settings();
     const profiles = await q('select id, name from profiles');
-    const body = Buffer.from(JSON.stringify({ hallflix: 'prerolls', version: 1, saved: new Date().toISOString(), settings: { ...s, skipProfiles: (s.skipProfiles || []).map((id) => profiles.find((p) => p.id === id)?.name).filter(Boolean) }, rules }, null, 2));
+    // Typed pre-roll tags, by clip file name (folder tags come back on their own from where the files sit).
+    const tags = {};
+    for (const c of await loadClips()) if (c.ownTags.length) tags[path.basename(c.path)] = c.ownTags;
+    const body = Buffer.from(JSON.stringify({ hallflix: 'prerolls', version: 2, saved: new Date().toISOString(), settings: { ...s, skipProfiles: (s.skipProfiles || []).map((id) => profiles.find((p) => p.id === id)?.name).filter(Boolean) }, rules, tags }, null, 2));
     res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="hallflix-prerolls-${new Date().toISOString().slice(0, 10)}.json"`, 'Content-Length': body.length });
     res.end(body);
   }, admin);
@@ -310,6 +362,17 @@ export function routes(r) {
       await q('insert into preroll_rules (name, enabled, position, clips, match, count) values ($1,$2,$3,$4::jsonb,$5::jsonb,$6)', [x.name, x.enabled !== false, x.position || 0, JSON.stringify(x.clips || { mode: 'all' }), JSON.stringify(match), x.count || 1]);
     }
     if (b.settings) await setSetting('prerolls', { ...DEFAULTS, ...b.settings, skipProfiles: (b.settings.skipProfiles || []).map((n) => profiles.find((p) => p.name === n)?.id).filter(Boolean) });
-    return { ok: true, rules: b.rules.length };
+    let tagged = 0;
+    if (b.tags && typeof b.tags === 'object') {
+      const byFile = new Map((await loadClips()).map((c) => [path.basename(c.path), c]));
+      for (const [file, list] of Object.entries(b.tags)) {
+        const c = byFile.get(file); if (!c || !Array.isArray(list)) continue;
+        const own = [...new Set(list.map(cleanTag).filter((t) => t && !c.folderTags.includes(t)))];
+        await q('delete from preroll_tags where clip_id = $1', [c.id]);
+        if (own.length) await q('insert into preroll_tags (clip_id, tag) select $1, unnest($2::text[]) on conflict do nothing', [c.id, own]);
+        tagged++;
+      }
+    }
+    return { ok: true, rules: b.rules.length, tagged };
   }, admin);
 }

@@ -664,20 +664,40 @@ export async function prerolls(main, k) {
   let P, tab = 'overview';
   const load = async () => { P = await api('GET', '/api/studio/prerolls'); };
   const libName = (id) => P.libraries.find((l) => l.id === +id)?.name || 'a removed library';
-  const describe = (r) => {
-    const m = r.match || {}, bits = [];
-    if (m.kinds?.length === 1) bits.push(m.kinds[0] === 'movie' ? 'movies only' : 'episodes only');
-    if (m.libraries?.length) bits.push(`in ${m.libraries.map(libName).join(', ')}`);
-    if (m.genres?.length) bits.push(m.genres.join(' or '));
-    if (m.studios?.length) bits.push(`from ${m.studios.join(' or ')}`);
-    if (m.ratings?.length) bits.push(`rated ${m.ratings.join(', ')}`);
-    if (m.title) bits.push(`titles with “${m.title}”`);
-    if (m.from && m.to) bits.push(`${k.niceDate(m.from)} to ${k.niceDate(m.to)}`);
-    if (m.days?.length) bits.push(m.days.map((d) => DAYS[d]).join(', '));
-    if (m.timeFrom && m.timeTo) bits.push(`${m.timeFrom}–${m.timeTo}`);
-    const what = r.clips?.mode === 'tag' ? `clips tagged “${r.clips.tag}”` : r.clips?.mode === 'pick' ? `${plural(r.clips.ids?.length || 0, 'chosen clip')}` : r.clips?.mode === 'match' ? 'clips tagged with the title’s genre' : r.clips?.untaggedOnly ? 'untagged clips' : 'any clip';
-    return `Plays ${r.count} from ${what} before ${bits.length ? bits.join(' · ') : 'everything'}${m.stop ? ' · replaces the rules below it' : ''}`;
+  // A rule as one sentence: "Before Horror movies in any library from Oct 1 to Oct 31, play 1 clip tagged “halloween”."
+  const list = (a, word = 'or') => (a.length <= 1 ? String(a[0] ?? '') : `${a.slice(0, -1).join(', ')} ${word} ${a.at(-1)}`);
+  const allTags = () => [...new Set(P.clips.flatMap((c) => c.tags))].sort();
+  const whatText = (m = {}) => {
+    const kind = m.kinds?.length === 1 ? (m.kinds[0] === 'movie' ? 'movies' : 'episodes') : '';
+    let t = m.genres?.length ? `${list(m.genres)} ${kind || 'titles'}` : kind || 'any title';
+    if (m.ratings?.length) t += ` rated ${list(m.ratings)}`;
+    if (m.studios?.length) t += ` from ${list(m.studios)}`;
+    if (m.title) t += ` with “${m.title}” in the title`;
+    return t;
   };
+  const whereText = (m = {}) => (m.libraries?.length ? `in ${list(m.libraries.map(libName))}` : 'in any library');
+  const whenText = (m = {}) => {
+    const b = [];
+    if (m.from && m.to) b.push(`from ${k.niceDate(m.from)} to ${k.niceDate(m.to)}`);
+    if (m.days?.length) b.push(`on ${list(m.days.map((x) => DAYS[x]), 'and')}`);
+    if (m.timeFrom && m.timeTo) b.push(`between ${m.timeFrom} and ${m.timeTo}`);
+    return b.length ? b.join(', ') : 'at any time';
+  };
+  const clipsText = (r) => {
+    const n = r.count || 1, c = n === 1 ? 'clip' : 'clips', sel = r.clips || {};
+    if (sel.mode === 'tag') return `${n} ${c} tagged “${sel.tag}”`;
+    if (sel.mode === 'match') return `${n} ${c} tagged with the title’s ${list((sel.on?.length ? sel.on : ['genres']).map((x) => ({ genres: 'genre', studios: 'studio', ratings: 'rating' })[x]))}`;
+    if (sel.mode === 'pick') return `${n} of ${plural(sel.ids?.length || 0, 'chosen clip')}`;
+    if (sel.untaggedOnly) return `${n} everyday ${c} (no tag)`;
+    return `${n} ${c} from all clips`;
+  };
+  const describe = (r) => {
+    const m = r.match || {};
+    const where = m.libraries?.length ? ` ${whereText(m)}` : '', when = whenText(m) === 'at any time' ? '' : ` ${whenText(m)}`;
+    return `Before ${whatText(m)}${where}${when}, play ${clipsText(r)}${m.stop ? ', instead of the rules below' : ''}.`;
+  };
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  const autoName = (r) => (r.clips?.mode === 'tag' && r.clips.tag ? cap(r.clips.tag) : r.match?.genres?.length ? `${list(r.match.genres)} clips` : r.clips?.mode === 'match' ? 'Clips that fit the title' : r.clips?.untaggedOnly ? 'Everyday clips' : 'Any clip');
   const tabsHtml = () => html`<div class="tabs" data-ptabs>${[['overview', 'Overview'], ['general', 'General'], ['rules', 'Rules and schedules'], ['clips', 'Clips'], ['test', 'Test'], ['activity', 'Activity'], ['backup', 'Backup']].map(([id, n]) => html`<button data-pt="${id}" class="${tab === id ? 'on' : ''}">${n}</button>`)}</div>`;
   const frame = (inner, tools = '') => html`${k.head('Pre-rolls', 'Short clips (studio logos, bumpers, seasonal intros) that play before a movie or episode, the same way on every device.', tools)}${tabsHtml()}${inner}`;
   const health = () => html`<div class="card"><h2>Health check</h2>${P.health.map((h) => html`<div class="row"><span class="dot ${h.level}"></span><div class="grow"><span style="white-space:normal;color:var(--text)">${h.text}</span></div>${h.fix === 'libraries' ? html`<a class="btn sm" href="#libraries">Open Libraries</a>` : ''}</div>`)}</div>`;
@@ -718,7 +738,7 @@ export async function prerolls(main, k) {
     main.innerHTML = String(frame(html`<div class="card"><h2>Start from a preset</h2><div class="tools">${Object.entries(P.presets).map(([id, p]) => html`<button class="btn sm" data-preset="${id}">${PRESET_ICON[id] || ''} ${p.name}</button>`)}<button class="btn sm" data-preset="cinema">🎬 Cinema line-up</button></div>
         <p class="muted small" style="margin-top:8px">Seasonal presets play clips tagged for the season (for example “halloween”) and replace the everyday clips while they're on. The cinema line-up plays a clip tagged “logo”, then one that fits the title, then one tagged “feature”. Tag clips on the Clips tab.</p></div>
       <div class="card"><h2>Rules</h2><p class="muted small" style="margin-bottom:6px">Rules run from top to bottom until the clip limit is reached.</p>
-        ${P.rules.length ? P.rules.map((r, i) => html`<div class="row" data-id="${r.id}"><div class="grow"><b>${r.name} ${r.enabled ? '' : html`<span class="pill">Off</span>`}</b><span>${describe(r)}</span></div>
+        ${P.rules.length ? P.rules.map((r, i) => html`<div class="row rule-row ${r.enabled ? '' : 'off'}" data-id="${r.id}"><span class="rule-no">${i + 1}</span><div class="grow"><span class="rule-sentence">${describe(r)}</span><span class="muted small">${r.name}${r.enabled ? '' : ' · off'}</span></div>
           <div class="tools">${i ? html`<button class="btn sm" data-up title="Run earlier">↑</button>` : ''}<button class="btn sm" data-edit>Edit</button><button class="btn sm danger" data-del>Delete</button></div></div>`)
         : html`<p class="muted">${P.clips.length ? 'No rules yet, so nothing plays.' : 'Add a “Pre-roll clips” library first.'}</p>`}
         <div class="tools" style="margin-top:10px"><button class="btn primary" data-new>New rule</button></div></div>`));
@@ -727,56 +747,132 @@ export async function prerolls(main, k) {
     const v = structuredClone(r || { name: '', enabled: true, count: 1, clips: { mode: 'all' }, match: {} });
     const m = v.match; for (const key of ['kinds', 'libraries', 'genres', 'ratings', 'studios', 'days']) m[key] ||= [];
     v.clips.ids ||= []; v.clips.on ||= ['genres'];
-    const tags = [...new Set(P.clips.flatMap((c) => c.tags))].sort();
+    const tags = allTags();
     const boxes = (key, list, label = (x) => x, cur = []) => html`<div class="checks">${list.map((x) => html`<label class="check"><input type="checkbox" data-multi="${key}" value="${x}" ${cur.map(String).includes(String(x)) ? 'checked' : ''}> ${label(x)}</label>`)}</div>`;
-    const d = k.dialog(r ? `Edit ${r.name}` : 'New pre-roll rule', html`<label class="f"><span>Name</span><input type="text" data-r="name" value="${v.name}" placeholder="Halloween bumpers"></label>
+    const libs = P.libraries.filter((l) => !['prerolls', 'books', 'comics', 'music'].includes(l.kind));
+    const mode = v.clips.mode === 'all' && v.clips.untaggedOnly ? 'untagged' : v.clips.mode;
+    // Each underlined part of the sentence opens its panel just below the sentence.
+    const panels = [];
+    const slot = (id, inner) => { panels.push(html`<div class="slotpanel" data-panel="${id}" hidden>${inner}</div>`); return html`<button type="button" class="slot" data-open="${id}" data-sum="${id}"></button>`; };
+    // The rule reads as one sentence; each underlined part opens to change it.
+    const d = k.dialog(r ? `Edit “${r.name}”` : 'New pre-roll rule', html`<p class="muted small">Click an underlined part to change it.</p>
+      <div class="sentence">Before
+        ${slot('what', html`<div class="f"><span>Type</span>${boxes('match.kinds', ['movie', 'episode'], (x) => (x === 'movie' ? 'Movies' : 'Episodes'), m.kinds)}</div>
+          ${P.genres.length ? html`<div class="f"><span>Genre</span>${boxes('match.genres', P.genres, undefined, m.genres)}</div>` : ''}
+          ${P.ratings.length ? html`<div class="f"><span>Rating</span>${boxes('match.ratings', P.ratings, undefined, m.ratings)}</div>` : ''}
+          ${P.studios.length ? html`<div class="f"><span>Studio or network</span>${boxes('match.studios', P.studios.slice(0, 60), undefined, m.studios)}</div>` : ''}
+          <label class="f"><span>Title contains</span><input type="text" data-r="title" value="${m.title || ''}" placeholder="e.g. Star Wars"></label>`)}
+        ${libs.length > 1 ? slot('where', html`<div class="f"><span>Library</span>${boxes('match.libraries', libs.map((l) => l.id), libName, m.libraries)}</div>`) : ''}
+        ${slot('when', html`<label class="check"><input type="checkbox" data-r="dated" ${m.from && m.to ? 'checked' : ''}> Only between two dates each year</label><div data-show="dated">${k.dates('f', 'From', m.from)}${k.dates('t', 'To', m.to)}</div>
+          <div class="f"><span>Days</span>${boxes('match.days', [0, 1, 2, 3, 4, 5, 6], (x) => DAYS[x], m.days)}</div>
+          <div class="f"><span>Hours</span><span class="imgrow"><input type="time" data-r="timeFrom" value="${m.timeFrom || ''}" style="width:auto"> to <input type="time" data-r="timeTo" value="${m.timeTo || ''}" style="width:auto"><span class="muted small">Overnight works (22:00 to 04:00)</span></span></div>`)},
+        play <select class="inl" data-r="count">${[1, 2, 3, 4, 5, 6].map((n) => html`<option value="${n}" ${+v.count === n ? 'selected' : ''}>${n === 1 ? '1 clip' : `${n} clips`}</option>`)}</select>
+        <select class="inl" data-r="mode">${[['all', 'from all clips'], ['untagged', 'from everyday clips (no tag)'], ['tag', 'tagged'], ['match', 'tagged with the title’s genre'], ['pick', 'that I pick']].map(([x, n]) => html`<option value="${x}" ${mode === x ? 'selected' : ''}>${n}</option>`)}</select>
+        <span data-show="tag">${tags.length ? html`<select class="inl" data-r="tag">${tags.map((t) => html`<option ${v.clips.tag === t ? 'selected' : ''}>${t}</option>`)}</select>` : html`<span class="muted small">(no tags yet: tag clips on the Clips tab)</span>`}</span>
+        <span data-show="match">${slot('on', html`<p class="muted small">A clip plays when one of its tags is the same word as the title's:</p>${boxes('clips.on', ['genres', 'studios', 'ratings'], (x) => ({ genres: 'Genre (a “horror” clip before horror films)', studios: 'Studio or network (“pixar”, “hbo”)', ratings: 'Rating (“pg”, “tv-ma”)' })[x], v.clips.on)}`)}</span>
+        <span data-show="pick">${slot('pick', boxes('clips.ids', P.clips.map((c) => c.id), (id) => P.clips.find((c) => c.id === id).title, v.clips.ids))}</span>.
+      </div>${panels}
+      <label class="check"><input type="checkbox" data-r="stop" ${m.stop ? 'checked' : ''}> When this plays something, skip the rules below it <span class="muted small">(seasonal clips replace the everyday ones)</span></label>
       <label class="check"><input type="checkbox" data-r="enabled" ${v.enabled ? 'checked' : ''}> Rule is on</label>
-      <div class="f"><span>Clips to play</span><span class="rangewrap"><input type="range" min="1" max="6" step="1" data-r="count" value="${v.count}"><output>${v.count}</output></span></div>
-      <h3 style="margin:14px 0 6px">Which clips</h3>
-      <label class="f"><span>Choose from</span><select data-r="mode">${[['all', 'Any clip'], ['untagged', 'Untagged clips only (your everyday clips)'], ['tag', 'Clips with a tag'], ['match', 'Clips tagged with the title’s genre (automatic)'], ['pick', 'Clips I pick']].map(([x, n]) => html`<option value="${x}" ${(v.clips.mode === 'all' && v.clips.untaggedOnly ? 'untagged' : v.clips.mode) === x ? 'selected' : ''}>${n}</option>`)}</select></label>
-      <div data-show="tag">${tags.length ? html`<label class="f"><span>Tag</span><select data-r="tag">${tags.map((t) => html`<option ${v.clips.tag === t ? 'selected' : ''}>${t}</option>`)}</select></label>` : html`<p class="muted small">No tags yet. Add tags on the Clips tab, or put clips in sub-folders.</p>`}</div>
-      <div data-show="match"><div class="f"><span>Match on</span>${boxes('clips.on', ['genres', 'studios', 'ratings'], (x) => ({ genres: 'Genre (a “horror” clip before horror films)', studios: 'Studio or network (“pixar”, “hbo”)', ratings: 'Rating (“pg”, “tv-ma”)' })[x], v.clips.on)}</div></div>
-      <div data-show="pick">${boxes('clips.ids', P.clips.map((c) => c.id), (id) => P.clips.find((c) => c.id === id).title, v.clips.ids)}</div>
-      <h3 style="margin:14px 0 6px">Before what (leave empty for everything)</h3>
-      <div class="f"><span>Type</span>${boxes('match.kinds', ['movie', 'episode'], (x) => (x === 'movie' ? 'Movies' : 'Episodes'), m.kinds)}</div>
-      ${P.libraries.filter((l) => !['prerolls', 'books', 'comics', 'music'].includes(l.kind)).length ? html`<div class="f"><span>Library</span>${boxes('match.libraries', P.libraries.filter((l) => !['prerolls', 'books', 'comics', 'music'].includes(l.kind)).map((l) => l.id), libName, m.libraries)}</div>` : ''}
-      ${P.genres.length ? html`<div class="f"><span>Genre</span>${boxes('match.genres', P.genres, undefined, m.genres)}</div>` : ''}
-      ${P.studios.length ? html`<div class="f"><span>Studio / network</span>${boxes('match.studios', P.studios.slice(0, 60), undefined, m.studios)}</div>` : ''}
-      ${P.ratings.length ? html`<div class="f"><span>Rating</span>${boxes('match.ratings', P.ratings, undefined, m.ratings)}</div>` : ''}
-      <label class="f"><span>Title contains</span><input type="text" data-r="title" value="${m.title || ''}" placeholder="e.g. Star Wars"></label>
-      <h3 style="margin:14px 0 6px">When</h3>
-      <label class="check"><input type="checkbox" data-r="dated" ${m.from && m.to ? 'checked' : ''}> Only between two dates each year</label><div data-show="dated">${k.dates('f', 'From', m.from)}${k.dates('t', 'To', m.to)}</div>
-      <div class="f"><span>Days</span>${boxes('match.days', [0, 1, 2, 3, 4, 5, 6], (x) => DAYS[x], m.days)}</div>
-      <div class="f"><span>Hours</span><span class="imgrow"><input type="time" data-r="timeFrom" value="${m.timeFrom || ''}" style="width:auto"> to <input type="time" data-r="timeTo" value="${m.timeTo || ''}" style="width:auto"><span class="muted small">Overnight works (22:00 to 04:00)</span></span></div>
-      <label class="check"><input type="checkbox" data-r="stop" ${m.stop ? 'checked' : ''}> When this rule plays something, skip the rules below it (seasonal clips replace the everyday ones)</label>`,
+      <label class="f" style="margin-top:10px"><span>Name <span class="muted small">(optional)</span></span><input type="text" data-r="name" value="${v.name}" placeholder="Named for you if left empty"></label>`,
     { wide: true, onOk: async (el) => {
-      const g = (x) => $(`[data-r="${x}"]`, el);
-      const multi = (key) => $$(`[data-multi="${key}"]:checked`, el).map((x) => (/ids|libraries|days/.test(key) ? +x.value : x.value));
-      const mode = g('mode').value;
-      const out = { ...v, name: g('name').value.trim(), enabled: g('enabled').checked, count: +g('count').value, stop: g('stop').checked,
-        clips: { mode: mode === 'untagged' ? 'all' : mode, untaggedOnly: mode === 'untagged' || undefined, tag: g('tag')?.value || tags[0] || '', ids: multi('clips.ids'), on: multi('clips.on') },
-        match: { kinds: multi('match.kinds'), libraries: multi('match.libraries'), genres: multi('match.genres'), studios: multi('match.studios'), ratings: multi('match.ratings'), days: multi('match.days'),
-          title: g('title').value.trim() || undefined, timeFrom: g('timeFrom').value || undefined, timeTo: g('timeTo').value || undefined,
-          ...(g('dated').checked ? { from: k.readDate(el, 'f'), to: k.readDate(el, 't') } : {}) } };
+      const out = readRule(el);
       if ((out.match.timeFrom && !out.match.timeTo) || (!out.match.timeFrom && out.match.timeTo)) throw new Error('Give both a start and an end time');
+      if (out.clips.mode === 'tag' && !out.clips.tag) throw new Error('Tag some clips on the Clips tab first, or choose other clips');
+      if (out.clips.mode === 'pick' && !out.clips.ids.length) throw new Error('Pick at least one clip');
+      if (!out.name) out.name = autoName(out);
       if (!r) out.position = (P.rules.at(-1)?.position ?? 0) + 1;
       await api('POST', '/api/studio/prerolls/rules', out); toast('Rule saved'); await refresh();
     } });
-    const show = () => { const mode = $('[data-r=mode]', d.el).value; for (const s of $$('[data-show]', d.el)) s.hidden = s.dataset.show === 'dated' ? !$('[data-r=dated]', d.el).checked : mode !== s.dataset.show; };
-    d.el.addEventListener('input', (e) => { if (e.target.type === 'range') e.target.nextElementSibling.textContent = e.target.value; show(); });
-    d.el.addEventListener('change', show); show();
+    const readRule = (el) => {
+      const g = (x) => $(`[data-r="${x}"]`, el);
+      const multi = (key) => $$(`[data-multi="${key}"]:checked`, el).map((x) => (/ids|libraries|days/.test(key) ? +x.value : x.value));
+      const md = g('mode').value;
+      return { ...v, name: g('name').value.trim(), enabled: g('enabled').checked, count: +g('count').value, stop: g('stop').checked,
+        clips: { mode: md === 'untagged' ? 'all' : md, untaggedOnly: md === 'untagged' || undefined, tag: g('tag')?.value || '', ids: multi('clips.ids'), on: multi('clips.on') },
+        match: { kinds: multi('match.kinds'), libraries: multi('match.libraries'), genres: multi('match.genres'), studios: multi('match.studios'), ratings: multi('match.ratings'), days: multi('match.days'),
+          title: g('title').value.trim() || undefined, timeFrom: g('timeFrom').value || undefined, timeTo: g('timeTo').value || undefined, stop: g('stop').checked,
+          ...(g('dated').checked ? { from: k.readDate(el, 'f'), to: k.readDate(el, 't') } : {}) } };
+    };
+    const sync = () => {
+      const o = readRule(d.el), md = $('[data-r=mode]', d.el).value;
+      for (const s of $$('[data-show]', d.el)) s.hidden = s.dataset.show === 'dated' ? !$('[data-r=dated]', d.el).checked : md !== s.dataset.show;
+      const set = (id, text) => { const el = $(`[data-sum="${id}"]`, d.el); if (el) el.textContent = text; };
+      set('what', whatText(o.match)); set('where', whereText(o.match)); set('when', whenText(o.match));
+      set('pick', o.clips.ids.length ? plural(o.clips.ids.length, 'clip') : 'choose clips…');
+      set('on', `(${list((o.clips.on.length ? o.clips.on : ['genres']).map((x) => ({ genres: 'genre', studios: 'studio', ratings: 'rating' })[x]), 'or')})`);
+      $('[data-r=name]', d.el).placeholder = `Named for you: ${autoName(o)}`;
+    };
+    // One panel open at a time; clicking its part again closes it.
+    d.el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-open]'); if (!b) return;
+      const open = !b.classList.contains('on');
+      for (const x of $$('[data-open]', d.el)) x.classList.toggle('on', open && x === b);
+      for (const x of $$('[data-panel]', d.el)) x.hidden = !(open && x.dataset.panel === b.dataset.open);
+    });
+    d.el.addEventListener('input', sync); d.el.addEventListener('change', sync); sync();
   };
+  let clipFilter = '', clipSel = new Set();
   const drawClips = () => {
-    main.innerHTML = String(frame(html`<div class="card"><h2>Clips (${P.clips.length})</h2><p class="muted small">Untagged clips are your everyday pre-rolls. Tag a clip with a genre (horror), a season (halloween), or “logo” / “feature” for the cinema line-up. Tags typed here stay through rescans; sub-folder names become tags too.</p>
-      <div class="clips">${P.clips.map((c) => html`<div class="clip ${c.off ? 'off' : ''}" data-clip="${c.id}"><img src="/api/studio/prerolls/clips/${c.id}/still.jpg" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
-        <div class="grow"><b>${c.title}</b><span class="muted small">${k.mins(c.runtime_s)}${c.folder ? ` · ${c.folder}` : ''} · ${c.plays ? `played ${plural(c.plays, 'time')}, last ${ago(c.last_played)}` : 'not played yet'}</span>
-          ${chipsIn(`c${c.id}`, c.tags, [...new Set([...P.clips.flatMap((x) => x.tags), ...P.genres.map((g) => g.toLowerCase()), 'logo', 'feature', 'halloween', 'christmas'])], 'Add a tag')}</div>
+    const tags = allTags();
+    const count = (t) => P.clips.filter((c) => c.tags.includes(t)).length;
+    const isFolder = (t) => P.clips.some((c) => c.folderTags.includes(t)) && !P.clips.some((c) => c.ownTags.includes(t));
+    const everyday = P.clips.filter((c) => !c.tags.length).length;
+    const shown = P.clips.filter((c) => (clipFilter === '' ? true : clipFilter === '-' ? !c.tags.length : c.tags.includes(clipFilter)));
+    const suggest = [...new Set([...tags, ...P.genres.map((g) => g.toLowerCase()), 'logo', 'feature', 'halloween', 'christmas'])];
+    main.innerHTML = String(frame(html`<div class="card"><h2>Pre-roll tags</h2>
+      <p class="muted small">Tags here are only for pre-rolls: rules use them to choose clips, and they don't show up anywhere else in HallFlix. A clip's sub-folder names count as tags too (📁). Clips with no tag are your everyday clips.</p>
+      <div class="tagbar">
+        <button class="tagpill ${clipFilter === '' ? 'on' : ''}" data-tf="">All clips <b>${P.clips.length}</b></button>
+        <button class="tagpill ${clipFilter === '-' ? 'on' : ''}" data-tf="-">Everyday (no tag) <b>${everyday}</b></button>
+        ${tags.map((t) => html`<span class="tagpill-wrap"><button class="tagpill ${clipFilter === t ? 'on' : ''}" data-tf="${t}">${isFolder(t) ? '📁 ' : ''}${t} <b>${count(t)}</b></button>${isFolder(t) ? '' : html`<button class="tagx" data-tren="${t}" title="Rename “${t}”">✎</button><button class="tagx" data-tdel="${t}" title="Delete “${t}”">×</button>`}</span>`)}
+      </div></div>
+      <div class="card"><div class="clips-head"><h2>Clips ${clipFilter ? html`<span class="muted">· ${clipFilter === '-' ? 'everyday' : clipFilter}</span>` : ''} (${shown.length})</h2>
+        <label class="check"><input type="checkbox" data-selall ${shown.length && shown.every((c) => clipSel.has(c.id)) ? 'checked' : ''}> Select all</label></div>
+      <div class="bulkbar" ${clipSel.size ? '' : 'hidden'}><b data-selcount>${plural(clipSel.size, 'clip')} selected</b>
+        <input type="text" data-btag placeholder="Tag" list="ptags" style="width:180px"><datalist id="ptags">${suggest.map((t) => html`<option value="${t}">`)}</datalist>
+        <button class="btn sm primary" data-badd>Add tag</button><button class="btn sm" data-brem>Remove tag</button><button class="btn sm" data-bnone>Clear selection</button></div>
+      <div class="clips">${shown.map((c) => html`<div class="clip ${c.off ? 'off' : ''} ${clipSel.has(c.id) ? 'sel' : ''}" data-clip="${c.id}">
+        <label class="clip-pick"><input type="checkbox" data-pick ${clipSel.has(c.id) ? 'checked' : ''} aria-label="Select ${c.title}"><img src="/api/studio/prerolls/clips/${c.id}/still.jpg" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></label>
+        <div class="grow"><b>${c.title}</b><span class="muted small">${k.mins(c.runtime_s)} · ${c.plays ? `played ${plural(c.plays, 'time')}, last ${ago(c.last_played)}` : 'not played yet'}</span>
+          <div class="cliptags">${c.folderTags.map((t) => html`<span class="chip fixed" title="From its folder">📁 ${t}</span>`)}${chipsIn(`c${c.id}`, c.ownTags, suggest, c.tags.length ? 'Add a tag' : 'Everyday clip · add a tag')}</div></div>
         <label class="check"><input type="checkbox" data-on ${c.off ? '' : 'checked'}> On</label></div>`)}
-      ${!P.clips.length ? html`<p class="muted">No clips found. <a href="#libraries">Add a pre-roll library</a>.</p>` : ''}</div></div>`));
-    const saveTags = k.debounce(async (el) => { const id = el.dataset.clip; try { await api('PUT', `/api/studio/prerolls/clips/${id}`, { tags: readChips(el, `c${id}`) }); toast('Tags saved', 1000); } catch (e) { k.fail(e); } }, 400);
+      ${!P.clips.length ? html`<p class="muted">No clips found. <a href="#libraries">Add a pre-roll library</a>.</p>` : !shown.length ? html`<p class="muted">No clips here.</p>` : ''}</div></div>`));
+    const saveTags = k.debounce(async (el) => { const id = el.dataset.clip; try { const r = await api('PUT', `/api/studio/prerolls/clips/${id}`, { tags: readChips(el, `c${id}`) }); const c = P.clips.find((x) => x.id === +id); Object.assign(c, { tags: r.tags, ownTags: r.tags.filter((t) => !c.folderTags.includes(t)) }); toast('Tags saved', 1000); } catch (e) { k.fail(e); } }, 400);
     for (const el of $$('[data-clip]', main)) wireChips(el, () => saveTags(el));
-    main.onchange = async (e) => { if (!e.target.matches('[data-on]')) return; const el = e.target.closest('[data-clip]'); el.classList.toggle('off', !e.target.checked); try { await api('PUT', `/api/studio/prerolls/clips/${el.dataset.clip}`, { off: !e.target.checked }); toast(e.target.checked ? 'Clip on' : 'Clip off', 1000); } catch (err) { k.fail(err); } };
+    const bulk = () => { const b = $('.bulkbar', main); b.hidden = !clipSel.size; $('[data-selcount]', main).textContent = `${plural(clipSel.size, 'clip')} selected`; };
+    main.onchange = async (e) => {
+      if (e.target.matches('[data-pick]')) { const el = e.target.closest('[data-clip]'), id = +el.dataset.clip; if (e.target.checked) clipSel.add(id); else clipSel.delete(id); el.classList.toggle('sel', e.target.checked); return bulk(); }
+      if (e.target.matches('[data-selall]')) { for (const c of shown) if (e.target.checked) clipSel.add(c.id); else clipSel.delete(c.id); return drawClips(); }
+      if (!e.target.matches('[data-on]')) return;
+      const el = e.target.closest('[data-clip]'); el.classList.toggle('off', !e.target.checked);
+      try { await api('PUT', `/api/studio/prerolls/clips/${el.dataset.clip}`, { off: !e.target.checked }); toast(e.target.checked ? 'Clip on' : 'Clip off', 1000); } catch (err) { k.fail(err); }
+    };
   };
+  const clipTools = async (b) => {
+    if (b.matches('[data-tf]')) { clipFilter = b.dataset.tf; return drawClips(); }
+    if (b.matches('[data-bnone]')) { clipSel = new Set(); return drawClips(); }
+    if (b.matches('[data-badd], [data-brem]')) {
+      const tag = $('[data-btag]', main).value.trim().toLowerCase();
+      if (!tag) return toast('Type a tag first');
+      await api('POST', '/api/studio/prerolls/tags', { action: b.matches('[data-badd]') ? 'add' : 'remove', tag, clips: [...clipSel] });
+      toast(b.matches('[data-badd]') ? `Tagged ${plural(clipSel.size, 'clip')} “${tag}”` : `Took “${tag}” off ${plural(clipSel.size, 'clip')}`);
+      return refresh();
+    }
+    if (b.matches('[data-tren]')) {
+      const from = b.dataset.tren, used = P.rules.filter((r) => r.clips?.mode === 'tag' && r.clips.tag === from).length;
+      k.dialog(`Rename “${from}”`, html`<label class="f"><span>New name</span><input type="text" data-newtag value="${from}"></label>${used ? html`<p class="muted small">${plural(used, 'rule')} using it will follow the new name.</p>` : ''}`,
+        { onOk: async (el) => { const to = $('[data-newtag]', el).value.trim().toLowerCase(); if (!to || to === from) return; await api('POST', '/api/studio/prerolls/tags', { action: 'rename', tag: from, to }); if (clipFilter === from) clipFilter = to; toast(`Renamed to “${to}”`); await refresh(); } });
+      return;
+    }
+    if (b.matches('[data-tdel]')) {
+      const t = b.dataset.tdel, used = P.rules.filter((r) => r.clips?.mode === 'tag' && r.clips.tag === t).length;
+      k.confirmBox(`Delete the tag “${t}”?`, `It comes off ${plural(count(t), 'clip')}. The clips stay.${used ? ` ${plural(used, 'rule')} use${used === 1 ? 's' : ''} it and would then play nothing.` : ''}`, 'Delete', async () => { await api('POST', '/api/studio/prerolls/tags', { action: 'delete', tag: t }); if (clipFilter === t) clipFilter = ''; await refresh(); });
+      return;
+    }
+    return false;
+  };
+  const count = (t) => P.clips.filter((c) => c.tags.includes(t)).length;
   const drawTest = () => {
     const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
     main.innerHTML = String(frame(html`<div class="card"><h2>What would play?</h2><p class="muted small">Pick a movie or episode, and optionally who's watching and when (handy for checking a Christmas schedule in July). Nothing is counted as played.</p>
@@ -830,6 +926,7 @@ export async function prerolls(main, k) {
     const t = e.target.closest('[data-pt]'); if (t) { tab = t.dataset.pt; return refresh(); }
     const b = e.target.closest('button'); if (!b) return;
     try {
+      if (tab === 'clips' && (await clipTools(b)) !== false) return;
       if (b.matches('[data-resetdecks]')) { await api('POST', '/api/studio/prerolls/decks/reset'); toast('Every round starts over'); return refresh(); }
       if (b.matches('[data-preset]')) { const r = await api('POST', '/api/studio/prerolls/presets', { preset: b.dataset.preset }); toast(`Added ${plural(r.created, 'rule')}. Tag clips “${r.tags.join('”, “')}” to use ${r.created > 1 ? 'them' : 'it'}.`, 5000); return refresh(); }
       if (b.matches('[data-new]')) return ruleForm(null);

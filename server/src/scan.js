@@ -236,7 +236,8 @@ async function scanShow(lib, showPath, dirName, existing, hasKey, seenShows, isH
   await q(`delete from items s where s.parent_id=$1 and s.kind='season' and not exists (select 1 from items e where e.parent_id=s.id)`, [show.id]);
 }
 
-/** Pre-roll clips: every video in the folder; sub-folder names become tags ("halloween/bump.mp4" → tag "halloween"). */
+/** Pre-roll clips: every video in the folder. Sub-folder names act as pre-roll tags ("halloween/bump.mp4" → "halloween"),
+ *  worked out from the path when rules run (prerolls.js), so they are not stored as metadata tags. */
 async function scanClips(lib) {
   const files = await walk(lib.path);
   const existing = new Map((await q(`select id, path, size, mtime from items where library_id=$1 and kind='clip'`, [lib.id])).map((r) => [r.path, r]));
@@ -247,14 +248,12 @@ async function scanClips(lib) {
   Object.assign(status, { phase: 'Adding pre-roll clips', total: todo.length, done: 0 });
   await pool(todo, 4, async (f) => {
     const p = await probe(f.path);
-    const rel = path.relative(lib.path, path.dirname(f.path));
-    const tags = rel ? rel.split(path.sep).map((t) => t.toLowerCase()) : [];
     const title = names.clipTitle(f.path);
     await q(
       `insert into items (library_id, kind, title, sort_title, path, size, mtime, container, streams, bitrate, runtime_s, tags)
        values ($1,'clip',$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)
        on conflict (path) do update set size=excluded.size, mtime=excluded.mtime, container=excluded.container,
-         streams=excluded.streams, bitrate=excluded.bitrate, runtime_s=excluded.runtime_s, tags=excluded.tags`,
-      [lib.id, title, names.sortTitle(title), f.path, f.size, f.mtime, ...media(p), tags]);
+         streams=excluded.streams, bitrate=excluded.bitrate, runtime_s=excluded.runtime_s`,
+      [lib.id, title, names.sortTitle(title), f.path, f.size, f.mtime, ...media(p), []]);
   });
 }
