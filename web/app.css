@@ -1928,3 +1928,21 @@ body.tv *, body.tv *::before, body.tv *::after { -webkit-backdrop-filter: none !
 body.tv .rbadge { background: rgba(0,0,0,0.78); }
 body.tv.tv-noglow .card::after, body.tv.tv-noglow .lib-tile::after, body.tv.tv-noglow .ico, body.tv.tv-noglow .avatar, body.tv.tv-noglow .splash img { filter: none !important; }
 body.tv #backdrop video { filter: none !important; } /* a filter takes a video off the TV's fast video path */
+
+/* ---------- TV layout (web/js/tv.js): fewer stops for the remote, rarely used actions behind the Menu (☰) key ---------- */
+body:not(.tv) .cast-h { display: none !important; }
+body.tv .sheet .close, body.tv .sheet .actions .manage, body.tv .ep-manage, body.tv .season-bar [data-seasonseen], body.tv .sheet .dlinks, body.tv .bg-edit { display: none !important; }
+body.tv .sheet .facts a { color: inherit; text-decoration: none; pointer-events: none; }
+body.tv .ratings a.rating { pointer-events: none; }
+/* A title reads top to bottom like Plex and Jellyfin: actions, then episodes or more like this, then the cast as one row. */
+body.tv .sheet .body { display: flex; flex-direction: column; }
+body.tv .sheet .body > .cast-h { display: block; order: 20; margin: 34px 0 10px; font-size: 22px; }
+body.tv .sheet .body > .cast { order: 21; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 6px 4px 10px; }
+body.tv .sheet .body > .cast::-webkit-scrollbar { display: none; }
+body.tv .tv-hint { align-self: center; margin-left: 14px; font-size: 15px; color: var(--muted); white-space: nowrap; }
+body.tv .tv-hint b { display: inline-grid; place-items: center; width: 26px; height: 26px; margin-right: 6px; border: 1.5px solid currentColor; border-radius: 6px; font-size: 14px; }
+.tv-menu { position: fixed; z-index: 200; right: 6vw; top: 50%; transform: translateY(-50%); min-width: 380px; padding: 18px; border-radius: calc(var(--radius) + 6px);
+  background: var(--surface); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 30px 80px rgba(0,0,0,0.6); display: grid; gap: 8px; }
+.tv-menu p { margin: 0 6px 6px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.tv-menu button { text-align: left; padding: 16px 20px; font: inherit; font-size: 20px; color: var(--text); background: rgba(255,255,255,0.05); border: 0; border-radius: var(--radius); cursor: pointer; }
+.tv-menu button:focus { outline: 3px solid var(--accent); outline-offset: 0; background: rgba(var(--accent-rgb), 0.22); }

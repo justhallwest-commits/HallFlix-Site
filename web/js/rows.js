@@ -42,8 +42,8 @@ function moreTile(row, extra) {
   if (link) el.href = link.getAttribute('href');
   else if (genre) el.dataset.seegenre = genre.dataset.seegenre;
   else el.dataset.capOpen = '';
-  el.innerHTML = `<b>+${extra}</b><span>${link || genre ? 'See all' : 'Show all'}</span>`;
-  el.setAttribute('aria-label', `${link || genre ? 'See all' : 'Show all'}: ${extra} more`);
+  el.innerHTML = `${extra ? `<b>+${extra}</b>` : ''}<span>${link || genre ? 'See all' : 'Show all'}</span>`;
+  el.setAttribute('aria-label', extra ? `${link || genre ? 'See all' : 'Show all'}: ${extra} more` : 'See all');
   if (row.classList.contains('keep')) el.classList.add('wide');
   if (row.classList.contains('squares')) el.classList.add('square');
   return el;
@@ -69,6 +69,8 @@ export function tidy() {
       for (const k of kids.slice(s.items)) k.classList.add('cap-hide');
       sc.append(moreTile(r, kids.length - s.items));
     }
+    // TVs: a row's "See all" lives at the end of the row (the heading link is not a stop for the remote, see tv.js).
+    if (isTV()) for (const r of rows) if (r.querySelector(':scope > h2 a[href]') && !r.querySelector(':scope > .scroller > .cap-more')) r.querySelector(':scope > .scroller').append(moreTile(r, 0));
     // Rows on the page: counted within each group of rows, and the rest wait behind "Show more rows".
     if (s.sections) {
       const groups = new Map();
