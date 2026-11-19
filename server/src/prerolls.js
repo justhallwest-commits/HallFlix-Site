@@ -8,6 +8,7 @@ import { q, q1, getSetting, setSetting } from './db.js';
 import { HttpError, readJson, sendFile } from './http.js';
 import { inRange, currentLook } from './look.js';
 import * as loudness from './loudness.js';
+import { img } from './catalog.js';
 
 const exec = promisify(execFile);
 const admin = { admin: true };
@@ -50,8 +51,8 @@ export function inSchedule(m, d) {
   return !days.length || days.includes(day);
 }
 
-/** Why a rule does or doesn't apply to a title. Null means it applies. */
-function mismatch(rule, target, date) {
+/** Why a rule doesn't fit a title, by the title alone (type, library, genre, studio, rating, words). Null means it fits. */
+function titleMismatch(rule, target) {
   const m = rule.match || {};
   if (m.kinds?.length && !m.kinds.includes(target.kind)) return `only before ${m.kinds.map((k) => (k === 'movie' ? 'movies' : 'episodes')).join(' and ')}`;
   if (m.libraries?.length && !m.libraries.map(Number).includes(target.library_id)) return 'a different library';
@@ -59,6 +60,13 @@ function mismatch(rule, target, date) {
   if (m.studios?.length && !lower(m.studios).some((g) => lower(target.studios).includes(g))) return `needs studio ${m.studios.join(' or ')}`;
   if (m.ratings?.length && !lower(m.ratings).includes(String(target.rating || '').toLowerCase())) return `needs rating ${m.ratings.join(' or ')}`;
   if (m.title?.trim() && !String(target.title || '').toLowerCase().includes(m.title.trim().toLowerCase()) && !String(target.show_title || '').toLowerCase().includes(m.title.trim().toLowerCase())) return `title must contain “${m.title}”`;
+  return null;
+}
+/** Why a rule does or doesn't apply to a title right now. Null means it applies. */
+function mismatch(rule, target, date) {
+  const m = rule.match || {};
+  const why = titleMismatch(rule, target);
+  if (why) return why;
   if (m.from && m.to && !inRange(m.from, m.to, date)) return 'outside its dates';
   if (!inSchedule(m, date)) return 'outside its days or hours';
   return null;
@@ -81,14 +89,7 @@ export function pickPrerolls(rules, clips, target, opts = {}, date = new Date(),
     const why = mismatch(rule, target, date);
     if (why) { log?.push({ rule: rule.name, note: `doesn't apply: ${why}` }); continue; }
     const sel = rule.clips || { mode: 'all' };
-    const want = new Set([
-      ...(sel.mode === 'match' ? [...((sel.on || ['genres']).includes('genres') ? lower(target.genres) : []), ...((sel.on || []).includes('studios') ? lower(target.studios) : []), ...((sel.on || []).includes('ratings') && target.rating ? [String(target.rating).toLowerCase()] : [])] : []),
-    ]);
-    let pool = usable.filter((cl) => !out.some((o) => o.id === cl.id) && (
-      sel.mode === 'pick' ? (sel.ids || []).map(Number).includes(cl.id)
-        : sel.mode === 'tag' ? lower(cl.tags).includes(String(sel.tag || '').toLowerCase())
-          : sel.mode === 'match' ? lower(cl.tags).some((t) => want.has(t))
-            : !(sel.untaggedOnly && cl.tags?.length)));
+    let pool = poolFor(sel, target, usable).filter((cl) => !out.some((o) => o.id === cl.id));
     if (!pool.length) { log?.push({ rule: rule.name, note: sel.mode === 'match' ? 'no clip is tagged with this title’s genre' : 'no usable clips for it' }); continue; }
     const before = out.length;
     for (let n = 0; n < (rule.count || 1) && pool.length && out.length < max; n++) {
@@ -101,6 +102,60 @@ export function pickPrerolls(rules, clips, target, opts = {}, date = new Date(),
   }
   return out;
 }
+/** The clips a rule's choice ("tagged halloween", "tagged with the title's genre"…) allows before a title. */
+function poolFor(sel, target, usable) {
+  const want = new Set(sel.mode === 'match' ? [...((sel.on || ['genres']).includes('genres') ? lower(target.genres) : []), ...((sel.on || []).includes('studios') ? lower(target.studios) : []), ...((sel.on || []).includes('ratings') && target.rating ? [String(target.rating).toLowerCase()] : [])] : []);
+  return usable.filter((cl) => (
+    sel.mode === 'pick' ? (sel.ids || []).map(Number).includes(cl.id)
+      : sel.mode === 'tag' ? lower(cl.tags).includes(String(sel.tag || '').toLowerCase())
+        : sel.mode === 'match' ? lower(cl.tags).some((t) => want.has(t))
+          : !(sel.untaggedOnly && cl.tags?.length)));
+}
+
+/**
+ * Who each rule and each tag group can reach: every movie and show is checked against every rule by what the title is
+ * (dates and hours aside, since those change through the year). A title is "matched" when a rule chooses clips for it
+ * (by tag, by its genre, picked clips, or a rule aimed at its genre, studio, rating or name), "general" when only catch-all rules
+ * (all clips, everyday clips) would play, and "none" when nothing would. Pure, so it can be tested without a database.
+ */
+export function reachOf(rules, clips, titles) {
+  const usable = clips.filter((c) => !c.extra?.off && !c.off);
+  const on = [...rules].filter((r) => r.enabled).sort((x, y) => x.position - y.position || x.id - y.id);
+  const groups = new Map(), ruleHits = new Map(on.map((r) => [r.id, []])), cls = { matched: [], general: [], none: [] };
+  // Only conditions about what a title is make a catch-all rule "chosen for it"; "before movies" alone is still general.
+  const aimed = (m = {}) => ['genres', 'studios', 'ratings'].some((k) => m[k]?.length) || !!m.title?.trim();
+  for (const t of titles) {
+    const target = { kind: t.kind === 'show' ? 'episode' : t.kind, library_id: t.library_id, title: t.title, show_title: t.title, genres: t.genres || [], studios: t.studios || [], rating: t.rating };
+    let matched = false, any = false;
+    for (const r of on) {
+      if (titleMismatch(r, target)) continue;
+      const sel = r.clips || { mode: 'all' }, pool = poolFor(sel, target, usable);
+      if (!pool.length) continue;
+      any = true; ruleHits.get(r.id).push(t.id);
+      if (sel.mode !== 'all' || aimed(r.match)) matched = true;
+      if (sel.mode === 'tag' || sel.mode === 'match') {
+        for (const tag of new Set(pool.flatMap((c) => lower(c.tags)).filter((x) => sel.mode === 'match' || x === String(sel.tag).toLowerCase()))) {
+          const g = groups.get(tag) || { tag, titles: new Set(), rules: new Set(), when: new Set() };
+          g.titles.add(t.id); g.rules.add(r.name);
+          if (r.match?.from && r.match?.to) g.when.add(`${r.match.from}|${r.match.to}`);
+          groups.set(tag, g);
+        }
+      }
+    }
+    cls[matched ? 'matched' : any ? 'general' : 'none'].push(t.id);
+  }
+  // Genres of titles without a matched clip, most common first: where a new tagged clip would help most.
+  const byId = new Map(titles.map((t) => [t.id, t]));
+  const gaps = new Map();
+  for (const id of [...cls.general, ...cls.none]) for (const g of byId.get(id).genres || []) gaps.set(g, (gaps.get(g) || 0) + 1);
+  return {
+    groups: [...groups.values()].map((g) => ({ tag: g.tag, titles: [...g.titles], rules: [...g.rules], when: [...g.when].map((w) => w.split('|')) })),
+    rules: Object.fromEntries([...ruleHits].map(([id, ids]) => [id, ids])),
+    classes: cls,
+    gaps: [...gaps].sort((x, y) => y[1] - x[1]).map(([genre, count]) => ({ genre, count })),
+  };
+}
+
 /** Shuffle like a deck of cards: each clip once per round, and the last one played never opens the next round. */
 function draw(pool, key, order, rnd, deck) {
   if (!deck || order === 'random') return pool[Math.floor(rnd() * pool.length)];
@@ -378,6 +433,30 @@ export function routes(r) {
       .map((x) => ({ id: x.id, label: x.kind === 'episode' ? `${x.show_title} · S${x.season_no} E${x.episode_no} · ${x.title}` : `${x.title}${x.year ? ` (${x.year})` : ''}` }));
   }, admin);
   r.get('/api/studio/prerolls/health', async () => health(), admin);
+  // Who the rules and tag groups reach. Lists are trimmed to `limit` titles each; ask with ?list=tag:x | rule:5 | none |
+  // general | matched for one whole list.
+  r.get('/api/studio/prerolls/reach', async ({ query }) => {
+    const rules = await q('select * from preroll_rules order by position, id');
+    const clips = await loadClips('order by i.id');
+    const titles = await q(`select id, kind, title, year, poster, genres, studios, rating, library_id from items
+      where kind in ('movie','show') and (kind = 'show' or path is not null) order by coalesce(sort_title, title)`);
+    const R = reachOf(rules, clips, titles);
+    const byId = new Map(titles.map((t) => [t.id, t]));
+    const card = (id) => { const t = byId.get(id); return { id, kind: t.kind, title: t.title, year: t.year, poster: img(t.poster, 'w185'), genres: (t.genres || []).slice(0, 3) }; };
+    if (query.list) {
+      const [kind, key] = String(query.list).split(/:(.*)/);
+      const ids = kind === 'tag' ? R.groups.find((g) => g.tag === key)?.titles : kind === 'rule' ? R.rules[key] : R.classes[kind];
+      return { titles: (ids || []).map(card) };
+    }
+    const limit = Math.max(0, Math.min(200, +query.limit || 24));
+    return {
+      total: titles.length,
+      groups: R.groups.map((g) => ({ ...g, count: g.titles.length, titles: g.titles.slice(0, limit).map(card) })).sort((x, y) => x.tag.localeCompare(y.tag)),
+      rules: Object.fromEntries(Object.entries(R.rules).map(([id, ids]) => [id, ids.length])),
+      classes: Object.fromEntries(Object.entries(R.classes).map(([k2, ids]) => [k2, { count: ids.length, titles: ids.slice(0, limit).map(card) }])),
+      gaps: R.gaps.slice(0, 12),
+    };
+  }, admin);
   r.get('/api/studio/prerolls/activity', async () => q(`select p.played_at, p.rule, c.title as clip, coalesce(s.title || ' · ' || i.title, i.title) as item, pr.name as profile
     from preroll_plays p left join items c on c.id = p.clip_id left join items i on i.id = p.item_id left join items s on s.id = i.show_id left join profiles pr on pr.id = p.profile_id
     order by p.played_at desc limit 100`), admin);

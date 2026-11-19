@@ -332,3 +332,26 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 .cliptags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .cliptags .chips-in { flex: 1; min-width: 200px; }
 .chip.fixed { opacity: 0.85; border-style: dashed; }
+
+/* Pre-rolls: previews, where tag groups reach, coverage */
+.clip-media { position: relative; }
+.clip-play { position: absolute; right: 6px; bottom: 6px; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 13px; cursor: pointer; display: grid; place-items: center; }
+.clip-play:hover, .clip-play:focus-visible { background: var(--cyan); color: #06121a; outline: none; }
+.pv video { width: 100%; max-height: 60vh; background: #000; border-radius: 10px; }
+.pv p { margin-top: 8px; color: var(--text); }
+.suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.suggbtn { padding: 3px 10px; border-radius: 999px; border: 1px dashed var(--cyan); background: transparent; color: var(--cyan); font: inherit; font-size: 13px; cursor: pointer; }
+.suggbtn:hover { background: var(--cyan); color: #06121a; }
+.reach { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; margin-top: 8px; }
+.reach-t { display: grid; gap: 4px; min-width: 0; }
+.reach-t img, .reach-blank { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); display: grid; place-items: center; font-size: 22px; }
+.reach-t span:last-child { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reach-t[hidden] { display: none; }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--cyan); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.statlink { display: block; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.statlink:hover { border-color: var(--cyan); }
+.card.notice { border-color: rgba(255, 196, 0, 0.45); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.covbar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--bg); border: 1px solid var(--line); margin: 12px 0 10px; }
+.covbar .m, .covkey .m { background: var(--cyan); } .covbar .g, .covkey .g { background: #8a7cff; } .covbar .n, .covkey .n { background: #555b66; }
+.covkey { display: flex; flex-wrap: wrap; gap: 18px; font-size: 14px; }
+.covkey i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
