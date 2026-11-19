@@ -6,11 +6,12 @@ import { promisify } from 'node:util';
 import { cfg } from './config.js';
 import { q, q1, getSetting, setSetting } from './db.js';
 import { HttpError, readJson, sendFile } from './http.js';
-import { inRange } from './look.js';
+import { inRange, currentLook } from './look.js';
+import * as loudness from './loudness.js';
 
 const exec = promisify(execFile);
 const admin = { admin: true };
-export const DEFAULTS = { enabled: true, max: 2, onResume: false, order: 'shuffle', everyMinutes: 0, skipProfiles: [], maxSeconds: 0, tz: '' };
+export const DEFAULTS = { enabled: true, max: 2, onResume: false, order: 'shuffle', everyMinutes: 0, skipProfiles: [], maxSeconds: 0, tz: '', evenVolume: false, volumeOffset: 0 };
 export async function settings() { return { ...DEFAULTS, ...((await getSetting('prerolls', {})) || {}) }; }
 
 const lower = (list) => (list || []).map((x) => String(x).toLowerCase());
@@ -132,12 +133,42 @@ export async function forPlay(profile, item, resumeAt, { record = true, at = new
     genres: item.genres?.length ? item.genres : item.show_genres, studios: item.studios?.length ? item.studios : item.show_studios, rating: item.rating || item.show_rating };
   const deck = (await getSetting('prerollDecks', {})) || {};
   const picked = pickPrerolls(rules, clips, target, s, wallClock(at, s.tz), Math.random, record ? deck : structuredClone(deck), log);
+  if (s.evenVolume && picked.length) {
+    const f = await loudness.featureLevel(item);
+    log?.push({ note: `Even volume: ${item.kind === 'episode' ? 'the episode' : 'the movie'} is ${f.measured ? `about ${f.lufs} LUFS` : `not measured yet, so the usual level for films (${f.lufs} LUFS) is used`}` });
+    for (const c of picked) {
+      c._lufs = await loudness.known(c.path);
+      if (c._lufs == null) loudness.want(c.path);
+      c._gain = loudness.gainFor(c._lufs, f.lufs, s.volumeOffset);
+    }
+  }
   if (record && picked.length) {
     await setSetting('prerollDecks', deck);
     for (const c of picked) await q('insert into preroll_plays (profile_id, clip_id, item_id, rule) values ($1,$2,$3,$4)', [profile?.id || null, c.id, item.id, c._rule]);
     await q(`delete from preroll_plays where played_at < now() - interval '180 days'`);
   }
   return picked;
+}
+
+/** The volume (0.05 to 1) for another file played before `item`, such as the uploaded ident; null when not evening out. */
+export async function volumeFor(file, item) {
+  const s = await settings();
+  if (!s.evenVolume || !file) return null;
+  const lufs = await loudness.known(file);
+  if (lufs == null) { loudness.want(file); return null; }
+  return loudness.gainFor(lufs, (await loudness.featureLevel(item)).lufs, s.volumeOffset);
+}
+const identFiles = async () => {
+  const id = (await currentLook()).theme?.ident || {};
+  return [...new Set([...(Array.isArray(id.videos) ? id.videos.map((v) => (typeof v === 'string' ? v : v?.url)) : []), id.video])]
+    .filter((u) => typeof u === 'string' && /^\/uploads\/[\w.-]+\.(mp4|webm)$/.test(u)).map((u) => path.join(cfg.dataDir, 'uploads', u.slice(9)));
+};
+/** Measure every clip and ident that hasn't been measured (or has changed), in the background. */
+export async function sweepLevels() {
+  if (!(await settings()).evenVolume) return;
+  const done = new Map((await q('select path, mtime from loudness')).map((x) => [x.path, +x.mtime]));
+  for (const c of await q(`select path, mtime from items where kind = 'clip' and path is not null`)) if (done.get(c.path) !== +c.mtime) loudness.want(c.path);
+  for (const f of await identFiles()) loudness.want(f);
 }
 
 // ---------- Studio ----------
@@ -159,7 +190,8 @@ async function overview() {
   const clips = (await loadClips('order by i.sort_title')).map((c) => ({ id: c.id, title: c.title, tags: c.tags, folderTags: c.folderTags, ownTags: c.ownTags, runtime_s: c.runtime_s,
     library_id: c.library_id, extra: c.extra, path: c.path, plays: plays.get(c.id)?.plays || 0, last_played: plays.get(c.id)?.last_played || null }));
   const deck = (await getSetting('prerollDecks', {})) || {};
-  return { settings: s, rules, clips: clips.map((c) => ({ ...c, off: !!c.extra?.off, extra: undefined, path: undefined, folder: c.path ? path.basename(path.dirname(c.path)) : '' })), deck, presets: PRESETS };
+  const levels = new Map((await q('select l.path, l.lufs from loudness l join items i on i.path = l.path and i.mtime = l.mtime where i.kind = \'clip\'')).map((x) => [x.path, x.lufs]));
+  return { settings: s, rules, clips: clips.map((c) => ({ ...c, lufs: levels.get(c.path) ?? null, off: !!c.extra?.off, extra: undefined, path: undefined, folder: c.path ? path.basename(path.dirname(c.path)) : '' })), deck, presets: PRESETS };
 }
 
 export async function health() {
@@ -188,12 +220,21 @@ export async function health() {
   if (long.length) add('warn', `${long.length} clip${long.length > 1 ? 's are' : ' is'} over ${Math.max(3, Math.round((s.maxSeconds || 180) / 60))} minutes: ${long.slice(0, 3).map((c) => c.title).join(', ')}${long.length > 3 ? '…' : ''}.`);
   const off = clips.filter((c) => c.off).length;
   if (off) add('info', `${off} clip${off > 1 ? 's are' : ' is'} switched off.`);
+  if (s.evenVolume && clips.length) {
+    const left = clips.filter((c) => c.lufs == null).length;
+    if (left) add('info', `Even volume: ${left} clip${left > 1 ? 's are' : ' is'} still being measured. Until then ${left > 1 ? 'they play' : 'it plays'} at normal volume.`);
+    const quiet = clips.filter((c) => c.lufs != null && c.lufs < loudness.TYPICAL + (+s.volumeOffset || 0) - 3);
+    if (quiet.length) add('info', `${quiet.length} clip${quiet.length > 1 ? 's are' : ' is'} quieter than a typical movie, so ${quiet.length > 1 ? 'they play' : 'it plays'} at full volume: ${quiet.slice(0, 3).map((c) => c.title).join(', ')}${quiet.length > 3 ? '…' : ''}.`);
+  }
   if (s.skipProfiles?.length) add('info', `${s.skipProfiles.length} profile${s.skipProfiles.length > 1 ? 's skip' : ' skips'} pre-rolls.`);
   if (!out.some((x) => x.level !== 'info')) add('ok', 'Everything looks right.');
   return out;
 }
 
 export function routes(r) {
+  // Keep loudness measurements up to date: shortly after start, then every six hours (new clips, a new ident).
+  setTimeout(() => sweepLevels().catch(() => {}), 90e3).unref?.();
+  setInterval(() => sweepLevels().catch(() => {}), 6 * 3600e3).unref?.();
   r.get('/api/studio/prerolls', async () => {
     const o = await overview();
     return {
@@ -216,8 +257,11 @@ export function routes(r) {
     next.order = next.order === 'random' ? 'random' : 'shuffle';
     next.skipProfiles = (next.skipProfiles || []).map(Number).filter(Boolean);
     next.tz = String(next.tz || '');
+    next.evenVolume = !!next.evenVolume;
+    next.volumeOffset = Math.max(-9, Math.min(9, Math.round(+next.volumeOffset || 0)));
     if (next.tz) { try { new Intl.DateTimeFormat('en-US', { timeZone: next.tz }); } catch { throw new HttpError(400, `“${next.tz}” is not a time zone`); } }
     await setSetting('prerolls', next);
+    if (next.evenVolume) sweepLevels().catch(() => {});
     return { ok: true, settings: next };
   }, admin);
   r.post('/api/studio/prerolls/rules', async ({ req }) => {
@@ -320,7 +364,7 @@ export function routes(r) {
     return {
       title: item.kind === 'episode' ? `${item.show_title} · S${item.season_no} E${item.episode_no} · ${item.title}` : `${item.title}${item.year ? ` (${item.year})` : ''}`,
       facts: { genres: item.genres?.length ? item.genres : item.show_genres || [], studios: item.studios?.length ? item.studios : item.show_studios || [], rating: item.rating || item.show_rating || null },
-      clips: picked.map((c) => ({ id: c.id, title: c.title, rule: c._rule, seconds: c.runtime_s })), log,
+      clips: picked.map((c) => ({ id: c.id, title: c.title, rule: c._rule, seconds: c.runtime_s, lufs: c._lufs ?? null, volume: c._gain ?? null })), log,
     };
   }, admin);
   r.get('/api/studio/prerolls/find', async ({ query }) => {

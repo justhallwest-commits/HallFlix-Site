@@ -38,6 +38,8 @@ class PlayerActivity : Activity() {
         val main get() = json.optString("kind") == "main"
         /** The HallFlix ident before a feature: shown as a clean interlude, not as a video with player controls. */
         val interlude get() = json.optString("kind") == "ident"
+        /** How loud to play it: pre-rolls and the ident come turned down to the movie's level when "even volume" is on. */
+        val gain get() = json.optDouble("gain", 1.0).toFloat().coerceIn(0f, 1f)
         val itemId get() = json.getLong("itemId")
         val duration get() = json.optDouble("duration", 0.0)
     }
@@ -112,7 +114,7 @@ class PlayerActivity : Activity() {
                     entries = list
                     resumeAt = list.lastOrNull()?.json?.optDouble("resumeAt", 0.0) ?: 0.0
                     resumed = false
-                    list.firstOrNull()?.let { interludeMode(it.interlude) } // before playback starts, so the controls never flash up
+                    list.firstOrNull()?.let { interludeMode(it.interlude); exo.volume = it.gain } // before playback starts, so the controls never flash up
                     exo.setMediaItems(list.mapIndexed { i, e -> mediaItem(e, i) })
                     exo.prepare()
                     exo.playWhenReady = true
@@ -162,6 +164,7 @@ class PlayerActivity : Activity() {
     private fun onEntryChanged() {
         val e = current() ?: return
         interludeMode(e.interlude)
+        exo.volume = e.gain
         val title = findViewById<TextView>(R.id.title)
         findViewById<View>(R.id.badge).visibility = if (e.main || e.json.optString("kind") == "ident") View.GONE else View.VISIBLE
         title.text = if (e.main) listOf(e.json.optString("title"), e.json.optString("subtitle")).filter { it.isNotEmpty() }.joinToString("  ·  ") else ""

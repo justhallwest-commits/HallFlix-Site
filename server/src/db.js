@@ -110,6 +110,8 @@ export const MIGRATIONS = [
      where i.kind = 'clip' and trim(t) <> '' and position('/' || lower(trim(t)) || '/' in lower(replace(i.path, chr(92), '/'))) = 0
      on conflict do nothing;
    update items set tags = '{}', locked = locked - 'tags', edits = edits - 'tags' where kind = 'clip';`,
+  // 11: how loud pre-rolls, idents and features are, so pre-rolls can play at the movie's level. Keyed by file path.
+  `create table loudness (path text primary key, mtime bigint not null, lufs real not null, measured_at timestamptz not null default now());`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {

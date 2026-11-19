@@ -251,6 +251,28 @@ test('pre-rolls play first, follow their rules, and are skipped on resume', asyn
   assert.equal((await hf.api('GET', '/api/studio/prerolls')).rules.length, 1);
 });
 
+test('even volume: pre-rolls come turned down to the level of the title after them', async () => {
+  await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: true, max: 2, evenVolume: true, volumeOffset: -6 });
+  let queue = [];
+  for (let i = 0; i < 60; i++) { // clips and the movie are measured in the background
+    ({ queue } = await hf.api('POST', '/api/play', { itemId: items['Night Drive'].id, caps: browser, start: 0 }));
+    if (queue.filter((e) => e.kind === 'preroll').every((e) => e.gain != null)) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  const pre = queue.filter((e) => e.kind === 'preroll');
+  assert.ok(pre.length);
+  // The sample clips and the movie share a test tone, so "6 dB quieter than the movie" comes out near half volume.
+  for (const e of pre) assert.ok(e.gain > 0.35 && e.gain < 0.7, `gain ${e.gain}`);
+  assert.equal(queue.at(-1).gain, undefined);
+  const pr = await hf.api('GET', '/api/studio/prerolls');
+  assert.ok(pr.clips.every((c) => typeof c.lufs === 'number'));
+  const t = await hf.api('POST', '/api/studio/prerolls/test', { itemId: items['Night Drive'].id });
+  assert.ok(t.clips.every((c) => c.volume > 0.35 && c.volume < 0.7));
+  assert.ok(t.log.some((x) => /Even volume: the movie is about -?\d/.test(x.note)));
+  await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: false, evenVolume: false, volumeOffset: 0 });
+  assert.equal((await hf.api('GET', '/api/studio/prerolls')).settings.evenVolume, false);
+});
+
 test('progress: continue watching, finishing, and what is up next', async () => {
   let home = await hf.api('GET', '/api/home');
   assert.equal(home.rows[0].id, 'continue'); assert.equal(home.rows[0].items[0].title, 'Night Drive');

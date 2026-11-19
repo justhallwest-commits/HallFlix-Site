@@ -360,7 +360,7 @@ test('pre-roll tags: kept apart from metadata tags, folder tags, tagging many cl
   // copied (they come from the path), and the clips' metadata tags are cleared.
   await q('delete from preroll_tags where clip_id = $1', [spooky.id]);
   await q(`update items set tags = '{"halloween","jump scare"}', edits = jsonb_build_object('tags', '["halloween","Jump Scare"]'::jsonb), locked = '{"tags":true}' where id = $1`, [spooky.id]);
-  await q(MIGRATIONS[MIGRATIONS.length - 1].replace(/create table preroll_tags[^;]*;/, ''));
+  await q(MIGRATIONS.find((m) => m.includes('create table preroll_tags')).replace(/create table preroll_tags[^;]*;/, ''));
   assert.deepEqual((await q('select tag from preroll_tags where clip_id = $1 order by tag', [spooky.id])).map((x) => x.tag), ['jump scare']);
   const after = (await q('select tags, locked, edits from items where id = $1', [spooky.id]))[0];
   assert.deepEqual([after.tags, after.locked.tags, after.edits.tags], [[], undefined, undefined]);

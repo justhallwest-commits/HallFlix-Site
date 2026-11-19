@@ -196,3 +196,21 @@ test('subtitles: encodings, season zips and language codes', async () => {
   assert.equal(pickFile(Buffer.from('1\n00:00:01,000 --> 00:00:02,000\nx'), {}).name, 'subtitle.srt');
   assert.equal(lang2('eng'), 'en'); assert.equal(lang2('pt_BR'), 'pt-br'); assert.equal(langName('ger'), 'German');
 });
+
+test('loudness: pre-roll volume against the feature, and a real measurement', async () => {
+  const L = await import('../src/loudness.js');
+  assert.equal(L.gainFor(-14, -24), 0.32); // a punchy trailer before a film: turned down 10 dB
+  assert.equal(L.gainFor(-30, -24), 1); // quieter than the film: full volume (players can't boost)
+  assert.equal(L.gainFor(-24, -24, -6), 0.5); // "quieter than the movie"
+  assert.equal(L.gainFor(5, -60), 0.05); // never silenced completely
+  assert.equal(L.gainFor(null, -24), null);
+  assert.equal(L.combine([-20, -20, -70]), -20); // silent samples are left out
+  assert.equal(L.combine([-20, -30]), -22.6);
+  const { execFileSync } = await import('node:child_process');
+  const os = await import('node:os'), path = await import('node:path');
+  const f = path.join(os.tmpdir(), `hf-loud-${process.pid}.wav`);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=f=1000:d=4', '-af', 'volume=-10dB', f]);
+  const lufs = await L.meter(f);
+  assert.ok(lufs < -25 && lufs > -38, `measured ${lufs}`);
+  assert.equal(await L.meter('/nope/missing.mp4'), null);
+});

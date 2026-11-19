@@ -67,10 +67,14 @@ function duration(p) {
   return Number.isFinite(s.video.duration) ? s.offset + s.video.duration : 0;
 }
 
+/** Each video plays at the viewer's volume times its entry's level (pre-rolls turned down to match the movie). */
+function levels(p) { for (const s of p.slots) s.video.volume = Math.max(0, Math.min(1, p.vol * (s.entry?.gain ?? 1))); }
+
 async function load(p, slot, entry, at = 0, forceStream = false) {
   const keepSid = slot.sid;
   teardown(slot);
   slot.entry = entry;
+  levels(p);
   const v = slot.video;
   const main = entry.kind === 'main';
   const direct = () => {
@@ -150,7 +154,7 @@ async function startEntry(p, idx) {
   const upcoming = p.queue[idx + 1];
   if (upcoming) {
     const standby = p.slots[1 - p.active];
-    standby.video.classList.add('standby'); standby.video.muted = slot.video.muted; standby.video.volume = slot.video.volume;
+    standby.video.classList.add('standby'); standby.video.muted = slot.video.muted;
     load(p, standby, upcoming, upcoming.kind === 'main' ? upcoming.resumeAt || 0 : 0).catch(() => { standby.entry = null; });
   }
 }
@@ -600,8 +604,9 @@ export async function openPlayer(itemId, opts = {}) {
   const p = P = { root, itemId, queue: [], idx: 0, active: 0, speed: keep.speed, sleep: typeof keep.sleep === 'number' && keep.sleep < Date.now() ? null : keep.sleep, sleepMin: keep.sleepMin, chapters: [], cinema: !!opts.cinema, quality: 'auto', audioSel: null, cues: [], subSel: null, pending: null, started: false, closed: false,
     slots: vids.map((video) => ({ video, hls: null, sid: null, entry: null, offset: 0, kind: null, retries: 0 })) };
   const saved = +localStorageGet('hf_volume', 1);
-  for (const v of vids) v.volume = Number.isFinite(saved) ? saved : 1;
-  $('input[type=range]', root).value = vids[0].volume;
+  p.vol = Number.isFinite(saved) ? Math.max(0, Math.min(1, saved)) : 1;
+  levels(p);
+  $('input[type=range]', root).value = p.vol;
 
   const activeVideo = () => p.slots[p.active].video;
   for (const slot of p.slots) {
@@ -685,7 +690,7 @@ export async function openPlayer(itemId, opts = {}) {
   };
   root.ondblclick = (e) => { if (!e.target.closest('.ui button, .scrub, .pmenu')) actions.full(); };
   root.onmousemove = () => showControls(p);
-  $('input[type=range]', root).oninput = (e) => { for (const v of vids) { v.volume = +e.target.value; v.muted = false; } $('.ico-vol', root).innerHTML = icons.vol; localStorageSet('hf_volume', e.target.value); };
+  $('input[type=range]', root).oninput = (e) => { p.vol = +e.target.value; levels(p); for (const v of vids) v.muted = false; $('.ico-vol', root).innerHTML = icons.vol; localStorageSet('hf_volume', e.target.value); };
 
   const scrub = $('.scrub', root);
   const at = (e) => { const r = scrub.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * duration(p); };
