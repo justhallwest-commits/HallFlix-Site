@@ -164,7 +164,7 @@ function startHero(list) {
   };
   hero.show = show;
   show(0);
-  if (list.length > 1) heroTimer = setInterval(() => { if (feel.trailerPlaying() && (hero.beats = (hero.beats || 0) + 1) < 5) return; hero.beats = 0; if (!hero.matches(':hover') && !hero.contains(document.activeElement) && !document.hidden && !$('#overlay').childElementCount && $('#player').hidden && !$('.surprise')) show(i + 1); }, 9000);
+  if (list.length > 1) heroTimer = setInterval(() => { if (document.body.classList.contains('tv') && performance.now() - (window.hfLastKey || 0) < 12000) return; /* TVs: the banner never changes while you are moving around */ if (feel.trailerPlaying() && (hero.beats = (hero.beats || 0) + 1) < 5) return; hero.beats = 0; if (!hero.matches(':hover') && !hero.contains(document.activeElement) && !document.hidden && !$('#overlay').childElementCount && $('#player').hidden && !$('.surprise')) show(i + 1); }, 9000);
 }
 
 /** Show or hide each row's arrows. All the measuring happens before any change, so the page is laid out once, not once per row. */

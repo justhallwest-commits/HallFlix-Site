@@ -77,7 +77,7 @@ function reveal(el) {
   const behavior = 'auto'; // instant: smooth scrolling stutters on a Fire TV Stick, and an instant jump feels quicker
   if (!tv()) { el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); return; }
   if (inRail(el)) return;
-  const sc = el.closest('.scroller, .moods, .tracks');
+  const sc = el.closest('.scroller, .moods, .tracks, .sheet .cast, .sheet .similar');
   if (sc && sc.scrollWidth > sc.clientWidth + 2) {
     const r = el.getBoundingClientRect(), box = sc.getBoundingClientRect();
     const pad = Math.min(box.width * 0.08, 60);
@@ -114,6 +114,16 @@ export function move(key) {
     const items = candidates(rail()).sort((x, y) => x[1].top - y[1].top).map(([el]) => el); // top to bottom as shown
     const i = items.indexOf(from);
     return focusEl(items[Math.max(0, Math.min(items.length - 1, i + dy))]);
+  }
+  // TVs, sideways along a row: the next title in the row, without measuring the whole page (a Fire TV Stick feels each one).
+  if (tv() && dx) {
+    const row = rowOf(from);
+    if (row?.matches('.scroller')) {
+      const items = [...row.children].map((x) => (x.matches(FOCUSABLE) ? x : x.querySelector(FOCUSABLE))).filter((x) => x && x.tabIndex >= 0 && !x.closest('.cap-hide'));
+      const i = items.indexOf(from.closest('.scroller > *')?.matches(FOCUSABLE) ? from.closest('.scroller > *') : from);
+      if (i >= 0 && items[i + dx]) return focusEl(items[i + dx]);
+      if (i >= 0 && dx > 0) return true; // the end of the row
+    }
   }
   const a = from.getBoundingClientRect();
   const list = candidates(root).filter(([el]) => !(tv() && inRail(el)));
@@ -253,7 +263,7 @@ export function initNav() {
   // Leaving a page remembers where focus was; arriving on one focuses something (after it has drawn).
   let current = location.hash, arrived = false, arrivedAt = 0, touched = false;
   addEventListener('hashchange', () => { remember(current); current = location.hash; lastContent = null; arrived = true; arrivedAt = performance.now(); touched = false; settle(); });
-  addEventListener('keydown', () => { touched = true; }, true);
+  addEventListener('keydown', () => { touched = true; window.hfLastKey = performance.now(); }, true);
   // After a page (or a title) opens or closes, focus lands on it: where you were before, or its first control.
   // A page chosen from the sidebar takes focus out of the sidebar.
   let timer = 0;

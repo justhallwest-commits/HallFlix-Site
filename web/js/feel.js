@@ -83,7 +83,8 @@ export function colourOf(url) {
 }
 /** Tint one element (a card, the spotlight, a title page) with its own artwork's colour. */
 export async function tint(el, url) {
-  if (!el || theme().artColor === false) return;
+  // TVs: no per-card colour (reading each picture's colour costs a Fire TV Stick a frame or two per move); focus is a plain ring.
+  if (!el || theme().artColor === false || isTV()) return;
   const c = await colourOf(url);
   if (!el.isConnected) return;
   if (!c) { el.style.removeProperty('--accent'); el.style.removeProperty('--accent-rgb'); return; }
