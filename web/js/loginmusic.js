@@ -137,6 +137,15 @@ export function startLoginMusic(theme, { preview = false } = {}) {
 }
 
 /** Fade the music out (when someone signs in). Resolves when it is quiet. */
+/**
+ * Where the sign-in music is right now ({ url, time, volume }), so it can carry on through the welcome ident after the
+ * page reloads (Studio → Sign-in page → After signing in → Sound: "Keep the sign-in music playing"). Null if silent.
+ */
+export function musicNow() {
+  if (!audio || audio.paused || !audio.currentSrc) return null;
+  return { url: audio.currentSrc, time: audio.currentTime || 0, volume: target() };
+}
+
 export function fadeOutLoginMusic(ms = 700) {
   return new Promise((resolve) => {
     if (!audio || audio.paused) { resolve(); return; }
