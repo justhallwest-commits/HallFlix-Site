@@ -514,6 +514,7 @@ export async function title(id) {
         ${d.genres.length ? html`<div><b>Genres</b> ${d.genres.slice(0, 3).map((g, i) => html`${i ? ', ' : ''}<span>${g}</span>`)}</div>` : ''}
         ${audio.length ? html`<div><b>Audio</b> ${audio.slice(0, 4).join(', ')}${audio.length > 4 ? ` +${audio.length - 4}` : ''}</div>` : ''}
         ${subs.length ? html`<div><b>Subtitles</b> ${subs.slice(0, 4).join(', ')}${subs.length > 4 ? ` +${subs.length - 4}` : ''}</div>` : ''}</div></div>
+      ${d.people.length ? html`<h3 class="cast-h">Cast &amp; crew</h3>` : ''}
       ${d.people.length ? html`<div class="cast">${d.people.map((x) => html`<a href="#/person/${encodeURIComponent(x.name)}">${x.photo ? html`<img loading="lazy" src="${x.photo}" alt="">` : html`<div class="ph">${x.name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</div>`}${x.name}<small>${x.role}</small></a>`)}</div>` : ''}
       <div class="stabs" role="tablist">${tabs.map(([k, n], i) => html`<button role="tab" data-stab="${k}" class="${i ? '' : 'on'}" aria-selected="${!i}">${n}</button>`)}</div>
       ${d.seasons ? html`<section class="spane" data-pane="episodes">

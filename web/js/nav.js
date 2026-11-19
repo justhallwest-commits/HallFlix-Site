@@ -6,6 +6,8 @@
 // - every page starts with something focused, and going back puts focus where it was;
 // - Back closes what is open, then goes to the previous page, then to the sidebar, then lets the app close;
 // - holding a key moves steadily instead of piling up presses; Play/Pause on a title plays it, ⏪ ⏩ jump along a row.
+import { openOptions, initTV } from './tv.js';
+
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]';
 const DIR = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 const tv = () => document.body.classList.contains('tv');
@@ -196,8 +198,9 @@ export function goBack() {
 /** Media keys on a title: Play/Pause plays it, ⏪ ⏩ jump along the row. */
 function mediaKey(k) {
   const el = document.activeElement;
-  if (k === 'menu') { // the remote's Menu key opens (or leaves) the sidebar
+  if (k === 'menu') { // the remote's Menu key: more options for where you are (see tv.js), otherwise the sidebar
     if (inRail(el)) return focusEl((lastContent?.isConnected && lastContent) || primary());
+    if (tv() && openOptions(el)) return true;
     if (el && el !== document.body) lastContent = el;
     return focusEl(document.querySelector('body.tv .nav .links a.on') || candidates(rail() || document.body)[0]?.[0]);
   }
@@ -270,6 +273,8 @@ export function initNav() {
   // The TV app passes on Back and the media keys (see MainActivity).
   window.hallflixBack = () => goBack();
   addEventListener('hallflix-key', (e) => mediaKey(e.detail));
+  addEventListener('keydown', (e) => { if (e.key === 'ContextMenu' && tv()) { e.preventDefault(); mediaKey('menu'); } });
+  if (tv()) initTV();
   addEventListener('keydown', (e) => {
     if (e.key === 'MediaPlayPause' || e.key === 'MediaPlay') { if (mediaKey('play')) e.preventDefault(); }
     else if (e.key === 'MediaFastForward' || e.key === 'MediaRewind') { if (mediaKey(e.key === 'MediaFastForward' ? 'ff' : 'rew')) e.preventDefault(); }
