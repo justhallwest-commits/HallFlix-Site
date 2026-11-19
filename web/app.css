@@ -1958,7 +1958,9 @@ body.tv *, body.tv *::before, body.tv *::after { clip-path: none !important; }
 body.tv .card .art, body.tv .episode .still, body.tv .confirm .choice, body.tv .mmenu, body.tv .menu, body.tv .toast { border-radius: 8px !important; }
 body.tv .lib-tile { border-radius: 12px !important; }
 body.tv .btn:not(.round), body.tv .chip, body.tv .mood { border-radius: 999px !important; }
-body.tv .lib-tile .tile-stack, body.tv .lib-tile .tile-text, body.tv .lib-tile .tile-slab, body.tv .lib-tile * { transform: none !important; animation: none !important; perspective: none !important; transform-style: flat !important; }
+/* Library tiles keep their layout (the logo and covers are placed with transforms); only the motion goes. */
+body.tv .lib-tile *, body.tv .tile-slab { animation: none !important; }
+body.tv.tiles-layered .lib-tile .tile-art, body.tv.tiles-layered .lib-tile .tile-text { translate: none; }
 body.tv .lib-tile .tile-shine, body.tv .tile-slab::before, body.tv .tile-slab::after { display: none !important; }
 body.tv .card .art img { transition: none !important; opacity: 1 !important; }
 /* The corner brackets become a plain ring drawn inside the edge, so a row or grid can never clip it. */
