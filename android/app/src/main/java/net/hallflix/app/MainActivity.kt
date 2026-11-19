@@ -64,7 +64,8 @@ class MainActivity : Activity() {
         web.apply {
             // No system focus outline around the whole page: HallFlix draws its own focus ring on each item.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) defaultFocusHighlightEnabled = false
-            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            // No setLayerType here: a permanent hardware layer copies the whole page into an extra
+            // texture every frame (slow on a Fire TV Stick) and can leave <video> blank.
             isVerticalScrollBarEnabled = false
             isHorizontalScrollBarEnabled = false
         }

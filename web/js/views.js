@@ -1,5 +1,5 @@
 // Screens: first-run setup, sign-in, home, libraries, search and the title sheet.
-import { $, $$, api, html, raw, esc, icons, state, applyLook, styleLogin, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, on, themeNow, libTitle } from './core.js';
+import { $, $$, api, html, raw, esc, icons, state, applyLook, styleLogin, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, on, themeNow, libTitle, tvPic } from './core.js';
 import * as browse from './browse.js';
 import * as feel from './feel.js';
 import * as media from './media.js';
@@ -72,8 +72,9 @@ const isVid = (u) => /\.(mp4|webm|m4v|mov)(\?|$)/i.test(u || '');
 const TILE_POS = { center: 'center', top: 'center top', bottom: 'center bottom', left: 'left center', right: 'right center' };
 /** The still picture on a library's Home tile (a tile background that is a video plays on the tile instead). */
 function tileBg(lk, artwork) {
-  if (lk.tileBackground && !isVid(lk.tileBackground)) return lk.tileBackground;
-  if (lk.tileUse !== 'artwork' && lk.background && !isVid(lk.background)) return lk.background;
+  // On a TV a custom picture comes as a tile-sized still (a full-size upload is heavy for a Fire TV Stick).
+  if (lk.tileBackground && !isVid(lk.tileBackground)) return tvPic(lk.tileBackground, 800);
+  if (lk.tileUse !== 'artwork' && lk.background && !isVid(lk.background)) return tvPic(lk.background, 800);
   return artwork;
 }
 const PLACES = { br: [1, 1], mr: [1, 0.5], tr: [1, 0], bc: [0.5, 1], tc: [0.5, 0], tl: [0, 0], bl: [0, 1], ml: [0, 0.5], mc: [0.5, 0.5] };

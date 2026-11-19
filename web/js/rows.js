@@ -2,7 +2,7 @@
 // "Show more rows", a visible scroll bar under each row, and an option to hold the rows in their own scrolling panel so
 // the background stays in view. Set in Studio → Look and feel (whole app, and each library's tab).
 // Works on the finished page, so every kind of row (movies, shows, music, comics, collections) is covered the same way.
-import { $, $$, themeNow, libraryLook, on } from './core.js';
+import { $, $$, themeNow, libraryLook, on, isTV } from './core.js';
 
 export const ROW_DEFAULTS = { items: 15, sections: 8, scroll: 'arrows', panel: false, panelHeight: 60 };
 const KEYS = Object.keys(ROW_DEFAULTS);
@@ -22,6 +22,12 @@ export function rowSettings(libId = null, theme = themeNow()) {
   out.sections = Math.max(0, +out.sections || 0);
   out.panel = out.panel === true || out.panel === 'yes';
   out.panelHeight = Math.max(30, Math.min(90, +out.panelHeight || 60));
+  // TVs show fewer titles and rows (Studio → Look and feel → TVs): a long page is slow on a Fire TV Stick.
+  if (isTV()) {
+    const T = theme?.tv || {}, cap = (v, m) => (m > 0 ? (v > 0 ? Math.min(v, m) : m) : v);
+    out.items = cap(out.items, +T.rowItems || 12);
+    out.sections = cap(out.sections, +T.rows || 6);
+  }
   return out;
 }
 

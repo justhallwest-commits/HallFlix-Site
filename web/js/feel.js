@@ -1,7 +1,7 @@
 // How HallFlix feels: colour drawn from the artwork in focus, depth on posters, the living spotlight,
 // navigation sounds, and the open animation. Everything here is optional polish: it switches itself off on
 // TVs and for people who ask for reduced motion, and never runs during playback.
-import { $, state, themeNow, applyLook, on, api } from './core.js';
+import { $, state, themeNow, applyLook, on, api, isTV } from './core.js';
 import { playSound, preload } from './sounds.js';
 
 const tv = () => document.body.classList.contains('tv');
@@ -93,6 +93,8 @@ export async function tint(el, url) {
 /** Wash the page background with the colour of what is in focus. */
 export async function wash(url) {
   const root = document.documentElement.style;
+  // On TVs this repaints the whole page each time the banner moves on, so it is off unless switched on.
+  if (isTV() && theme().tv?.wash !== true) { root.removeProperty('--mood-rgb'); return; }
   const c = theme().artColor === false ? null : await colourOf(url);
   if (c) root.setProperty('--mood-rgb', c.join(', ')); else root.removeProperty('--mood-rgb');
 }
@@ -204,7 +206,7 @@ function moveLight(e) {
 // ---------- library tiles: a video plays on the tile while it is pointed at or in focus ----------
 function tileVideo(tile, play) {
   const url = tile?.dataset.video;
-  if (!url || theme().tiles3d?.video === false || calm() || navigator.connection?.saveData) return;
+  if (!url || theme().tiles3d?.video === false || calm() || navigator.connection?.saveData || (isTV() && theme().tv?.tileVideos !== true)) return;
   const art = tile.querySelector('.tile-art');
   let v = art?.querySelector('video');
   if (play) {

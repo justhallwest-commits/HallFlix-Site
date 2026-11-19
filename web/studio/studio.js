@@ -667,6 +667,18 @@ pages.look = async (main) => {
           ${check(theme, 'profileColors', 'Tint each profile’s session with its own colour')}
           ${check(theme, 'glass', 'Glass controls that pick up the picture behind them')}${check(theme, 'previews', 'Open a larger preview when the pointer rests on a title')}
           ${select(theme, 'screensaver', 'Screensaver after five idle minutes', L.options.screensavers)}<p class="muted small">“tv” shows drifting artwork on TVs only, “all” on every screen. Glass and previews switch themselves off on TVs to keep them fast.</p></div>
+        <div class="card"><h2>TVs (Fire TV and Android TV)</h2>
+          <p class="muted small">A Fire TV Stick has far less power than a computer, so TVs get a lighter HallFlix. These settings only change TVs.</p>
+          ${choose(theme, 'tv.width', 'Size of everything on the TV screen', [['1600', 'Like a computer (smallest, fits the most)'], ['1280', 'Medium'], ['960', 'Large (easiest to read from the sofa)']])}
+          ${range(theme, 'tv.rowItems', 'Most titles in a row on TVs', 6, 40, 1, 12)}
+          ${range(theme, 'tv.rows', 'Most rows on a page on TVs', 2, 20, 1, 6)}
+          ${check(theme, 'tv.effects', 'Moving background effects (snow, stars and so on)')}
+          ${check(theme, 'tv.textures', 'Grain and texture over the page')}
+          ${check(theme, 'tv.glow', 'Full soft glow (off uses a simpler, faster glow)')}
+          ${check(theme, 'tv.wash', 'Colour wash that follows the banner')}
+          ${check(theme, 'tv.tileVideos', 'Videos on library tiles')}
+          ${check(theme, 'tv.stills', 'Show background videos and GIFs (sign-in page included) as still pictures (fastest)')}
+          <p class="muted small">Banner clips on TVs are under Motion (“Play clips on TVs too”). The TV picks up changes the next time HallFlix opens on it.</p></div>
         ${soundsCard(theme)}
         ${identCard(theme)}
         <div class="card"><h2>Evening look</h2>${check(theme, 'night.enabled', 'Switch to a second look in the evening')}

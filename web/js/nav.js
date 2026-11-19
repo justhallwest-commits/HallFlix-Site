@@ -72,7 +72,7 @@ function nearest(from, a, list, dx, dy) {
 let held = false; // a key is being held: scroll instantly so the screen keeps up
 /** Keep the focused control on screen: rows slide so it sits a little in from the left, and the page keeps it at a steady height. */
 function reveal(el) {
-  const behavior = held || !tv() ? 'auto' : 'smooth';
+  const behavior = 'auto'; // instant: smooth scrolling stutters on a Fire TV Stick, and an instant jump feels quicker
   if (!tv()) { el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); return; }
   if (inRail(el)) return;
   const sc = el.closest('.scroller, .moods, .tracks');

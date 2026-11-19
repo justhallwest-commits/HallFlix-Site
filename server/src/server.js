@@ -26,6 +26,7 @@ import * as profilesMod from './profiles.js';
 import * as lyricsMod from './lyrics.js';
 import * as musicMod from './music.js';
 import * as clips from './clips.js';
+import * as fit from './fit.js';
 import { versionedPage } from './webpage.js';
 import * as ratingsMod from './ratings.js';
 import * as videosMod from './videos.js';
@@ -89,6 +90,7 @@ r.post('/api/password', async ({ req, profile }) => {
 
 catalog.routes(r);
 clips.routes(r);
+fit.routes(r, open);
 playback.routes(r);
 studio.routes(r);
 manage.routes(r);
@@ -147,6 +149,17 @@ r.get('/img/l/:ref', async ({ req, res, params }) => {
   await sendFile(req, res, file, { cache: 'public, max-age=86400' });
 }, open);
 
+/**
+ * TVs get the page laid out at a computer-like width from the very first paint (Studio → Look and feel → TVs → Size).
+ * The Fire TV WebView otherwise lays pages out 960 px wide, so everything looks about 1.7x too big.
+ */
+const TV_UA = /AFT|Android TV|GoogleTV|BRAVIA|SmartTV|Tizen|Web0S/i;
+async function tvPage(req, html) {
+  if (!TV_UA.test(req.headers['user-agent'] || '')) return html;
+  let w = 1600;
+  try { w = Math.max(960, Math.min(1920, +(await look.currentLook()).theme?.tv?.width || 1600)); } catch {}
+  return html.replace(/<meta name="viewport" content="[^"]*">/, `<meta name="viewport" content="width=${w}, viewport-fit=cover">`);
+}
 async function serveStatic(req, res, pathname) {
   if (pathname.startsWith('/uploads/')) return sendFile(req, res, safeJoin(path.join(cfg.dataDir, 'uploads'), pathname.slice(9)), { cache: 'public, max-age=31536000, immutable' });
   if (pathname.startsWith('/plugins/')) return sendFile(req, res, safeJoin(plugins.pluginsDir(), pathname.slice(9)));
@@ -154,12 +167,12 @@ async function serveStatic(req, res, pathname) {
   if (rel === '/' || rel === '') rel = '/index.html';
   else if (rel === '/studio' || rel === '/studio/') rel = '/studio/index.html';
   // The pages carry each script's version (see webpage.js); a versioned file never changes, so it is kept for good.
-  if (rel === '/index.html' || rel === '/studio/index.html') return sendText(req, res, versionedPage(cfg.webDir, rel));
+  if (rel === '/index.html' || rel === '/studio/index.html') return sendText(req, res, await tvPage(req, versionedPage(cfg.webDir, rel)));
   const versioned = /[?&]v=[0-9a-f]{6,}/.test(req.url || '');
   const long = rel.startsWith('/assets/fonts/') || rel.startsWith('/vendor/');
   try { return await sendFile(req, res, safeJoin(cfg.webDir, rel), { cache: versioned ? 'public, max-age=31536000, immutable' : long ? 'public, max-age=2592000' : 'no-cache' }); }
   catch (e) {
-    if (e.status === 404 && !path.extname(rel)) return sendText(req, res, versionedPage(cfg.webDir, '/index.html'));
+    if (e.status === 404 && !path.extname(rel)) return sendText(req, res, await tvPage(req, versionedPage(cfg.webDir, '/index.html')));
     throw e;
   }
 }
