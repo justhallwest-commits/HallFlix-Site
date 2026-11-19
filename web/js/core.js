@@ -181,7 +181,7 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
     try { localStorage.setItem('hf_tvw', String(w)); } catch { /* private mode */ }
     $('meta[name=viewport]')?.setAttribute('content', `width=${w}, viewport-fit=cover`);
     document.body.classList.toggle('tv-notex', TV.textures !== true);
-    document.body.classList.toggle('tv-noglow', TV.glow !== true);
+    document.body.classList.toggle('tv-noglow', TV.glow !== true); document.body.classList.toggle('tv-focus-accent', TV.focus === 'accent');
   }
   let bg = signedOut ? (t.login?.image || t.background?.image) : (lib.background || t.background?.image);
   // On a TV a picture comes TV-sized (a huge upload is slow on a Fire TV Stick). Videos and GIFs keep moving

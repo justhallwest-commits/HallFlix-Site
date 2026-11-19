@@ -670,6 +670,7 @@ pages.look = async (main) => {
         <div class="card"><h2>TVs (Fire TV and Android TV)</h2>
           <p class="muted small">A Fire TV Stick has far less power than a computer, so TVs get a lighter HallFlix. These settings only change TVs.</p>
           ${choose(theme, 'tv.width', 'Size of everything on the TV screen', [['1600', 'Like a computer (smallest, fits the most)'], ['1280', 'Medium'], ['960', 'Large (easiest to read from the sofa)']])}
+          ${choose(theme, 'tv.focus', 'What is selected is outlined in', [['white', 'White (clearest on any picture)'], ['accent', 'The accent colour']])}
           ${range(theme, 'tv.rowItems', 'Most titles in a row on TVs', 6, 40, 1, 12)}
           ${range(theme, 'tv.rows', 'Most rows on a page on TVs', 2, 20, 1, 6)}
           ${check(theme, 'tv.effects', 'Moving background effects (snow, stars and so on)')}

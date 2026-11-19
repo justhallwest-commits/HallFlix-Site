@@ -1946,3 +1946,64 @@ body.tv .tv-hint b { display: inline-grid; place-items: center; width: 26px; hei
 .tv-menu p { margin: 0 6px 6px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
 .tv-menu button { text-align: left; padding: 16px 20px; font: inherit; font-size: 20px; color: var(--text); background: rgba(255,255,255,0.05); border: 0; border-radius: var(--radius); cursor: pointer; }
 .tv-menu button:focus { outline: 3px solid var(--accent); outline-offset: 0; background: rgba(var(--accent-rgb), 0.22); }
+
+/* ===================== TV skin (Fire TV, Android TV): clean and flat, after Plex, Netflix and Emby =====================
+   One flat layer per screen instead of dozens: no cut corners (clip-path), no 3D, no shine or sway, no fading pictures.
+   What is selected is unmistakable: a white ring outside a dark edge, a small lift, its title, and its row's heading lit. */
+body.tv { --tv-focus: #fff; --tv-focus-ink: #0b0b10; }
+body.tv.tv-focus-accent { --tv-focus: var(--accent); --tv-focus-ink: var(--bg); }
+
+/* Flat shapes */
+body.tv *, body.tv *::before, body.tv *::after { clip-path: none !important; }
+body.tv .card .art, body.tv .episode .still, body.tv .confirm .choice, body.tv .mmenu, body.tv .menu, body.tv .toast { border-radius: 8px !important; }
+body.tv .lib-tile { border-radius: 12px !important; }
+body.tv .btn:not(.round), body.tv .chip, body.tv .mood { border-radius: 999px !important; }
+body.tv .lib-tile .tile-stack, body.tv .lib-tile .tile-text, body.tv .lib-tile .tile-slab, body.tv .lib-tile * { transform: none !important; animation: none !important; perspective: none !important; transform-style: flat !important; }
+body.tv .lib-tile .tile-shine, body.tv .tile-slab::before, body.tv .tile-slab::after { display: none !important; }
+body.tv .card .art img { transition: none !important; opacity: 1 !important; }
+/* The corner brackets become a plain ring drawn inside the edge, so a row or grid can never clip it. */
+body.tv .card::after, body.tv .lib-tile::after { content: '' !important; display: none !important; position: absolute !important; inset: 0 !important; z-index: 6 !important; pointer-events: none;
+  background: none !important; filter: none !important; opacity: 1 !important; border: 5px solid var(--tv-focus); border-radius: 8px; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.55); }
+body.tv .lib-tile::after { border-radius: 12px; }
+body.tv .card:focus::after, body.tv .lib-tile:focus::after { display: block !important; }
+body.tv .card .art { overflow: hidden; background: rgba(255, 255, 255, 0.06); }
+
+/* Focus: posters, wide cards and library tiles */
+body.tv .card:focus, body.tv .card:focus-visible { transform: scale(1.08) !important; z-index: 3; outline: none !important; box-shadow: none !important; }
+body.tv .card:focus .art { box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7); filter: none !important; }
+body.tv .row .scroller { padding-block: 26px !important; margin-block: -26px !important; }
+body.tv .card:focus .label { opacity: 1; font-size: 17px; font-weight: 700; padding: 34px 12px 10px; background: linear-gradient(to top, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.6) 60%, transparent); color: #fff; }
+body.tv .card:focus .label small { display: block; font-size: 13px; font-weight: 500; opacity: 0.85; margin-top: 2px; }
+body.tv .lib-tile:focus, body.tv .lib-tile:focus-visible { transform: scale(1.03) !important; z-index: 3; outline: none !important; box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6) !important; }
+body.tv .lib-tile { transition: transform 0.12s ease-out !important; }
+body.tv .cap-more:focus { outline: 4px solid var(--tv-focus) !important; outline-offset: 3px; transform: scale(1.06); }
+
+/* Focus: buttons, chips and tabs turn solid (like Plex and Netflix buttons) */
+body.tv :is(.btn, .mood, .chip, .stabs button, .seasons button, .vlib-tabs button, [data-stab]):focus,
+body.tv :is(.btn, .mood, .chip, .stabs button, .seasons button):focus-visible {
+  background: var(--tv-focus) !important; color: var(--tv-focus-ink) !important; outline: none !important; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important; transform: scale(1.06); }
+body.tv :is(.btn, .mood, .chip):focus svg { color: var(--tv-focus-ink); fill: currentColor; }
+body.tv .btn.primary:focus { background: var(--tv-focus) !important; }
+body.tv .stabs button:focus, body.tv .seasons button:focus { border-radius: 999px; padding-inline: 16px; }
+
+/* Focus: list items (episodes, a person's titles, the cast, search results, settings) */
+body.tv :is(.episode, .person-item, .cast a, .tv-menu button, .choice, .mmenu button, .menu a, .menu button):focus {
+  outline: 4px solid var(--tv-focus) !important; outline-offset: 2px; background: rgba(255, 255, 255, 0.1) !important; }
+body.tv .cast a:focus { transform: scale(1.06); border-radius: 12px; }
+body.tv .cast a:focus img, body.tv .cast a:focus .ph { box-shadow: 0 0 0 4px var(--tv-focus); }
+
+/* The sidebar: the item in focus is solid too */
+body.tv .nav .links a:focus, body.tv .nav .navbtn:focus, body.tv .nav .search:focus-within { background: var(--tv-focus) !important; color: var(--tv-focus-ink) !important; }
+body.tv .nav .links a:focus .ico, body.tv .nav .navbtn:focus svg { color: var(--tv-focus-ink) !important; }
+body.tv .nav .avatar:focus { outline-color: var(--tv-focus) !important; }
+
+/* Where you are: the focused row's heading is bright, the others step back */
+body.tv .row > h2 { opacity: 0.6; transition: opacity 0.12s; }
+body.tv .row:focus-within > h2 { opacity: 1; }
+body.tv .row { padding-block: 16px; margin-top: -16px; margin-bottom: -6px; } /* rows skip drawing off screen (content-visibility), which also clips: room for the lifted title */
+body.tv .row:focus-within { position: relative; z-index: 2; } /* the lifted title draws over the next row, never under it */
+/* A title's "More like this" is one row on TVs, like the cast and like Plex: Down goes row to row, never into a grid. */
+body.tv .sheet .similar { display: flex; flex-wrap: nowrap; gap: 14px; overflow-x: auto; scrollbar-width: none; padding: 20px 6px; margin: -8px -6px; }
+body.tv .sheet .similar::-webkit-scrollbar { display: none; }
+body.tv .sheet .similar .card { flex: none; width: 150px; }
+body.tv .sheet .cast { padding: 10px 6px 14px !important; }
