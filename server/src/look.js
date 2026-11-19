@@ -36,7 +36,7 @@ export const DEFAULT_THEME = {
   heroClips: { start: 60, end: 600, length: 30, sound: false, tv: false },
   // TVs (the Fire TV and Android TV apps): how big everything is (the page is laid out this many pixels wide: 1600 looks
   // like a computer, 960 is the big old TV layout), and the extras that cost a Fire TV Stick the most, off unless switched on.
-  tv: { width: 1600, effects: false, textures: false, glow: false, wash: false, tileVideos: false, rowItems: 12, rows: 6 },
+  tv: { width: 1600, stills: false, effects: false, textures: false, glow: false, wash: false, tileVideos: false, rowItems: 12, rows: 6 },
   depth: true, // posters tilt toward the pointer
   sounds: 'off', // off | soft | arcade | cinema | glass | scifi | custom: the navigation sound pack ("custom" = only uploaded sounds)
   // Each sound can be swapped for an uploaded file, given its own volume, or switched off.

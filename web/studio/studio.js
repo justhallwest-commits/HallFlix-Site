@@ -677,7 +677,8 @@ pages.look = async (main) => {
           ${check(theme, 'tv.glow', 'Full soft glow (off uses a simpler, faster glow)')}
           ${check(theme, 'tv.wash', 'Colour wash that follows the banner')}
           ${check(theme, 'tv.tileVideos', 'Videos on library tiles')}
-          <p class="muted small">Banner clips on TVs are under Motion (“Play clips on TVs too”). Background videos show as a still picture on TVs. The TV picks up changes the next time HallFlix opens on it.</p></div>
+          ${check(theme, 'tv.stills', 'Show background videos and GIFs (sign-in page included) as still pictures (fastest)')}
+          <p class="muted small">Banner clips on TVs are under Motion (“Play clips on TVs too”). The TV picks up changes the next time HallFlix opens on it.</p></div>
         ${soundsCard(theme)}
         ${identCard(theme)}
         <div class="card"><h2>Evening look</h2>${check(theme, 'night.enabled', 'Switch to a second look in the evening')}

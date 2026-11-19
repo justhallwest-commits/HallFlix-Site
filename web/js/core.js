@@ -92,6 +92,7 @@ export function rgb(hex) {
   const h = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1];
   return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)).join(', ');
 }
+const isMoving = (u) => /\.(mp4|webm|m4v|mov|gif)(\?|$)/i.test(u || '');
 const isVideo = (u) => !/^\/api\/fit\?/.test(u || '') && /\.(mp4|webm)(\?|$)/i.test(u || ''); // a TV still made from a video is a picture
 let currentLibrary = null;
 
@@ -183,8 +184,9 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
     document.body.classList.toggle('tv-noglow', TV.glow !== true);
   }
   let bg = signedOut ? (t.login?.image || t.background?.image) : (lib.background || t.background?.image);
-  // A TV gets a still, TV-sized copy: a background video would vanish behind the page in the TV app, and a huge picture may not show at all.
-  if (bg && isTV()) bg = tvPic(bg, Math.min(1920, (+TV.width || 1600) * 1.2));
+  // On a TV a picture comes TV-sized (a huge upload is slow on a Fire TV Stick). Videos and GIFs keep moving
+  // unless Studio → TVs asks for still pictures.
+  if (bg && isTV() && (TV.stills === true || !isMoving(bg))) bg = tvPic(bg, Math.min(1920, (+TV.width || 1600) * 1.2));
   const dim = signedOut ? (t.login?.dim ?? 0.45) : (lib.dim ?? t.background?.dim ?? 0.6);
   const layer = $('#backdrop');
   layer.classList.toggle('has-image', !!bg);

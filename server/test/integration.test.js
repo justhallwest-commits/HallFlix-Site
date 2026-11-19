@@ -282,7 +282,11 @@ test('looks: theme, library looks, seasons, uploads', async () => {
   assert.equal((await fetch(`${hf.base}/api/fit?src=${encodeURIComponent('https://example.com/x.jpg')}`)).status, 404);
   assert.equal((await fetch(`${hf.base}/api/fit?src=${encodeURIComponent('/uploads/../config.json')}`)).status, 404);
   const tvd = (await hf.api('GET', '/api/boot')).look.theme;
-  assert.deepEqual([tvd.tv.width, tvd.tv.effects, tvd.tv.rowItems, tvd.heroClips.tv], [1600, false, 12, false], 'TVs start light');
+  assert.deepEqual([tvd.tv.width, tvd.tv.stills, tvd.tv.effects, tvd.tv.rowItems, tvd.heroClips.tv], [1600, false, false, 12, false], 'TVs start light; videos keep playing');
+  // TVs get the page laid out at a computer-like width from the first paint; other devices keep device-width.
+  const tvHtml = await (await fetch(hf.base + '/', { headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 9; AFTKA) HallFlixApp/1 Android TV' } })).text();
+  assert.match(tvHtml, /<meta name="viewport" content="width=1600, viewport-fit=cover">/);
+  assert.match(await (await fetch(hf.base + '/')).text(), /width=device-width/);
   await hf.api('PUT', '/api/studio/theme', { theme: { colors: { accent: '#ff00aa' }, radius: 4 } });
   await hf.api('PUT', `/api/studio/libraries/${lib.movies.id}`, { look: { background: up.url, accent: '#00ff00' } });
   let b = await hf.api('GET', '/api/boot');

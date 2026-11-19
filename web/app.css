@@ -1923,3 +1923,8 @@ body.tv::before{display:none!important}
 body.tv #backdrop::before{filter:none!important}
 body.tv.tv-noglow{--glow-shadow:0 0 0 3px var(--accent);--text-glow:none;--glow-drop:none}
 body.tv .card,body.tv .poster,body.tv .tile{will-change:auto}
+/* TVs: no frosted glass anywhere (a blur behind every rating badge is a full GPU pass each), and focus glows as plain rings. */
+body.tv *, body.tv *::before, body.tv *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+body.tv .rbadge { background: rgba(0,0,0,0.78); }
+body.tv.tv-noglow .card::after, body.tv.tv-noglow .lib-tile::after, body.tv.tv-noglow .ico, body.tv.tv-noglow .avatar, body.tv.tv-noglow .splash img { filter: none !important; }
+body.tv #backdrop video { filter: none !important; } /* a filter takes a video off the TV's fast video path */
