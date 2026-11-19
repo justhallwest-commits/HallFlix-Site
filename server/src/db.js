@@ -16,7 +16,7 @@ export const q = async (sql, params = []) => (await db().query(sql, params)).row
 export const q1 = async (sql, params = []) => (await q(sql, params))[0] || null;
 export async function closeDb() { if (pool) { await pool.end(); pool = null; } }
 
-const MIGRATIONS = [
+export const MIGRATIONS = [
   `create table settings (key text primary key, value jsonb not null);
    create table profiles (
      id serial primary key, name text not null unique, pass text not null,
@@ -102,6 +102,14 @@ const MIGRATIONS = [
   `create index if not exists items_lib_kind_added on items (library_id, kind, added_at desc);
    create index if not exists items_kind_added on items (kind, added_at desc);
    create index if not exists progress_profile_updated on progress (profile_id, updated_at desc);`,
+  // 10: pre-roll tags live with the pre-roll tool, apart from metadata tags. Tags typed on clips move over (a clip's
+  // sub-folder names are worked out from its path instead, so they're not copied), and clips' metadata tags are cleared.
+  `create table preroll_tags (clip_id bigint not null references items on delete cascade, tag text not null, primary key (clip_id, tag));
+   insert into preroll_tags (clip_id, tag)
+     select distinct i.id, lower(trim(t)) from items i, jsonb_array_elements_text(case when jsonb_typeof(i.edits->'tags') = 'array' then i.edits->'tags' else '[]'::jsonb end) t
+     where i.kind = 'clip' and trim(t) <> '' and position('/' || lower(trim(t)) || '/' in lower(replace(i.path, chr(92), '/'))) = 0
+     on conflict do nothing;
+   update items set tags = '{}', locked = locked - 'tags', edits = edits - 'tags' where kind = 'clip';`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {

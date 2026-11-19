@@ -318,3 +318,51 @@ test('metadata import from the Jellyfin Bulk Metadata plugin: matched by path, T
   assert.match(h.label, /Imported from Jellyfin \(4 titles\)/);
   await hf.api('POST', `/api/studio/meta/history/${h.id}/undo`);
 });
+
+test('pre-roll tags: kept apart from metadata tags, folder tags, tagging many clips, rename, delete, backup and the move from old tags', async () => {
+  const { q, MIGRATIONS } = await import('../src/db.js');
+  let pr = await hf.api('GET', '/api/studio/prerolls');
+  const ident = pr.clips.find((c) => c.title === 'hallflix ident'), spooky = pr.clips.find((c) => c.title === 'spooky bump');
+  // The sub-folder is a tag that can't be typed away; typed tags are the clip's own.
+  assert.deepEqual(spooky.folderTags, ['halloween']);
+  await hf.api('PUT', `/api/studio/prerolls/clips/${spooky.id}`, { tags: ['Creepy'] });
+  pr = await hf.api('GET', '/api/studio/prerolls');
+  assert.deepEqual(pr.clips.find((c) => c.id === spooky.id).tags, ['halloween', 'creepy']);
+  // Pre-roll tags are not metadata tags: not on the clip's metadata, not in the metadata editor's tag list.
+  assert.deepEqual((await q('select tags from items where id = $1', [spooky.id]))[0].tags, []);
+  const catalog = await hf.api('GET', '/api/studio/meta/catalog');
+  assert.ok(!catalog.tags.includes('creepy') && !catalog.tags.includes('halloween'));
+  // Tag several clips at once, take it off again.
+  await hf.api('POST', '/api/studio/prerolls/tags', { action: 'add', tag: 'Friday Night', clips: [ident.id, spooky.id] });
+  pr = await hf.api('GET', '/api/studio/prerolls');
+  assert.ok(pr.clips.every((c) => c.tags.includes('friday night')));
+  await hf.api('POST', '/api/studio/prerolls/tags', { action: 'remove', tag: 'friday night', clips: [ident.id] });
+  pr = await hf.api('GET', '/api/studio/prerolls');
+  assert.deepEqual(pr.clips.filter((c) => c.tags.includes('friday night')).map((c) => c.id), [spooky.id]);
+  // Renaming a tag carries the rules that use it along; the renamed tag still picks the clip.
+  const rule = await hf.api('POST', '/api/studio/prerolls/rules', { name: 'Fridays', enabled: true, count: 1, position: 0, stop: true, clips: { mode: 'tag', tag: 'friday night' }, match: { stop: true } });
+  await hf.api('POST', '/api/studio/prerolls/tags', { action: 'rename', tag: 'friday night', to: 'Weekend' });
+  pr = await hf.api('GET', '/api/studio/prerolls');
+  assert.equal(pr.rules.find((r) => r.id === rule.id).clips.tag, 'weekend');
+  assert.ok(pr.clips.find((c) => c.id === spooky.id).tags.includes('weekend'));
+  const t = await hf.api('POST', '/api/studio/prerolls/test', { itemId: it['Night Drive'].id });
+  assert.deepEqual(t.clips.map((c) => [c.title, c.rule]), [['spooky bump', 'Fridays']]);
+  // Backups carry typed tags (by file name) and bring them back.
+  const backup = await (await fetch(`${hf.base}/api/studio/prerolls/backup`, { headers: { Cookie: hf.getCookie() } })).json();
+  assert.deepEqual(backup.tags['spooky_bump.mp4'].sort(), ['creepy', 'weekend']);
+  await hf.api('POST', '/api/studio/prerolls/tags', { action: 'delete', tag: 'weekend' });
+  assert.ok(!(await hf.api('GET', '/api/studio/prerolls')).clips.some((c) => c.tags.includes('weekend')));
+  const restored = await hf.api('POST', '/api/studio/prerolls/backup', backup);
+  assert.ok(restored.tagged >= 1);
+  assert.ok((await hf.api('GET', '/api/studio/prerolls')).clips.find((c) => c.id === spooky.id).tags.includes('weekend'));
+  await hf.api('DELETE', `/api/studio/prerolls/rules/${(await hf.api('GET', '/api/studio/prerolls')).rules.find((r) => r.name === 'Fridays').id}`);
+  // The move from the old system: tags typed on clips (kept in their edits) become pre-roll tags, folder names aren't
+  // copied (they come from the path), and the clips' metadata tags are cleared.
+  await q('delete from preroll_tags where clip_id = $1', [spooky.id]);
+  await q(`update items set tags = '{"halloween","jump scare"}', edits = jsonb_build_object('tags', '["halloween","Jump Scare"]'::jsonb), locked = '{"tags":true}' where id = $1`, [spooky.id]);
+  await q(MIGRATIONS[MIGRATIONS.length - 1].replace(/create table preroll_tags[^;]*;/, ''));
+  assert.deepEqual((await q('select tag from preroll_tags where clip_id = $1 order by tag', [spooky.id])).map((x) => x.tag), ['jump scare']);
+  const after = (await q('select tags, locked, edits from items where id = $1', [spooky.id]))[0];
+  assert.deepEqual([after.tags, after.locked.tags, after.edits.tags], [[], undefined, undefined]);
+  assert.deepEqual((await hf.api('GET', '/api/studio/prerolls')).clips.find((c) => c.id === spooky.id).tags, ['halloween', 'jump scare']);
+});
