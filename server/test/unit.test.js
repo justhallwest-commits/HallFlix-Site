@@ -214,3 +214,30 @@ test('loudness: pre-roll volume against the feature, and a real measurement', as
   assert.ok(lufs < -25 && lufs > -38, `measured ${lufs}`);
   assert.equal(await L.meter('/nope/missing.mp4'), null);
 });
+
+test('pre-roll reach: which titles each tag group and rule can play before, and coverage', async () => {
+  const { reachOf } = await import('../src/prerolls.js');
+  const clips = [{ id: 1, tags: ['halloween'] }, { id: 2, tags: ['horror'] }, { id: 3, tags: [] }, { id: 4, tags: ['comedy'], extra: { off: true } }];
+  const titles = [
+    { id: 10, kind: 'movie', title: 'Fright', genres: ['Horror'], library_id: 1 },
+    { id: 11, kind: 'movie', title: 'Laughs', genres: ['Comedy'], library_id: 1 },
+    { id: 12, kind: 'show', title: 'Harbor', genres: ['Drama'], library_id: 2 },
+  ];
+  const rules = [
+    { id: 1, name: 'Halloween', enabled: true, position: 0, clips: { mode: 'tag', tag: 'halloween' }, match: { kinds: ['movie'], from: '10-01', to: '10-31' } },
+    { id: 2, name: 'Fits the title', enabled: true, position: 1, clips: { mode: 'match', on: ['genres'] }, match: {} },
+    { id: 3, name: 'Everyday', enabled: true, position: 2, clips: { mode: 'all', untaggedOnly: true }, match: { kinds: ['movie'] } },
+    { id: 4, name: 'Off', enabled: false, position: 3, clips: { mode: 'all' }, match: {} },
+  ];
+  const r = reachOf(rules, clips, titles);
+  const g = Object.fromEntries(r.groups.map((x) => [x.tag, x]));
+  assert.deepEqual(g.halloween.titles, [10, 11]); // movies only, both
+  assert.deepEqual(g.halloween.when, [['10-01', '10-31']]);
+  assert.deepEqual(g.horror.titles, [10]); // matched by genre
+  assert.equal(g.comedy, undefined); // the comedy clip is switched off
+  assert.deepEqual(r.rules, { 1: [10, 11], 2: [10], 3: [10, 11] });
+  assert.deepEqual(r.classes, { matched: [10, 11], general: [], none: [12] });
+  assert.deepEqual(r.gaps, [{ genre: 'Drama', count: 1 }]);
+  // Without the tagged rules, "everyday clips before movies" is general, not chosen for them.
+  assert.deepEqual(reachOf([rules[2]], clips, titles).classes, { matched: [], general: [10, 11], none: [12] });
+});

@@ -273,6 +273,24 @@ test('even volume: pre-rolls come turned down to the level of the title after th
   assert.equal((await hf.api('GET', '/api/studio/prerolls')).settings.evenVolume, false);
 });
 
+test('pre-roll reach: tag groups list the titles they play before, and coverage', async () => {
+  const pr = await hf.api('GET', '/api/studio/prerolls');
+  const spooky = pr.clips.find((c) => c.tags.includes('halloween'));
+  const rule = await hf.api('POST', '/api/studio/prerolls/rules', { name: 'Spooky thrillers', clips: { mode: 'tag', tag: 'halloween' }, match: { genres: ['Thriller'] }, position: 0 });
+  const r = await hf.api('GET', '/api/studio/prerolls/reach?limit=1');
+  const g = r.groups.find((x) => x.tag === 'halloween');
+  assert.ok(g.count >= 1 && g.titles.length === 1 && g.titles[0].title);
+  assert.deepEqual(g.rules, ['Spooky thrillers']);
+  assert.equal(r.rules[rule.id], g.count);
+  assert.equal(r.classes.matched.count + r.classes.general.count + r.classes.none.count, r.total);
+  const all = await hf.api('GET', '/api/studio/prerolls/reach?list=tag:halloween');
+  assert.equal(all.titles.length, g.count);
+  assert.ok(all.titles.some((t) => t.title === 'Night Drive'));
+  assert.equal((await hf.api('GET', `/api/studio/prerolls/reach?list=rule:${rule.id}`)).titles.length, g.count);
+  assert.equal((await hf.api('GET', '/api/file/' + spooky.id, null, { raw: true })).status, 200); // previews play the clip file
+  await hf.api('DELETE', `/api/studio/prerolls/rules/${rule.id}`);
+});
+
 test('progress: continue watching, finishing, and what is up next', async () => {
   let home = await hf.api('GET', '/api/home');
   assert.equal(home.rows[0].id, 'continue'); assert.equal(home.rows[0].items[0].title, 'Night Drive');
