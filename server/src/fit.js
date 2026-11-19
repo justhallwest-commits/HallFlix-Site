@@ -56,6 +56,29 @@ async function make(src, w, out) {
   } finally { if (tmp) fs.rmSync(tmp, { force: true }); }
 }
 
+/** Widths a picture is resized to, so a handful of copies cover every screen (and the cache stays small). */
+export const WIDTHS = [160, 240, 360, 480, 720, 1080, 1280, 1920];
+export const bucket = (w) => WIDTHS.find((x) => x >= w) || WIDTHS.at(-1);
+
+/**
+ * A local artwork file (poster.jpg beside a film, often 2000+ px) at about the width it is shown, made once and kept.
+ * Returns the resized file, or null when it can't be made (the caller then sends the original).
+ */
+export async function resizedLocal(file, w) {
+  const st = await fs.promises.stat(file).catch(() => null);
+  if (!st) return null;
+  const width = bucket(w);
+  const key = crypto.createHash('sha1').update(`${file}|${st.mtimeMs}|${st.size}|${width}`).digest('hex').slice(0, 20);
+  const out = path.join(DIR(), `l-${key}.jpg`);
+  if (fs.existsSync(out)) return out;
+  await fs.promises.mkdir(DIR(), { recursive: true });
+  if (!making.has(key)) {
+    making.set(key, ffmpeg(['-i', file, '-frames:v', '1', '-vf', `scale='min(${width},iw)':-2`, '-q:v', '4', `${out}.part.jpg`])
+      .then(() => fs.renameSync(`${out}.part.jpg`, out)).finally(() => making.delete(key)));
+  }
+  try { await making.get(key); return out; } catch (e) { console.warn('[fit] local', path.basename(file), e.message); return null; }
+}
+
 export function routes(r, open) {
   r.get('/api/fit', async ({ req, res, query }) => {
     const src = String(query.src || '');

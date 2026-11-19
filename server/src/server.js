@@ -142,10 +142,15 @@ r.get('/img/t/:size/:file', async ({ req, res, params }) => {
 }, open);
 
 // Artwork that lives beside the media or was picked from the NAS.
-r.get('/img/l/:ref', async ({ req, res, params }) => {
+// ?w=<width> sends a copy about that wide (made once and kept), so a 3000 px poster isn't sent to a 250 px slot.
+r.get('/img/l/:ref', async ({ req, res, params, query }) => {
   const file = path.resolve(Buffer.from(params.ref, 'base64url').toString('utf8'));
   const e = path.extname(file).slice(1).toLowerCase();
   if (!(await art.allowed(file)) || !(IMAGE_EXT.has(e) || e === 'mp4' || e === 'webm')) throw new HttpError(404, 'Not found');
+  if (+query.w > 0 && ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tif', 'tiff'].includes(e)) {
+    const small = await fit.resizedLocal(file, Math.min(2560, +query.w));
+    if (small) return sendFile(req, res, small, { cache: 'public, max-age=604800', type: 'image/jpeg' });
+  }
   await sendFile(req, res, file, { cache: 'public, max-age=86400' });
 }, open);
 

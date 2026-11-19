@@ -1,5 +1,5 @@
 // Screens: first-run setup, sign-in, home, libraries, search and the title sheet.
-import { $, $$, api, html, raw, esc, icons, state, applyLook, styleLogin, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, on, themeNow, libTitle, tvPic } from './core.js';
+import { $, $$, api, html, raw, esc, icons, state, applyLook, styleLogin, logoUrl, libraryLook, avatarStyle, fmtRuntime, toast, emit, on, themeNow, libTitle, tvPic, pic, wide } from './core.js';
 import * as browse from './browse.js';
 import * as feel from './feel.js';
 import * as media from './media.js';
@@ -39,7 +39,7 @@ function shelfCard(it, read = false) {
   const href = reading && read ? `#/read/${it.id}` : `#/title/${it.id}`; // only Continue reading jumps straight into the book
   return html`<a class="card ${square ? 'square' : 'book'} k-${it.kind}" href="${href}" data-id="${it.id}" title="${it.title}">
     <div class="art"><div class="fallback">${it.title}${it.author && it.kind !== 'album' ? html`<small>${it.author}</small>` : ''}</div>
-      ${it.poster ? html`<img loading="lazy" decoding="async" src="${it.poster}" alt="" onload="this.classList.add('in')" onerror="this.remove()">` : ''}
+      ${it.poster ? html`<img loading="lazy" decoding="async" src="${it.poster}"${pic(it.poster)} alt="" onload="this.classList.add('in')" onerror="this.remove()">` : ''}
       ${it.kind === 'album' ? html`<button class="playdot" data-playalbum="${it.id}" aria-label="Play ${it.title}" tabindex="-1"><span>${icons.play}</span></button>` : ''}
       <div class="label">${it.title}<small>${sub}</small></div>
       ${pct ? html`<div class="bar"><i style="width:${pct}%"></i></div>` : ''}${it.progress?.watched ? html`<div class="seen">✓</div>` : ''}</div></a>`;
@@ -55,7 +55,7 @@ export function cardHtml(it, { wide = false, read = false } = {}) {
   const sub = ep ? `S${it.show.season} E${it.show.episode} · ${it.title}` : wide ? left || it.year || '' : [it.year, it.rating].filter(Boolean).join(' · ');
   return html`<a class="card ${wide || ep ? 'wide' : ''}" href="#/${wide || ep ? 'watch' : 'title'}/${it.id}" data-id="${it.id}" title="${title}">
     <div class="art"><div class="fallback">${title}</div>
-      ${art ? html`<img loading="lazy" decoding="async" src="${art}" alt="" onload="this.classList.add('in')">` : ''}
+      ${art ? html`<img loading="lazy" decoding="async" src="${art}"${pic(art, 'wide')} alt="" onload="this.classList.add('in')">` : ''}
       ${wide || ep ? html`<div class="playdot"><span>${icons.play}</span></div>` : ratings.badge(it)}
       <div class="label">${title}<small>${sub}${ep && left ? ` · ${left}` : ''}</small></div>
       ${pct ? html`<div class="bar"><i style="width:${pct}%"></i></div>` : ''}${it.progress?.watched ? html`<div class="seen">✓</div>` : ''}</div></a>`;
@@ -99,7 +99,7 @@ function coversHtml(posters, lk) {
   const step = c.style === 'fan' ? 0.12 : 0.24; // how far each cover sits from the next, as a share of the stack's width
   const ar = (2 / 3) / (1 - step * (list.length - 1));
   const style = `--ar:${ar.toFixed(3)};--ax:${ax};--ay:${ay};--cov-h:${Math.max(20, Math.min(100, +c.size || 56))}%;--cov-x:${Math.max(-40, Math.min(40, +c.x || 0))}%;--cov-y:${Math.max(-40, Math.min(40, +c.y || 0))}%;--n:${list.length}`;
-  return html`<span class="tile-stack st-${['angled', 'flat', 'fan'].includes(c.style) ? c.style : 'angled'}" style="${style}">${list.map((p, i) => html`<img src="${p}" alt="" loading="lazy" style="--i:${i}">`)}</span>`;
+  return html`<span class="tile-stack st-${['angled', 'flat', 'fan'].includes(c.style) ? c.style : 'angled'}" style="${style}">${list.map((p, i) => html`<img src="${p}"${pic(p)} alt="" loading="lazy" decoding="async" style="--i:${i}">`)}</span>`;
 }
 let lastTiles = null;
 // A new look (from the Studio's live preview, or a season starting) redraws the library tiles on Home.
@@ -142,7 +142,7 @@ function startHero(list) {
     i = (n + list.length) % list.length;
     const it = list[i], bgs = $$('.bg', hero);
     layer = 1 - layer;
-    bgs[layer].style.backgroundImage = `url("${it.backdrop}")`;
+    bgs[layer].style.backgroundImage = `url("${wide(it.backdrop)}")`;
     // Restart the fade on the next frame instead of forcing a layout now.
     const next = bgs[layer]; next.classList.remove('on'); bgs[1 - layer].classList.remove('on');
     requestAnimationFrame(() => requestAnimationFrame(() => next.classList.add('on')));
@@ -159,7 +159,7 @@ function startHero(list) {
     hero.dataset.showing = it.id;
     // Fetch the next title's picture now, so it is ready when the banner moves on (no picture popping in mid-fade).
     const nx = list[(i + 1) % list.length];
-    if (nx && nx !== it) { const pre = new Image(); pre.decoding = 'async'; pre.src = nx.backdrop; }
+    if (nx && nx !== it) { const pre = new Image(); pre.decoding = 'async'; pre.src = wide(nx.backdrop); }
     feel.tint(hero, it.backdrop); feel.wash(it.backdrop); feel.queueTrailer(hero, it);
   };
   hero.show = show;
@@ -493,7 +493,7 @@ export async function title(id) {
   ].filter(([, v]) => v);
   o.innerHTML = String(html`<article class="sheet" data-id="${d.id}">
     <button class="btn round close" data-x aria-label="Close">${icons.x}</button>
-    <div class="top" style="${d.backdrop ? `background-image:url('${d.backdrop}')` : ''}"><div class="in">
+    <div class="top" style="${d.backdrop ? `background-image:url('${wide(d.backdrop)}')` : ''}"><div class="in">
       ${d.logo ? html`<img class="logo-art" src="${d.logo}" alt="${d.title}">` : html`<h1>${d.title}</h1>`}
       <div class="topmeta">${metaLine(d, [d.kind === 'show' ? `${d.seasons.length} season${d.seasons.length === 1 ? '' : 's'}` : ''].filter(Boolean))}
         ${badges.length ? html`<span class="badges">${badges.map((b) => html`<span class="fmt">${b}</span>`)}</span>` : ''}</div>
@@ -515,7 +515,7 @@ export async function title(id) {
         ${audio.length ? html`<div><b>Audio</b> ${audio.slice(0, 4).join(', ')}${audio.length > 4 ? ` +${audio.length - 4}` : ''}</div>` : ''}
         ${subs.length ? html`<div><b>Subtitles</b> ${subs.slice(0, 4).join(', ')}${subs.length > 4 ? ` +${subs.length - 4}` : ''}</div>` : ''}</div></div>
       ${d.people.length ? html`<h3 class="cast-h">Cast &amp; crew</h3>` : ''}
-      ${d.people.length ? html`<div class="cast">${d.people.map((x) => html`<a href="#/person/${encodeURIComponent(x.name)}">${x.photo ? html`<img loading="lazy" src="${x.photo}" alt="">` : html`<div class="ph">${x.name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</div>`}${x.name}<small>${x.role}</small></a>`)}</div>` : ''}
+      ${d.people.length ? html`<div class="cast">${d.people.map((x) => html`<a href="#/person/${encodeURIComponent(x.name)}">${x.photo ? html`<img loading="lazy" decoding="async" src="${x.photo}"${pic(x.photo)} alt="">` : html`<div class="ph">${x.name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</div>`}${x.name}<small>${x.role}</small></a>`)}</div>` : ''}
       <div class="stabs" role="tablist">${tabs.map(([k, n], i) => html`<button role="tab" data-stab="${k}" class="${i ? '' : 'on'}" aria-selected="${!i}">${n}</button>`)}</div>
       ${d.seasons ? html`<section class="spane" data-pane="episodes">
         ${d.seasons.length > 1 ? html`<div class="seasons" role="tablist">${d.seasons.map((s) => html`<button data-season="${s.id}" class="${s === season ? 'on' : ''}">${s.title}</button>`)}</div>` : ''}

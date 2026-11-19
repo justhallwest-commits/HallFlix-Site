@@ -1,4 +1,5 @@
 // HallFlix web app entry: boot, routing, and the plugin API.
+import { initLean } from './lean.js';
 import { $, api, state, applyLook, on, emit, toast, html, raw, themeNow } from './core.js';
 import * as views from './views.js';
 import { openPlayer, closePlayer, playerOpen } from './player.js';
@@ -112,7 +113,7 @@ function welcome() {
 async function boot() {
   const params = new URLSearchParams(location.search);
   if (/AFT|Android TV|GoogleTV|BRAVIA|SmartTV|Tizen|Web0S/i.test(navigator.userAgent) || params.has('tv')) document.body.classList.add('tv');
-  initNav(); initFeel(); initMusic();
+  initNav(); initFeel(); initMusic(); initLean();
   let b;
   try { b = await api('GET', '/api/boot'); }
   catch (e) { $('#app').innerHTML = `<div class="login"><div class="box"><h1>HallFlix is starting…</h1><p style="color:var(--muted)">The server is not answering yet. This page will retry.</p></div></div>`; setTimeout(boot, 4000); return; }
