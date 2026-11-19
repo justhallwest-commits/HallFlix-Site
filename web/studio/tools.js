@@ -724,15 +724,22 @@ export async function prerolls(main, k) {
       <div class="f"><span>How often</span><select data-s="everyMinutes">${[[0, 'Before every title'], [15, 'At most once every 15 minutes'], [30, 'At most once every 30 minutes'], [60, 'At most once an hour'], [120, 'At most once every 2 hours'], [240, 'At most once every 4 hours'], [1440, 'At most once a day']].map(([v, n]) => html`<option value="${v}" ${+s.everyMinutes === v ? 'selected' : ''}>${n}</option>`)}</select></div>
       <p class="muted small" style="margin-left:140px">Per profile. Handy for binge-watching: the first episode gets a pre-roll, the next few don't.</p>
       <div class="f"><span>Skip clips longer than</span><select data-s="maxSeconds">${[[0, 'No limit'], [30, '30 seconds'], [60, '1 minute'], [120, '2 minutes'], [300, '5 minutes']].map(([v, n]) => html`<option value="${v}" ${+s.maxSeconds === v ? 'selected' : ''}>${n}</option>`)}</select></div>
+      <label class="check"><input type="checkbox" data-s="evenVolume" ${s.evenVolume ? 'checked' : ''}> Even out the volume: play pre-rolls at the same loudness as the movie or episode after them</label>
+      <div class="f" ${s.evenVolume ? '' : 'hidden'} data-offset><span>Pre-roll level</span><select data-s="volumeOffset">${[[-6, 'Quieter than the movie'], [-3, 'A little quieter'], [0, 'Same as the movie'], [3, 'A little louder'], [6, 'Louder than the movie']].map(([v, n]) => html`<option value="${v}" ${+s.volumeOffset === v ? 'selected' : ''}>${n}</option>`)}</select></div>
+      <p class="muted small" style="margin-left:140px" ${s.evenVolume ? '' : 'hidden'} data-offset>Each clip, the ident and each title are measured once in the background. Loud clips are turned down to match; a clip quieter than the movie plays at full volume. Clips not measured yet play as they are.</p>
       <div class="f"><span>Profiles that skip pre-rolls</span><div class="checks">${P.profiles.map((p) => html`<label class="check"><input type="checkbox" data-skip="${p.id}" ${s.skipProfiles.includes(p.id) ? 'checked' : ''}> ${p.name}</label>`)}</div></div>
       <div class="f"><span>Time zone for schedules</span><select data-s="tz"><option value="">The NAS clock</option>${zones.map((z) => html`<option ${s.tz === z ? 'selected' : ''}>${z}</option>`)}</select></div></div>`));
     const save = k.debounce(async () => {
       const el = $('[data-settings]', main);
       const b = { enabled: $('[data-s=enabled]', el).checked, max: +$('[data-s=max]', el).value, onResume: $('[data-s=onResume]', el).checked, order: $('[data-s=order]', el).value,
-        everyMinutes: +$('[data-s=everyMinutes]', el).value, maxSeconds: +$('[data-s=maxSeconds]', el).value, tz: $('[data-s=tz]', el).value, skipProfiles: $$('[data-skip]:checked', el).map((x) => +x.dataset.skip) };
+        everyMinutes: +$('[data-s=everyMinutes]', el).value, maxSeconds: +$('[data-s=maxSeconds]', el).value, tz: $('[data-s=tz]', el).value, evenVolume: $('[data-s=evenVolume]', el).checked, volumeOffset: +$('[data-s=volumeOffset]', el).value, skipProfiles: $$('[data-skip]:checked', el).map((x) => +x.dataset.skip) };
       try { const r = await api('PUT', '/api/studio/prerolls/settings', b); P.settings = r.settings; toast('Saved', 1000); } catch (e) { k.fail(e); }
     }, 350);
-    main.oninput = (e) => { if (e.target.type === 'range') e.target.nextElementSibling.textContent = e.target.value; if (e.target.closest('[data-settings]')) save(); };
+    main.oninput = (e) => {
+      if (e.target.type === 'range') e.target.nextElementSibling.textContent = e.target.value;
+      if (e.target.dataset.s === 'evenVolume') for (const x of $$('[data-offset]', main)) x.hidden = !e.target.checked;
+      if (e.target.closest('[data-settings]')) save();
+    };
   };
   const drawRules = () => {
     main.innerHTML = String(frame(html`<div class="card"><h2>Start from a preset</h2><div class="tools">${Object.entries(P.presets).map(([id, p]) => html`<button class="btn sm" data-preset="${id}">${PRESET_ICON[id] || ''} ${p.name}</button>`)}<button class="btn sm" data-preset="cinema">🎬 Cinema line-up</button></div>
@@ -834,7 +841,7 @@ export async function prerolls(main, k) {
         <button class="btn sm primary" data-badd>Add tag</button><button class="btn sm" data-brem>Remove tag</button><button class="btn sm" data-bnone>Clear selection</button></div>
       <div class="clips">${shown.map((c) => html`<div class="clip ${c.off ? 'off' : ''} ${clipSel.has(c.id) ? 'sel' : ''}" data-clip="${c.id}">
         <label class="clip-pick"><input type="checkbox" data-pick ${clipSel.has(c.id) ? 'checked' : ''} aria-label="Select ${c.title}"><img src="/api/studio/prerolls/clips/${c.id}/still.jpg" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></label>
-        <div class="grow"><b>${c.title}</b><span class="muted small">${k.mins(c.runtime_s)} · ${c.plays ? `played ${plural(c.plays, 'time')}, last ${ago(c.last_played)}` : 'not played yet'}</span>
+        <div class="grow"><b>${c.title}</b><span class="muted small">${k.mins(c.runtime_s)}${P.settings.evenVolume && c.lufs != null ? ` · ${Math.round(c.lufs)} LUFS` : ''} · ${c.plays ? `played ${plural(c.plays, 'time')}, last ${ago(c.last_played)}` : 'not played yet'}</span>
           <div class="cliptags">${c.folderTags.map((t) => html`<span class="chip fixed" title="From its folder">📁 ${t}</span>`)}${chipsIn(`c${c.id}`, c.ownTags, suggest, c.tags.length ? 'Add a tag' : 'Everyday clip · add a tag')}</div></div>
         <label class="check"><input type="checkbox" data-on ${c.off ? '' : 'checked'}> On</label></div>`)}
       ${!P.clips.length ? html`<p class="muted">No clips found. <a href="#libraries">Add a pre-roll library</a>.</p>` : !shown.length ? html`<p class="muted">No clips here.</p>` : ''}</div></div>`));
@@ -901,7 +908,7 @@ export async function prerolls(main, k) {
       try {
         const r = await api('POST', '/api/studio/prerolls/test', { itemId: hitItem.id, profileId: +$('[data-tprof]', main).value || null, at: $('[data-tat]', main).value, resume: $('[data-tres]', main).checked });
         $('[data-tout]', main).innerHTML = String(html`<h3 style="margin:16px 0 6px">${r.title}</h3><p class="muted small">${[r.facts.genres.join(', '), r.facts.studios.slice(0, 3).join(', '), r.facts.rating].filter(Boolean).join(' · ') || 'No genre, studio or rating'}</p>
-          ${r.clips.length ? html`<ol class="tl">${r.clips.map((c) => html`<li><b>${c.title}</b> <span class="muted">· ${k.mins(c.seconds)} · from “${c.rule}”</span></li>`)}<li class="muted">then the title</li></ol>` : html`<p><b>No pre-roll would play.</b></p>`}
+          ${r.clips.length ? html`<ol class="tl">${r.clips.map((c) => html`<li><b>${c.title}</b> <span class="muted">· ${k.mins(c.seconds)} · from “${c.rule}”${c.volume != null ? ` · at ${Math.round(c.volume * 100)}% volume` : ''}</span></li>`)}<li class="muted">then the title</li></ol>` : html`<p><b>No pre-roll would play.</b></p>`}
           <h3 style="margin:14px 0 6px">Why</h3>${r.log.map((x) => html`<div class="row"><div class="grow">${x.rule ? html`<b>${x.rule}</b>` : ''}<span style="white-space:normal">${x.note}</span></div></div>`)}`);
       } catch (e) { k.fail(e); }
     };
