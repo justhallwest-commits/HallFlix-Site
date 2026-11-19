@@ -8,7 +8,9 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.speech.RecognizerIntent
 import android.view.KeyEvent
 import android.view.View
@@ -24,6 +26,7 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import org.json.JSONObject
 
 /**
@@ -55,6 +58,15 @@ class MainActivity : Activity() {
             useWideViewPort = true
             // "Android TV" tells the web app to use its remote-friendly layout.
             userAgentString = "$userAgentString HallFlixApp/${BuildConfigVersion.name(this@MainActivity)}${if (isTv()) " Android TV" else ""}"
+            // TVs: the page decides text sizes, whatever the system's font size setting.
+            textZoom = 100
+        }
+        web.apply {
+            // No system focus outline around the whole page: HallFlix draws its own focus ring on each item.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) defaultFocusHighlightEnabled = false
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            isVerticalScrollBarEnabled = false
+            isHorizontalScrollBarEnabled = false
         }
         web.isFocusable = true
         web.isFocusableInTouchMode = true
@@ -135,6 +147,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (web.visibility == View.VISIBLE) web.requestFocus() // focus comes back to the page after the player or another app
         if (playerOpen) {
             playerOpen = false
             // Tell the web app playback ended so Continue Watching and progress bars refresh.
@@ -150,9 +163,49 @@ class MainActivity : Activity() {
         web.evaluateJavascript("window.dispatchEvent(new CustomEvent('hallflix-voice',{detail:${JSONObject.quote(heard)}}))", null)
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && panel.visibility != View.VISIBLE && web.canGoBack()) { web.goBack(); return true }
-        return super.onKeyDown(keyCode, event)
+    private var backAt = 0L
+    /**
+     * Back goes to the page first: it closes whatever is open, goes to the previous page, then to the sidebar.
+     * Only when the page has nothing left to go back to does Back close the app, after a second press.
+     */
+    private fun back() {
+        if (panel.visibility == View.VISIBLE || web.visibility != View.VISIBLE) { finish(); return }
+        web.evaluateJavascript("window.hallflixBack ? hallflixBack() : null") { r ->
+            when (r) {
+                "true" -> Unit
+                "false" -> confirmExit()
+                else -> if (web.canGoBack()) web.goBack() else confirmExit()
+            }
+        }
+    }
+    private fun confirmExit() {
+        val now = SystemClock.uptimeMillis()
+        if (now - backAt < 2500) { finish(); return }
+        backAt = now
+        Toast.makeText(this, "Press Back again to close HallFlix", Toast.LENGTH_SHORT).show()
+    }
+
+    /** The remote's media and menu keys go to the page: Play/Pause plays the focused title, ⏪ ⏩ jump along a row, Menu opens the sidebar. */
+    private fun pageKey(name: String) {
+        web.evaluateJavascript("window.dispatchEvent(new CustomEvent('hallflix-key',{detail:'$name'}))", null)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (web.visibility == View.VISIBLE && panel.visibility != View.VISIBLE) {
+            val name = when (event.keyCode) {
+                KeyEvent.KEYCODE_BACK -> "back"
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY -> "play"
+                KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "ff"
+                KeyEvent.KEYCODE_MEDIA_REWIND -> "rew"
+                KeyEvent.KEYCODE_MENU -> "menu"
+                else -> null
+            }
+            if (name != null) {
+                if (event.action == KeyEvent.ACTION_UP && event.repeatCount == 0) { if (name == "back") back() else pageKey(name) }
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     /** What the web app can ask of the app. Calls arrive on a background thread. */

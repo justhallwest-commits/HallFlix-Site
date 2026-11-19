@@ -1828,3 +1828,91 @@ body.rank-at-front.rank-outline.rank-c-accent .rank .num { -webkit-text-stroke-c
 body.rank-at-front.rank-outline.rank-c-gradient .rank .num { -webkit-text-stroke-color: rgb(var(--accent2-rgb)); }
 body.rank-at-front:is(.rank-solid, .rank-glow) .rank .num { color: rgba(var(--text-rgb), max(0.9, var(--rank-a, 0.62))); }
 body.rank-at-front:is(.rank-solid, .rank-glow).rank-c-accent .rank .num { color: var(--accent); }
+
+/* =====================================================================================================================
+   TV mode (Fire TV and Android TV apps, and ?tv): a 10-foot layout in the style of Plex, Jellyfin and Emby.
+   A left sidebar of icons that opens with labels when focus moves into it; content kept inside the 5% safe zone;
+   a clear focus ring and lift on whatever is focused; and the heavy effects off, so a Fire TV Stick stays smooth.
+   ===================================================================================================================== */
+body.tv { --rail: 76px; --rail-open: 252px; --pad: 3.4vw; --hero-h: 74vh; }
+body.tv #view { margin-left: var(--rail); }
+/* The sidebar */
+body.tv .nav { right: auto; bottom: 0; width: var(--rail); flex-direction: column; align-items: stretch; gap: 4px; padding: 4.5vh 10px 4.5vh 12px;
+  background: linear-gradient(to right, rgba(var(--bg-rgb), 0.96), rgba(var(--bg-rgb), 0.82)); box-shadow: 1px 0 0 rgba(var(--text-rgb), 0.06);
+  transition: width 0.18s ease-out, background 0.18s; overflow: hidden; z-index: 40; backdrop-filter: none; }
+body.tv .nav.solid { background: linear-gradient(to right, rgba(var(--bg-rgb), 0.96), rgba(var(--bg-rgb), 0.82)); backdrop-filter: none; }
+body.tv.rail-open .nav { width: var(--rail-open); background: rgba(var(--bg-rgb), 0.97); box-shadow: 18px 0 50px rgba(0, 0, 0, 0.55); }
+body.tv .nav .logo { order: 0; display: flex; justify-content: center; margin-bottom: 2.2vh; }
+body.tv .nav .logo img { height: auto; max-height: 34px; width: 100%; max-width: 54px; object-position: left center; transition: max-width 0.18s; }
+body.tv.rail-open .nav .logo img { max-width: 180px; }
+body.tv .nav .search { order: 1; }
+body.tv .nav .links { order: 2; flex-direction: column; flex: 0 1 auto; gap: 2px; overflow: visible; }
+body.tv .nav .navbtn { order: 3; }
+body.tv .nav .avatar { order: 4; margin-top: auto; }
+body.tv .nav .ico { display: grid; place-items: center; width: 28px; height: 28px; flex: none; }
+body.tv .nav .ico svg { width: 24px; height: 24px; }
+/* Every sidebar item is a row: icon, then its label (shown when the sidebar is open). */
+body.tv .nav .links a, body.tv .nav .search, body.tv .nav .navbtn, body.tv .nav .avatar {
+  display: flex; align-items: center; gap: 16px; width: 100%; height: 48px; padding: 0 12px; border: 0; border-radius: 12px; background: none; color: var(--muted);
+  font-size: 18px; font-weight: 600; white-space: nowrap; text-shadow: none; box-shadow: none; outline: none; transition: background 0.12s, color 0.12s, transform 0.12s; }
+body.tv .nav .links a span { opacity: 0; transition: opacity 0.12s; }
+body.tv.rail-open .nav .links a span { opacity: 1; }
+body.tv .nav .links a.on { color: var(--text); }
+body.tv .nav .links a.on .ico { color: var(--accent); filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.6)); }
+body.tv .nav .links a.on::before { content: ''; position: absolute; left: 2px; width: 4px; height: 26px; border-radius: 2px; background: var(--accent); }
+body.tv .nav .links a:focus, body.tv .nav .navbtn:focus, body.tv .nav .avatar:focus, body.tv .nav .search:focus-within { background: var(--accent); color: var(--bg); transform: scale(1.03); }
+body.tv .nav .links a:focus .ico { color: var(--bg); filter: none; }
+body.tv .nav .navbtn svg { width: 24px; height: 24px; margin-left: 2px; }
+body.tv .nav .navbtn::after { content: 'Surprise me'; opacity: 0; transition: opacity 0.12s; }
+body.tv.rail-open .nav .navbtn::after { opacity: 1; }
+body.tv .nav .avatar { justify-content: flex-start; padding: 0 9px; color: #fff; }
+body.tv .nav .avatar > * { width: 34px !important; height: 34px !important; flex: none; }
+body.tv .nav .search { padding: 0 12px; }
+body.tv .nav .search input { width: 0; padding: 0; border: 0; min-width: 0; opacity: 0; background: transparent; color: inherit; font: inherit; transition: opacity 0.12s; }
+body.tv.rail-open .nav .search input { width: 100%; opacity: 1; padding: 6px 0; }
+body.tv .nav .search input::placeholder { color: currentColor; opacity: 0.7; }
+body.tv .nav .search .mic { display: none; }
+body.tv.rail-open .nav .search .mic { display: grid; color: inherit; }
+body.tv .nav .menu { position: fixed; left: calc(var(--rail-open) + 8px); top: auto; bottom: 4.5vh; right: auto; }
+/* The page dims a little while the sidebar is open, as in the big TV apps. */
+body.tv #view { transition: opacity 0.18s, filter 0.18s; }
+body.tv.rail-open #view { opacity: 0.55; }
+/* Content: inside the safe zone, with pages starting near the top now the menu is at the side. */
+body.tv .hero { min-height: 380px; }
+body.tv .hero .content { bottom: 13vh; }
+body.tv .hero .overview { -webkit-line-clamp: 2; }
+body.tv .row h2 { font-size: 24px; }
+body.tv .libs { grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--libs-min, 320px) * 0.72)), 1fr)); }
+/* Focus: a bright ring and a small lift, never clipped by the row. */
+body.tv .row .scroller { padding-block: 18px; margin-block: -18px; scroll-behavior: auto; }
+body.tv .card:focus-visible, body.tv .card:focus { transform: scale(1.07); z-index: 3; box-shadow: 0 0 0 3px var(--accent), 0 14px 34px rgba(0, 0, 0, 0.65); outline: none; }
+body.tv .lib-tile:focus-visible, body.tv .lib-tile:focus { box-shadow: inset 0 0 0 3px var(--accent), 0 14px 34px rgba(0, 0, 0, 0.6); outline: none; }
+body.tv.ui-hud .card:focus .art { filter: brightness(1.08); }
+body.tv :is(.btn, .mood, .chip, select, input):focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+body.tv .btn:focus-visible { transform: scale(1.05); }
+/* Things that only make sense with a mouse, and the heavy effects. */
+body.tv .row .arrow, body.tv .preview-pop, body.tv .playdot, body.tv .clip-sound, body.tv #atmos { display: none !important; }
+body.tv .row > .scroller, body.tv .moods { scrollbar-width: none; }
+body.tv .row > .scroller::-webkit-scrollbar, body.tv .moods::-webkit-scrollbar { display: none; }
+body.tv .tile-slab { transform: none !important; filter: none !important; animation: none !important; }
+body.tv .lib-tile .tile-art { transition: none; }
+body.tv :is(.vlib-bar, .lib-head) { padding-top: 4.5vh; }
+.nav .ico { display: none; }
+body.tv .nav .links a { position: relative; }
+/* Card transitions cost a Fire TV Stick more than anything else on the page, so TVs keep only the focused card's quick lift. */
+body.tv .card, body.tv .card *, body.tv .card::before, body.tv .card::after, body.tv .lib-tile *, body.tv .rank .num { transition: none !important; }
+body.tv .card { transition: transform 0.12s ease-out !important; }
+/* Sidebar fit: items size to the screen height, and a long list (many libraries) scrolls inside the sidebar. */
+body.tv .nav { overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+body.tv .nav::-webkit-scrollbar { display: none; }
+body.tv .nav .links a, body.tv .nav .search, body.tv .nav .navbtn, body.tv .nav .avatar { height: min(46px, 7.4vh); flex: none; }
+body.tv .nav .logo { margin-bottom: 1.6vh; }
+body.tv .nav .links a::after, body.tv .nav .links a.on::after { display: none !important; }
+body.tv .nav .links a, body.tv .nav .links a.on { border-bottom: 0 !important; }
+body.tv .nav .search input:focus, body.tv .nav .search input:focus-visible { outline: none !important; box-shadow: none !important; }
+body.tv .nav .links a, body.tv .nav .search, body.tv .nav .navbtn { justify-content: flex-start; }
+body.tv .nav .navbtn svg { margin-left: 2px; width: 24px; height: 24px; flex: none; }
+/* The profile picture keeps its colours as a small square, lined up with the icons above it. */
+body.tv .nav .avatar { width: 40px; height: 40px !important; padding: 0; margin: 6px 0 0 6px; justify-content: center; border-radius: 10px; color: #fff; font-size: 18px;
+  background: linear-gradient(135deg, var(--a1, var(--accent)), var(--a2, var(--accent2))); }
+body.tv .nav .avatar:focus { outline: 3px solid var(--accent); outline-offset: 3px; background: linear-gradient(135deg, var(--a1, var(--accent)), var(--a2, var(--accent2))); transform: scale(1.06); }
