@@ -56,6 +56,11 @@ export function fmtRuntime(s) {
 
 const I = (d, extra = '') => raw(`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`);
 export const icons = {
+  // Sidebar icons (TV): one per kind of page.
+  home: I('<path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/>'), film: I('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M3 15h18M8 5v14M16 5v14"/>'),
+  tv: I('<rect x="3" y="6" width="18" height="12" rx="2"/><path d="m9 2 3 4 3-4"/>'), comic: I('<path d="M4 5h11l5 5v9H4z"/><path d="M8 10h6M8 14h8"/>'),
+  music: I('<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>'), clock: I('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  user: I('<circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'), search: I('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>'),
   play: raw('<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>'),
   pause: raw('<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5.5" y="4" width="4.5" height="16" rx="1"/><rect x="14" y="4" width="4.5" height="16" rx="1"/></svg>'),
   plus: I('<path d="M12 5v14M5 12h14"/>'), check: I('<path d="m5 12.5 4.5 4.5L19 7.5"/>'), info: I('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>'),

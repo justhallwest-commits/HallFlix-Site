@@ -58,6 +58,9 @@ A self-hosted media service with its own server, web app and design Studio. It r
 - **Library logos** (Studio → Look and feel): drag each library's logo (or name) to its own spot on a miniature of its Home tile, all tiles
   in one place under **Logo on each tile**, or use a 3×3 position grid and nudge sliders, resize it, hide the title count, and set the logo's height and place at the top of the library's own page (left, centre, right,
   the name instead, or hidden, nudged anywhere); for all libraries or one at a time.
+- **Fire TV and Android TV:** a 10-foot layout in the style of Plex, Jellyfin and Emby: a left sidebar that opens with labels, rows that remember
+  your place, focus that stays on screen and comes back where you were, Back that closes, goes back, then offers to exit, Play/Pause on a title
+  to play it, ⏪ ⏩ to jump along a row, and the heavy effects off so a Fire TV Stick stays smooth.
 - **Banner clips from the films themselves:** the spotlight plays short clips cut from each title's own file, from a random moment in its
   opening minutes (no YouTube needed), with a speaker button; the banner shuffles to a new mix each visit (or hour, or day), and shows only
   your picked titles when you pick some.

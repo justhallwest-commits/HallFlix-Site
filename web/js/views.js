@@ -179,13 +179,16 @@ export function syncArrows(...rows) {
 }
 
 // ---------- shell ----------
+// Which sidebar icon each kind of library uses (TV).
+const KIND_ICON = { movies: 'film', shows: 'tv', books: 'book', comics: 'comic', music: 'music', audiobooks: 'book' };
+
 export function shell() {
   const p = state.profile;
   app().innerHTML = String(html`
     <header class="nav"><a class="logo" href="#/" aria-label="Home"><img data-site-logo src="${logoUrl()}" alt="${themeNow()?.siteName || 'HallFlix'}"></a>
-      <nav class="links"><a href="#/" data-nav="home">Home</a>${state.libraries.map((l) => html`<a href="#/library/${l.id}" data-nav="library-${l.id}">${l.name}</a>`)}<a href="#/timeline" data-nav="timeline">Timeline</a><a href="#/me" data-nav="me">My HallFlix</a></nav>
+      <nav class="links"><a href="#/" data-nav="home"><i class="ico">${icons.home}</i><span>Home</span></a>${state.libraries.map((l) => html`<a href="#/library/${l.id}" data-nav="library-${l.id}"><i class="ico">${KIND_ICON[l.kind] ? icons[KIND_ICON[l.kind]] : icons.film}</i><span>${l.name}</span></a>`)}<a href="#/timeline" data-nav="timeline"><i class="ico">${icons.clock}</i><span>Timeline</span></a><a href="#/me" data-nav="me"><i class="ico">${icons.user}</i><span>My HallFlix</span></a></nav>
       <button class="btn round navbtn" data-surprise aria-label="Surprise me" title="Surprise me">${icons.dice}</button>
-      <div class="search"><input type="search" placeholder="Titles, people, genres" aria-label="Search" autocomplete="off">${browse.canListen() ? html`<button class="mic" data-mic aria-label="Search by voice" title="Search by voice">${icons.mic}</button>` : ''}</div>
+      <div class="search"><i class="ico" aria-hidden="true">${icons.search}</i><input type="search" placeholder="Titles, people, genres" aria-label="Search" autocomplete="off">${browse.canListen() ? html`<button class="mic" data-mic aria-label="Search by voice" title="Search by voice">${icons.mic}</button>` : ''}</div>
       <button class="avatar" style="${avatarStyle(p)}" aria-label="Profile menu" data-menu>${p.avatar ? html`<img src="${p.avatar}" alt="" style="width:100%;height:100%;border-radius:8px;object-fit:cover">` : p.name[0].toUpperCase()}</button>
     </header><main id="view"></main>`);
   initRows();
