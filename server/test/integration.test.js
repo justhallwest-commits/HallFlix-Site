@@ -313,7 +313,7 @@ test('looks: theme, library looks, seasons, uploads', async () => {
   assert.deepEqual([d.tileLogo, d.libLogoSize], [{ place: 'bl', size: 100, x: 0, y: 0, count: 'yes' }, 0]);
   assert.deepEqual([d.homeTiles, d.bannerLogo, d.ident.order], [{ width: 320, height: 44, brightness: 100 }, 100, 'shuffle']);
   assert.deepEqual(d.libPage, { place: 'left', x: 0, y: 0 });
-  assert.deepEqual(d.splash, { image: '', size: 100, motion: 'pulse', background: '', video: '', when: 'signin', sound: true });
+  assert.deepEqual(d.splash, { image: '', size: 100, motion: 'pulse', background: '', video: '', when: 'signin', sound: true, audio: '' });
   assert.equal((await fetch(`${hf.base}/js/splash.js`)).status, 200, 'the loading screen script is served');
   // Pages carry versioned module addresses (cached for good) and everything text-based is gzipped.
   const pageHtml = await (await fetch(`${hf.base}/`)).text();
