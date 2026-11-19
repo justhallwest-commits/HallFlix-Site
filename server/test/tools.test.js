@@ -224,6 +224,11 @@ test('Artwork Studio: slots, every source, backdrop order, fill from online, bul
 test('pre-roll tools: clips, presets, test, frequency, skipped profiles, health, activity and backup', async () => {
   let pr = await hf.api('GET', '/api/studio/prerolls');
   const ident = pr.clips.find((c) => c.title === 'hallflix ident'), spooky = pr.clips.find((c) => c.title === 'spooky bump');
+  // The Test tab's search finds a title again from the label it suggested (picking a suggestion fills the box with it).
+  for (const hit of (await hf.api('GET', '/api/studio/prerolls/find?q=a')).slice(0, 6)) {
+    const again = await hf.api('GET', `/api/studio/prerolls/find?q=${encodeURIComponent(hit.label)}`);
+    assert.ok(again.some((x) => x.id === hit.id), `"${hit.label}" finds itself`);
+  }
   // The metadata editor finds pre-roll clips by their library, by name, or by type (not in the default list of everything).
   const titles = async (f) => (await hf.api('POST', '/api/studio/meta/search', f)).items.map((x) => x.title).sort();
   assert.deepEqual(await titles({ library: lib.prerolls.id }), ['hallflix ident', 'spooky bump']);

@@ -785,11 +785,23 @@ export async function prerolls(main, k) {
       <div class="f"><span>When</span><input type="datetime-local" data-tat value="${now}" style="width:auto"></div>
       <label class="check"><input type="checkbox" data-tres> Resuming part-way through</label>
       <div class="tools" style="margin-top:10px"><button class="btn primary" data-trun>Test</button></div><div data-tout></div></div>`));
+    // Every title the search has offered, by its label. Picking a suggestion puts its label in the box, which is not
+    // itself searchable ("Title (2020)"), so a picked label is looked up here instead of searched for again.
     let found = [];
-    $('[data-tq]', main).oninput = k.debounce(async (e) => { found = await api('GET', `/api/studio/prerolls/find?q=${encodeURIComponent(e.target.value)}`).catch(() => []); $('#tdl').innerHTML = String(html`${found.map((x) => html`<option value="${x.label}">`)}`); }, 250);
+    const seen = new Map();
+    const search = async (text) => { found = await api('GET', `/api/studio/prerolls/find?q=${encodeURIComponent(text)}`).catch(() => []); for (const x of found) seen.set(x.label, x); return found; };
+    $('[data-tq]', main).oninput = k.debounce(async (e) => {
+      const text = e.target.value.trim();
+      if (!text || seen.has(text)) return;
+      await search(text);
+      $('#tdl').innerHTML = String(html`${found.map((x) => html`<option value="${x.label}">`)}`);
+    }, 250);
     $('[data-trun]', main).onclick = async () => {
-      const label = $('[data-tq]', main).value, hitItem = found.find((x) => x.label === label) || found[0];
-      if (!hitItem) return toast('Search for a movie or episode first');
+      const label = $('[data-tq]', main).value.trim();
+      let hitItem = seen.get(label);
+      if (!hitItem && label) hitItem = (await search(label))[0]; // typed but not picked: the best match for what's typed
+      if (!hitItem) return toast(label ? `Nothing found for “${label}”` : 'Search for a movie or episode first');
+      $('[data-tq]', main).value = hitItem.label;
       try {
         const r = await api('POST', '/api/studio/prerolls/test', { itemId: hitItem.id, profileId: +$('[data-tprof]', main).value || null, at: $('[data-tat]', main).value, resume: $('[data-tres]', main).checked });
         $('[data-tout]', main).innerHTML = String(html`<h3 style="margin:16px 0 6px">${r.title}</h3><p class="muted small">${[r.facts.genres.join(', '), r.facts.studios.slice(0, 3).join(', '), r.facts.rating].filter(Boolean).join(' · ') || 'No genre, studio or rating'}</p>

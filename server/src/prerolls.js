@@ -275,7 +275,11 @@ export function routes(r) {
     };
   }, admin);
   r.get('/api/studio/prerolls/find', async ({ query }) => {
-    const like = `%${String(query.q || '').trim().replace(/[%_\\]/g, '\\$&')}%`;
+    // A suggestion's own label also finds it: "Title (2020)" → "Title", "Show · S1 E2 · Episode" → "Episode".
+    let text = String(query.q || '').trim();
+    const ep = text.split(' · '); if (ep.length === 3) text = ep[2];
+    text = text.replace(/\s\((\d{4})\)$/, '');
+    const like = `%${text.replace(/[%_\\]/g, '\\$&')}%`;
     return (await q(`select i.id, i.kind, i.title, i.year, i.season_no, i.episode_no, s.title as show_title from items i left join items s on s.id = i.show_id
       where i.kind in ('movie','episode') and (i.title ilike $1 or s.title ilike $1) order by (i.kind='movie') desc, coalesce(s.sort_title, i.sort_title), i.season_no, i.episode_no limit 25`, [like]))
       .map((x) => ({ id: x.id, label: x.kind === 'episode' ? `${x.show_title} · S${x.season_no} E${x.episode_no} · ${x.title}` : `${x.title}${x.year ? ` (${x.year})` : ''}` }));
