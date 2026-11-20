@@ -159,6 +159,7 @@ export function plan(items, ops, { onlyEmpty = false, lock = true } = {}) {
 
 /** Save planned changes. Returns the history entry. */
 async function commit(planned, label, { lock = true, undoes = null } = {}) {
+  planned = [...planned, ...(await cascadeTags(planned))];
   const record = [];
   for (const p of planned) {
     if (p.error || !p.changes.length) continue;
@@ -186,6 +187,37 @@ async function commit(planned, label, { lock = true, undoes = null } = {}) {
   await q('delete from meta_history where id not in (select id from meta_history order by id desc limit 50)');
   guard.changed();
   return { ...h, items: new Set(record.map((r) => r.id)).size, changes: record.length };
+}
+
+/**
+ * A tag taken off a show comes off its seasons and episodes too. Episodes use their show's tags as well as their own,
+ * and imports (Jellyfin's export) copy the show's tags onto every episode, so without this an old tag lives on in the
+ * episodes and keeps matching (pre-rolls, parental controls). Tags added to a show aren't copied: episodes get them
+ * from the show already. Returns extra planned changes, saved (and undone) with the edit itself.
+ */
+async function cascadeTags(planned) {
+  const out = [];
+  for (const p of planned) {
+    if (p.error || p.kind !== 'show') continue;
+    const c = p.changes.find((x) => x.field === 'tags' && 'after' in x);
+    if (!c) continue;
+    const after = new Set((c.after || []).map((t) => String(t).toLowerCase()));
+    const removed = [...new Set((c.before || []).map((t) => String(t).toLowerCase()))].filter((t) => !after.has(t));
+    if (!removed.length) continue;
+    const kids = await q(`select id, title, kind, tags, locked from items where show_id = $1 and kind in ('season','episode')
+      and exists (select 1 from unnest(tags) t where lower(t) = any($2::text[]))`, [p.id, removed]);
+    for (const k of kids) {
+      const next = k.tags.filter((t) => !removed.includes(String(t).toLowerCase()));
+      out.push({ id: k.id, title: k.title, kind: k.kind, show: p.title, changes: [{ field: 'tags', before: k.tags, after: next, lockTo: !!(k.locked || {}).tags }], error: null, lockAfter: k.locked || {} });
+    }
+  }
+  return out;
+}
+
+/** Set one field on some titles as a saved, undoable edit (used by tools outside the metadata editor). */
+export async function setField(ids, field, value, label) {
+  const items = await load(ids);
+  return commit(plan(items, [{ op: 'set', field, value: Array.isArray(value) ? value.join('|') : value }]), label);
 }
 
 /** After a scan rewrites files' details, put locked hand edits back. */

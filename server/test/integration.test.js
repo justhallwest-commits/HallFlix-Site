@@ -356,6 +356,39 @@ test('shared tags: with no rules at all, a clip plays before titles that share a
   for (const r of pr.rules) await hf.api('POST', '/api/studio/prerolls/rules', { ...r, id: undefined, stop: r.match?.stop });
 });
 
+test('episode tags: a tag taken off a show comes off its episodes, Test shows where tags come from, and cleanup', async () => {
+  const ep = items.eps[0];
+  let t = await hf.api('POST', '/api/studio/prerolls/test', { itemId: ep.id });
+  const show = t.facts.showId;
+  // As an import leaves things: the show and its episode both carry old tags.
+  await hf.api('POST', `/api/studio/meta/item/${show}`, { values: { tags: ['HFArcane', 'HFSwimBump'] } });
+  await hf.api('POST', `/api/studio/meta/item/${ep.id}`, { values: { tags: ['HFSwimBump', 'steampunk'] } });
+  t = await hf.api('POST', '/api/studio/prerolls/test', { itemId: ep.id });
+  assert.deepEqual([t.facts.showTags, t.facts.ownTags], [['HFArcane', 'HFSwimBump'], ['HFSwimBump', 'steampunk']]);
+  // Taking HFSwimBump off the show takes it off the episode too (and only that tag).
+  await hf.api('POST', `/api/studio/meta/item/${show}`, { values: { tags: ['HFArcane'] } });
+  t = await hf.api('POST', '/api/studio/prerolls/test', { itemId: ep.id });
+  assert.deepEqual([t.facts.showTags, t.facts.ownTags], [['HFArcane'], ['steampunk']]);
+  // A shared-tags clip says which tag it matched on.
+  const pr = await hf.api('GET', '/api/studio/prerolls');
+  const spooky = pr.clips.find((c) => c.title === 'spooky bump');
+  await hf.api('PUT', `/api/studio/prerolls/clips/${spooky.id}`, { tags: ['halloween', 'hfarcane'] });
+  await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: true, tagMatch: true });
+  t = await hf.api('POST', '/api/studio/prerolls/test', { itemId: ep.id });
+  const hit = t.clips.find((c) => c.id === spooky.id);
+  assert.deepEqual(hit.shares, ['hfarcane']);
+  assert.ok(t.log.some((x) => /shares “hfarcane”/.test(x.note)));
+  // Clearing: this episode, then every episode of the show.
+  assert.equal((await hf.api('POST', '/api/studio/prerolls/episode-tags/clear', { itemId: ep.id })).cleared, 1);
+  assert.deepEqual((await hf.api('POST', '/api/studio/prerolls/test', { itemId: ep.id })).facts.ownTags, []);
+  await hf.api('POST', `/api/studio/meta/item/${items.eps[1].id}`, { values: { tags: ['old'] } });
+  assert.equal((await hf.api('POST', '/api/studio/prerolls/episode-tags/clear', { itemId: ep.id, all: true })).cleared, 1);
+  assert.deepEqual((await hf.api('POST', '/api/studio/prerolls/test', { itemId: items.eps[1].id })).facts.ownTags, []);
+  await hf.api('PUT', `/api/studio/prerolls/clips/${spooky.id}`, { tags: ['halloween'] });
+  await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: false });
+  await hf.api('POST', `/api/studio/meta/item/${show}`, { values: { tags: [] } });
+});
+
 test('progress: continue watching, finishing, and what is up next', async () => {
   let home = await hf.api('GET', '/api/home');
   assert.equal(home.rows[0].id, 'continue'); assert.equal(home.rows[0].items[0].title, 'Night Drive');

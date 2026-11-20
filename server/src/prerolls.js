@@ -9,6 +9,7 @@ import { HttpError, readJson, sendFile } from './http.js';
 import { inRange, currentLook } from './look.js';
 import * as loudness from './loudness.js';
 import { img } from './catalog.js';
+import { setField } from './meta.js';
 
 const exec = promisify(execFile);
 const admin = { admin: true };
@@ -108,14 +109,35 @@ export function pickPrerolls(rules, clips, target, opts = {}, date = new Date(),
     if (!pool.length) { log?.push({ rule: rule.name, note: sel.mode === 'match' ? `no clip has a tag matching this title’s ${(sel.on?.length ? sel.on : ['genres']).map((x) => ({ genres: 'genre', studios: 'studio', ratings: 'rating', tags: 'tags' })[x]).join(' or ')}` : 'no usable clips for it' }); continue; }
     const before = out.length;
     for (let n = 0; n < (rule.count || 1) && pool.length && out.length < max; n++) {
-      const pick = draw(pool, `rule:${rule.id}`, opts.order, rnd, deck);
-      out.push({ ...pick, _rule: rule.name });
+      // Shared tags: the clip whose shared tag is on the fewest titles wins ("hfarcane" over a bump tag on every show).
+      const { tier, tag } = rule.builtIn && target.tagCounts ? mostSpecific(pool, target) : { tier: pool, tag: null };
+      if (tag && n === 0) log?.push({ rule: rule.name, note: `the most specific shared tag wins: ${specificNote(pool, target)}` });
+      const pick = draw(tier, tag ? `rule:${rule.id}:${tag}` : `rule:${rule.id}`, opts.order, rnd, deck);
+      out.push({ ...pick, _rule: rule.name, _shares: sel.mode === 'match' ? matchedTags(sel, target, pick) : undefined });
       pool = pool.filter((x) => x.id !== pick.id);
     }
-    log?.push({ rule: rule.name, note: `plays ${out.slice(before).map((c) => c.title).join(', ')}` });
+    log?.push({ rule: rule.name, note: `plays ${out.slice(before).map((c) => `${c.title}${c._shares?.length ? ` (shares ${c._shares.map((t) => `“${t}”`).join(', ')})` : ''}`).join(', ')}` });
     if ((rule.stop || rule.match?.stop) && out.length > before) { for (const r of sorted.slice(sorted.indexOf(rule) + 1)) log?.push({ rule: r.name, note: `skipped: “${rule.name}” replaces the rules below it` }); break; }
   }
   return out;
+}
+/** The clips sharing the title's most specific tag (the one on the fewest titles). */
+function mostSpecific(pool, target) {
+  const spec = (c) => Math.min(...lower(c.tags).filter((t) => lower(target.tags).includes(t)).map((t) => target.tagCounts[t] ?? 1e9));
+  const best = Math.min(...pool.map(spec));
+  const tier = pool.filter((c) => spec(c) === best);
+  const tag = lower(tier[0].tags).find((t) => lower(target.tags).includes(t) && (target.tagCounts[t] ?? 1e9) === best) || null;
+  return { tier, tag };
+}
+function specificNote(pool, target) {
+  const tags = [...new Set(pool.flatMap((c) => lower(c.tags)).filter((t) => lower(target.tags).includes(t)))].sort((a, b) => (target.tagCounts[a] ?? 1e9) - (target.tagCounts[b] ?? 1e9));
+  return tags.map((t) => `“${t}” is on ${target.tagCounts[t] ?? '?'} title${target.tagCounts[t] === 1 ? '' : 's'}`).join(', ');
+}
+/** The title's words a clip matched on, for "plays X (shares “birthday”)". */
+function matchedTags(sel, target, clip) {
+  const on = sel.on?.length ? sel.on : ['genres'];
+  const theirs = new Set([...(on.includes('genres') ? lower(target.genres) : []), ...(on.includes('studios') ? lower(target.studios) : []), ...(on.includes('ratings') && target.rating ? [String(target.rating).toLowerCase()] : []), ...(on.includes('tags') ? lower(target.tags) : [])]);
+  return lower(clip.tags).filter((t) => theirs.has(t));
 }
 /** The clips a rule's choice ("tagged halloween", "tagged with the title's genre"…) allows before a title. */
 function poolFor(sel, target, usable) {
@@ -206,11 +228,15 @@ export async function forPlay(profile, item, resumeAt, { record = true, at = new
   const target = { kind: item.kind, library_id: item.library_id, title: item.title, show_title: item.show_title,
     genres: item.genres?.length ? item.genres : item.show_genres, studios: item.studios?.length ? item.studios : item.show_studios, rating: item.rating || item.show_rating,
     tags: [...new Set([...(item.tags || []), ...(item.show_tags || [])])] };
+  if (s.tagMatch !== false && target.tags.length) {
+    target.tagCounts = Object.fromEntries((await q(`select lower(t) as t, count(distinct i.id)::int as n from items i, unnest(i.tags) t
+      where i.kind in ('movie','show') and lower(t) = any($1::text[]) group by 1`, [lower(target.tags)])).map((x) => [x.t, x.n]));
+  }
   const deck = (await getSetting('prerollDecks', {})) || {};
   const picked = pickPrerolls(rules, clips, target, s, wallClock(at, s.tz), Math.random, record ? deck : structuredClone(deck), log);
   if (s.evenVolume && picked.length) {
     const f = await loudness.featureLevel(item);
-    log?.push({ note: `Even volume: ${item.kind === 'episode' ? 'the episode' : 'the movie'} is ${f.measured ? `about ${f.lufs} LUFS` : `not measured yet, so the usual level for films (${f.lufs} LUFS) is used`}` });
+    log?.push({ note: `Even volume: ${item.kind === 'episode' ? 'the episode' : 'the movie'} is ${f.measured ? `about ${f.lufs} LUFS${f.from === 'show' ? ' (from other episodes of the show)' : ''}` : `not measured yet, so the usual level for films (${f.lufs} LUFS) is used`}` });
     for (const c of picked) {
       c._lufs = await loudness.known(c.path);
       if (c._lufs == null) loudness.want(c.path);
@@ -451,9 +477,21 @@ export function routes(r) {
     const picked = await forPlay(profile, item, b.resume ? 300 : 0, { record: false, at, log });
     return {
       title: item.kind === 'episode' ? `${item.show_title} · S${item.season_no} E${item.episode_no} · ${item.title}` : `${item.title}${item.year ? ` (${item.year})` : ''}`,
-      facts: { genres: item.genres?.length ? item.genres : item.show_genres || [], studios: item.studios?.length ? item.studios : item.show_studios || [], rating: item.rating || item.show_rating || null, tags: [...new Set([...(item.tags || []), ...(item.show_tags || [])])] },
-      clips: picked.map((c) => ({ id: c.id, title: c.title, rule: c._rule, seconds: c.runtime_s, lufs: c._lufs ?? null, volume: c._gain ?? null })), log,
+      facts: { genres: item.genres?.length ? item.genres : item.show_genres || [], studios: item.studios?.length ? item.studios : item.show_studios || [], rating: item.rating || item.show_rating || null, tags: [...new Set([...(item.tags || []), ...(item.show_tags || [])])],
+        ownTags: item.tags || [], showTags: item.kind === 'episode' ? item.show_tags || [] : null, showId: item.show_id || null, showTitle: item.show_title || null, kind: item.kind },
+      clips: picked.map((c) => ({ id: c.id, title: c.title, rule: c._rule, seconds: c.runtime_s, lufs: c._lufs ?? null, volume: c._gain ?? null, shares: c._shares || [] })), log,
     };
+  }, admin);
+  // Take an episode's own tags off (one episode, or every season and episode of its show), so it goes by its show's tags.
+  // Saved as a metadata edit, so it can be undone from Metadata → History.
+  r.post('/api/studio/prerolls/episode-tags/clear', async ({ req }) => {
+    const b = await readJson(req);
+    const ep = await q1(`select i.id, i.show_id, s.title as show_title from items i left join items s on s.id = i.show_id where i.id = $1 and i.kind = 'episode'`, [b.itemId]);
+    if (!ep) throw new HttpError(400, 'Choose an episode');
+    const ids = b.all ? (await q(`select id from items where show_id = $1 and kind in ('season','episode') and cardinality(tags) > 0`, [ep.show_id])).map((x) => x.id) : [ep.id];
+    if (!ids.length) return { ok: true, cleared: 0 };
+    const h = await setField(ids, 'tags', [], b.all ? `Cleared episode tags in ${ep.show_title}` : 'Cleared an episode’s tags');
+    return { ok: true, cleared: h?.items || 0 };
   }, admin);
   r.get('/api/studio/prerolls/find', async ({ query }) => {
     // A suggestion's own label also finds it: "Title (2020)" → "Title", "Show · S1 E2 · Episode" → "Episode".
