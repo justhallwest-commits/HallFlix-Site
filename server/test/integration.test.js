@@ -318,6 +318,44 @@ test('pre-rolls matched to the title’s own tags: a “birthday” clip before 
   for (const r of pr.rules) await hf.api('POST', '/api/studio/prerolls/rules', { ...r, id: undefined, stop: r.match?.stop });
 });
 
+test('shared tags: with no rules at all, a clip plays before titles that share a tag with it, tagged anywhere', async () => {
+  const pr = await hf.api('GET', '/api/studio/prerolls');
+  const spooky = pr.clips.find((c) => c.title === 'spooky bump'), ident = pr.clips.find((c) => c.title === 'hallflix ident');
+  for (const r of pr.rules) await hf.api('DELETE', `/api/studio/prerolls/rules/${r.id}`);
+  await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: true, max: 2 });
+  const pre = async (id) => (await hf.api('POST', '/api/play', { itemId: id, caps: browser, start: 0 })).queue.filter((e) => e.kind === 'preroll').map((e) => e.itemId);
+  assert.deepEqual(await pre(items['Night Drive'].id), []); // nothing shares a tag yet
+  // The clip and the movie are both tagged in Metadata, the same tool.
+  await hf.api('POST', `/api/studio/meta/item/${ident.id}`, { values: { tags: ['Anniversary'] } });
+  await hf.api('POST', `/api/studio/meta/item/${items['Night Drive'].id}`, { values: { tags: ['anniversary'] } });
+  assert.deepEqual(await pre(items['Night Drive'].id), [ident.id]);
+  const clips = (await hf.api('GET', '/api/studio/prerolls')).clips;
+  assert.deepEqual(clips.find((c) => c.id === ident.id).metaTags, ['anniversary']);
+  // A tag typed on the Clips tab works the same; "only matching clips" keeps the everyday clip out.
+  await hf.api('PUT', `/api/studio/prerolls/clips/${spooky.id}`, { tags: ['halloween', 'anniversary'] });
+  const everyday = await hf.api('POST', '/api/studio/prerolls/rules', { name: 'Everyday', clips: { mode: 'all' }, position: 1 });
+  await hf.api('PUT', '/api/studio/prerolls/settings', { tagMatchCount: 2 });
+  assert.deepEqual((await pre(items['Night Drive'].id)).sort(), [ident.id, spooky.id].sort());
+  await hf.api('PUT', '/api/studio/prerolls/settings', { tagMatchCount: 1 });
+  assert.equal((await pre(items['Night Drive'].id)).length, 1);
+  await hf.api('PUT', '/api/studio/prerolls/settings', { tagMatchOnly: false });
+  assert.equal((await pre(items['Night Drive'].id)).length, 2); // the matching clip, then the everyday rule
+  const t = await hf.api('POST', '/api/studio/prerolls/test', { itemId: items['Night Drive'].id });
+  assert.equal(t.clips[0].rule, 'Shared tags');
+  const reach = await hf.api('GET', '/api/studio/prerolls/reach');
+  assert.ok(reach.rules.tags >= 1 && reach.clips[ident.id] >= 1);
+  assert.ok((await hf.api('GET', '/api/studio/prerolls/health')).some((h) => /Shared tags: 1 tag link/.test(h.text)));
+  // Switched off, it's gone.
+  await hf.api('PUT', '/api/studio/prerolls/settings', { tagMatch: false });
+  assert.ok(!(await hf.api('POST', '/api/studio/prerolls/test', { itemId: items['Night Drive'].id })).clips.some((c) => c.rule === 'Shared tags'));
+  await hf.api('DELETE', `/api/studio/prerolls/rules/${everyday.id}`);
+  await hf.api('PUT', `/api/studio/prerolls/clips/${spooky.id}`, { tags: ['halloween'] });
+  await hf.api('POST', `/api/studio/meta/item/${ident.id}`, { values: { tags: [] } });
+  await hf.api('POST', `/api/studio/meta/item/${items['Night Drive'].id}`, { values: { tags: [] } });
+  await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: false, max: 2, tagMatch: true, tagMatchOnly: true, tagMatchCount: 1 });
+  for (const r of pr.rules) await hf.api('POST', '/api/studio/prerolls/rules', { ...r, id: undefined, stop: r.match?.stop });
+});
+
 test('progress: continue watching, finishing, and what is up next', async () => {
   let home = await hf.api('GET', '/api/home');
   assert.equal(home.rows[0].id, 'continue'); assert.equal(home.rows[0].items[0].title, 'Night Drive');

@@ -355,3 +355,5 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 .covbar .m, .covkey .m { background: var(--cyan); } .covbar .g, .covkey .g { background: #8a7cff; } .covbar .n, .covkey .n { background: #555b66; }
 .covkey { display: flex; flex-wrap: wrap; gap: 18px; font-size: 14px; }
 .covkey i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.rule-row.builtin .rule-no { background: var(--cyan); color: #06121a; }
+.f[hidden], p[hidden], div[hidden] { display: none !important; }
