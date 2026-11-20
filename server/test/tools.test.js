@@ -159,6 +159,14 @@ test('metadata editor: search, preview, apply with locks that survive rescans, v
   assert.deepEqual(ipv.planned[0].changes.map((c) => c.field).sort(), ['rating', 'title']);
   await hf.api('POST', '/api/studio/meta/import?apply=1', Buffer.from(edited), { headers: { 'Content-Type': 'text/csv' } });
   assert.equal((await hf.api('GET', `/api/items/${it['Quiet Orbit'].id}`)).title, 'Quiet Orbit (Remastered)');
+  // Episodes export with their show's name, season and episode numbers (read-only: importing ignores them).
+  const epCsv = await (await hf.api('POST', '/api/studio/meta/export', { ids: [it.ep.id, it.show.id], columns: ['show', 'season', 'episode', 'title'] }, { raw: true })).text();
+  const [head, epRow, showRow] = epCsv.replace(/^\uFEFF/, '').trim().split(/\r\n/);
+  assert.equal(head, 'id,show,season,episode,title');
+  assert.match(epRow, new RegExp(`^${it.ep.id},${it.show.title},\\d+,\\d+,`));
+  assert.ok(showRow.startsWith(`${it.show.id},${it.show.title},,,`), showRow);
+  const renamed = epCsv.replace(`,${it.show.title},`, ',Some Other Show,');
+  assert.equal((await hf.api('POST', '/api/studio/meta/import', Buffer.from(renamed), { headers: { 'Content-Type': 'text/csv' } })).planned.length, 0);
   // History: undo the import, then undo the undo.
   const hist = await hf.api('GET', '/api/studio/meta/history');
   assert.match(hist[0].label, /Imported/);

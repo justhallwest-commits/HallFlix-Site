@@ -272,8 +272,13 @@ const FROMQ = 'from items i join libraries l on l.id = i.library_id left join it
 const SORTS = { title: 'i.sort_title, i.id', added: 'i.added_at desc, i.id', year: 'i.year desc nulls last, i.sort_title', series: 'coalesce(s.title, p.title, i.sort_title), i.season_no, i.episode_no, i.sort_title' };
 
 // ---------- CSV ----------
-const CSV_COLS = ['id', 'library', 'type', 'path', ...Object.keys(FIELDS)];
-const READONLY = new Set(['library', 'type', 'path']);
+// "show" is the show an episode or season belongs to (or the series/album a comic issue or song is in, or a show's own
+// name), with its season and episode numbers: there to read and sort by, ignored when a file is imported.
+const CSV_COLS = ['id', 'library', 'type', 'show', 'season', 'episode', 'path', ...Object.keys(FIELDS)];
+const READONLY = new Set(['library', 'type', 'show', 'season', 'episode', 'path']);
+const csvValue = (it, c) => (c === 'library' ? it.library_name : c === 'type' ? KINDS[it.kind]
+  : c === 'show' ? it.show_title || it.parent_title || (it.kind === 'show' ? it.title : '')
+    : c === 'season' ? it.season_no : c === 'episode' ? it.episode_no : it[c]);
 const cell = (v) => { const s = Array.isArray(v) ? v.join(' | ') : v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 export function parseCsv(text) {
   const rows = []; let row = [], f = '', qd = false;
@@ -450,7 +455,7 @@ export function routes(r) {
     const order = new Map(ids.map((id, i) => [Number(id), i]));
     items.sort((a, z) => order.get(a.id) - order.get(z.id));
     const lines = [cols.join(',')];
-    for (const it of items) lines.push(cols.map((c) => cell(c === 'library' ? it.library_name : c === 'type' ? KINDS[it.kind] : it[c])).join(','));
+    for (const it of items) lines.push(cols.map((c) => cell(csvValue(it, c))).join(','));
     const body = Buffer.from('﻿' + lines.join('\r\n') + '\r\n');
     res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="hallflix-metadata-${new Date().toISOString().slice(0, 10)}.csv"`, 'Content-Length': body.length, 'Cache-Control': 'no-store' });
     res.end(body);
