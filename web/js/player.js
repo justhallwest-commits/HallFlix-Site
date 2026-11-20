@@ -124,8 +124,8 @@ async function play(p) {
 async function startEntry(p, idx) {
   p.idx = idx;
   const entry = p.queue[idx];
-  // The built-in ident plays right before the feature, after any pre-rolls.
-  if (entry.kind === 'main' && p.wantIdent) { p.wantIdent = false; p.root.classList.remove('waiting', 'preroll'); p.root.classList.add('identing'); await ident(p); if (p.closed) return; }
+  // The built-in ident opens the line-up (before any pre-rolls), or plays right before the feature if set to play last.
+  if (p.wantIdent && (entry.kind === 'main' || p.identFirst)) { p.wantIdent = false; p.root.classList.remove('waiting', 'preroll'); p.root.classList.add('identing'); await ident(p); if (p.closed) return; }
   let slot = p.slots[p.active];
   const other = p.slots[1 - p.active];
   if (other.entry === entry) { // already loaded on the standby element: swap
@@ -747,6 +747,7 @@ export async function openPlayer(itemId, opts = {}) {
     const main = queue[queue.length - 1];
     const wantIdent = opts.cinema ? !queue.some((q) => q.kind === 'ident') : themeNow()?.ident?.enabled !== false && !opts.party && opts.start == null && !(main.resumeAt > 60) && !queue.some((q) => q.kind === 'ident') && !state.preview;
     p.wantIdent = wantIdent;
+    p.identFirst = themeNow()?.ident?.when !== 'last';
     await startEntry(p, 0);
   } catch (e) { fail(p, e.message); }
 }

@@ -515,6 +515,7 @@ const identCard = (theme) => {
           <button class="btn sm danger" data-iddel="${i}" title="Remove">✕</button></div></div>`)
       : html`<p class="muted small">No ident videos yet: the website plays the built-in HallFlix animation.</p>`}</div>
     <div class="row-btns"><button class="btn sm" data-idadd>Upload idents</button></div>
+    ${choose(theme, 'ident.when', 'When it plays', [['first', 'First, before any pre-rolls'], ['last', 'Last, after the pre-rolls and right before the movie or episode']])}
     ${choose(theme, 'ident.order', 'Which one plays', [['shuffle', 'Shuffle (never the same one twice in a row)'], ['order', 'Take turns, in this order']])}
     ${check(theme, 'ident.builtIn', 'Include the built-in HallFlix animation in the mix (website only)')}
     <p class="muted small">MP4 (H.264) or WebM. Uploaded idents also play in the Fire TV, phone and Roku apps. A season can carry its own set.</p></div>`;
