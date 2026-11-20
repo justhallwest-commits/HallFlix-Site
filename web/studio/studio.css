@@ -357,3 +357,7 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 .covkey i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
 .rule-row.builtin .rule-no { background: var(--cyan); color: #06121a; }
 .f[hidden], p[hidden], div[hidden] { display: none !important; }
+.tagfacts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; align-items: start; margin-top: 8px; }
+.tagfacts > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.tagfacts .chip { padding: 2px 9px; border-radius: 99px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); font-size: 12px; }
+.tagfacts .chip.hit { background: var(--cyan); border-color: var(--cyan); color: #06121a; font-weight: 600; }

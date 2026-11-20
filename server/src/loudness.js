@@ -15,6 +15,9 @@ const queue = new Map(); // path → { runtime, sample }
 const failed = new Map(); // path → when it last failed (tried again after a day)
 let busy = false;
 
+/** Real programmes sit between about −40 and −8 LUFS. A reading outside −60…−5 means a silent, damaged or odd audio
+ *  track (or a misread), so it's ignored rather than trusted. */
+export const plausible = (x) => Number.isFinite(x) && x > -60 && x < -5;
 const mtimeOf = (file) => { try { return Math.floor(fs.statSync(file).mtimeMs); } catch { return null; } };
 
 /** The stored loudness of a file, or null when it hasn't been measured (or has changed since). */
@@ -23,7 +26,7 @@ export async function known(file) {
   const m = mtimeOf(file);
   if (m == null) return null;
   const row = await q1('select lufs, mtime from loudness where path = $1', [file]);
-  return row && +row.mtime === m ? row.lufs : null;
+  return row && +row.mtime === m && plausible(row.lufs) ? row.lufs : null;
 }
 
 /** Ask for a file to be measured soon. `sample` measures a few minutes spread through a long file instead of all of it. */
@@ -43,7 +46,7 @@ export function gainFor(clip, feature, offsetDb = 0) {
 
 /** Combine several measurements by their power, as the meter itself would. */
 export function combine(list) {
-  const ok = list.filter((x) => Number.isFinite(x) && x > -60);
+  const ok = list.filter(plausible);
   if (!ok.length) return null;
   return Math.round(10 * Math.log10(ok.reduce((a, x) => a + 10 ** (x / 10), 0) / ok.length) * 10) / 10;
 }
@@ -87,7 +90,7 @@ async function work() {
       const m = mtimeOf(file);
       if (m == null || (await known(file)) != null) continue;
       const lufs = await measure(file, opt);
-      if (lufs == null) { failed.set(file, Date.now()); continue; }
+      if (!plausible(lufs)) { failed.set(file, Date.now()); if (lufs != null) console.warn(`[loudness] ignored ${lufs} LUFS for ${file}`); continue; }
       await q(`insert into loudness (path, mtime, lufs) values ($1, $2, $3)
         on conflict (path) do update set mtime = excluded.mtime, lufs = excluded.lufs, measured_at = now()`, [file, m, lufs]);
     }
@@ -105,7 +108,7 @@ export async function featureLevel(item) {
   if (item.show_id) {
     const r = await q(`select l.lufs from loudness l join items i on i.path = l.path where i.show_id = $1 limit 12`, [item.show_id]);
     const avg = combine(r.map((x) => x.lufs));
-    if (avg != null) return { lufs: avg, measured: true };
+    if (avg != null) return { lufs: avg, measured: true, from: 'show' };
   }
   return { lufs: TYPICAL, measured: false };
 }

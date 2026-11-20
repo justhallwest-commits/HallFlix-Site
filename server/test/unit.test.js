@@ -205,6 +205,8 @@ test('loudness: pre-roll volume against the feature, and a real measurement', as
   assert.equal(L.gainFor(5, -60), 0.05); // never silenced completely
   assert.equal(L.gainFor(null, -24), null);
   assert.equal(L.combine([-20, -20, -70]), -20); // silent samples are left out
+  assert.ok(L.plausible(-23) && !L.plausible(0) && !L.plausible(-70) && !L.plausible(null)); // a 0 LUFS misreading is ignored
+  assert.equal(L.combine([0, -20]), -20);
   assert.equal(L.combine([-20, -30]), -22.6);
   const { execFileSync } = await import('node:child_process');
   const os = await import('node:os'), path = await import('node:path');
@@ -240,4 +242,19 @@ test('pre-roll reach: which titles each tag group and rule can play before, and 
   assert.deepEqual(r.gaps, [{ genre: 'Drama', count: 1 }]);
   // Without the tagged rules, "everyday clips before movies" is general, not chosen for them.
   assert.deepEqual(reachOf([rules[2]], clips, titles).classes, { matched: [], general: [10, 11], none: [12] });
+});
+
+test('shared tags: the most specific shared tag wins', () => {
+  const clips = [{ id: 1, title: 'Swim bump', tags: ['hfswimbump'] }, { id: 2, title: 'Arcane', tags: ['hfarcane'] }, { id: 3, title: 'Everyday', tags: [] }];
+  const rule = { id: 'tags', name: 'Shared tags', builtIn: true, enabled: true, position: -1, count: 1, clips: { mode: 'match', on: ['tags'] }, match: { stop: true } };
+  const target = { kind: 'episode', tags: ['HFArcane', 'HFSwimBump', 'steampunk'], tagCounts: { hfarcane: 1, hfswimbump: 40 } };
+  for (let i = 0; i < 10; i++) {
+    const log = [];
+    const out = pickPrerolls([rule], clips, target, { max: 2 }, new Date(), Math.random, {}, log);
+    assert.deepEqual(out.map((c) => c.id), [2]);
+    assert.ok(log.some((x) => /“hfarcane” is on 1 title, “hfswimbump” is on 40 titles/.test(x.note)));
+  }
+  // Two matching clips with count 2: the specific one first, then the next.
+  const two = pickPrerolls([{ ...rule, count: 2 }], clips, target, { max: 2 }, new Date(), Math.random, {});
+  assert.deepEqual(two.map((c) => c.id), [2, 1]);
 });

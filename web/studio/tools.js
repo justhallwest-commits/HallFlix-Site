@@ -944,6 +944,17 @@ export async function prerolls(main, k) {
     return false;
   };
   const count = (t) => P.clips.filter((c) => c.tags.includes(t)).length;
+  // A title's tags by where they come from: an episode has its own tags and its show's, and both count.
+  const tagFacts = (r) => {
+    const f = r.facts, shared = new Set(r.clips.flatMap((c) => c.shares || []).map((t) => t.toLowerCase()));
+    const chips = (list) => (list.length ? list.map((t) => html`<span class="chip ${shared.has(t.toLowerCase()) ? 'hit' : ''}">${t}</span>`) : html`<span class="muted small">none</span>`);
+    if (f.kind !== 'episode') return html`<div class="tagfacts"><span class="muted small">Tags</span><div>${chips(f.ownTags || f.tags || [])}</div></div>`;
+    const extra = (f.ownTags || []).filter((t) => !(f.showTags || []).map((x) => x.toLowerCase()).includes(t.toLowerCase()));
+    return html`<div class="tagfacts"><span class="muted small">Show’s tags (${f.showTitle})</span><div>${chips(f.showTags || [])}</div>
+      <span class="muted small">This episode’s own tags</span><div>${chips(f.ownTags || [])}</div></div>
+      ${(f.ownTags || []).length ? html`<p class="muted small" style="margin-top:6px">Both lists count before an episode. ${extra.length ? html`<b style="color:var(--text)">${plural(extra.length, 'tag')} here ${extra.length === 1 ? 'isn’t' : 'aren’t'} on the show</b> (often copied in by an import), so editing the show alone won’t remove ${extra.length === 1 ? 'it' : 'them'}.` : 'They’re copies of the show’s tags.'}</p>
+        <div class="tools"><button class="btn sm" data-cleartags="one">Clear this episode’s tags</button><button class="btn sm" data-cleartags="all">Clear tags on every episode of ${f.showTitle}</button></div>` : ''}`;
+  };
   const drawTest = () => {
     const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
     main.innerHTML = String(frame(html`<div class="card"><h2>What would play?</h2><p class="muted small">Pick a movie or episode, and optionally who's watching and when (handy for checking a Christmas schedule in July). Nothing is counted as played.</p>
@@ -971,10 +982,19 @@ export async function prerolls(main, k) {
       $('[data-tq]', main).value = hitItem.label;
       try {
         const r = await api('POST', '/api/studio/prerolls/test', { itemId: hitItem.id, profileId: +$('[data-tprof]', main).value || null, at: $('[data-tat]', main).value, resume: $('[data-tres]', main).checked });
-        $('[data-tout]', main).innerHTML = String(html`<h3 style="margin:16px 0 6px">${r.title}</h3><p class="muted small">${[r.facts.genres.join(', '), r.facts.studios.slice(0, 3).join(', '), r.facts.rating, r.facts.tags?.length ? `Tags: ${r.facts.tags.join(', ')}` : ''].filter(Boolean).join(' · ') || 'No genre, studio, rating or tags'}</p>
-          ${r.clips.length ? html`<ol class="tl">${r.clips.map((c) => html`<li><b>${c.title}</b> <span class="muted">· ${k.mins(c.seconds)} · from “${c.rule}”${c.volume != null ? ` · at ${Math.round(c.volume * 100)}% volume` : ''}</span></li>`)}<li class="muted">then the title</li></ol><div class="tools"><button class="btn sm" data-pvline>▶ Preview the line-up</button></div>` : html`<p><b>No pre-roll would play.</b></p>`}
+        $('[data-tout]', main).innerHTML = String(html`<h3 style="margin:16px 0 6px">${r.title}</h3><p class="muted small">${[r.facts.genres.join(', '), r.facts.studios.slice(0, 3).join(', '), r.facts.rating].filter(Boolean).join(' · ') || 'No genre, studio or rating'}</p>
+          ${tagFacts(r)}
+          ${r.clips.length ? html`<ol class="tl">${r.clips.map((c) => html`<li><b>${c.title}</b> <span class="muted">· ${k.mins(c.seconds)} · from “${c.rule}”${c.shares?.length ? html` · shares <b style="color:var(--text)">${c.shares.join(', ')}</b>` : ''}${c.volume != null ? ` · at ${Math.round(c.volume * 100)}% volume` : ''}</span></li>`)}<li class="muted">then the title</li></ol><div class="tools"><button class="btn sm" data-pvline>▶ Preview the line-up</button></div>` : html`<p><b>No pre-roll would play.</b></p>`}
           <h3 style="margin:14px 0 6px">Why</h3>${r.log.map((x) => html`<div class="row"><div class="grow">${x.rule ? html`<b>${x.rule}</b>` : ''}<span style="white-space:normal">${x.note}</span></div></div>`)}`);
         const pv = $('[data-pvline]', main); if (pv) pv.onclick = () => preview(r.clips, `Before ${r.title}`, `Then: ${r.title}`);
+        for (const b of $$('[data-cleartags]', main)) b.onclick = () => {
+          const all = b.dataset.cleartags === 'all';
+          k.confirmBox(all ? `Clear the tags on every episode of ${r.facts.showTitle}?` : 'Clear this episode’s own tags?',
+            `${all ? 'Every season and episode' : 'The episode'} will go by the show’s tags only. You can undo this in Metadata → History.`, 'Clear tags', async () => {
+              const out = await api('POST', '/api/studio/prerolls/episode-tags/clear', { itemId: hitItem.id, all });
+              toast(`Cleared tags on ${plural(out.cleared, all ? 'season or episode' : 'episode')}`); $('[data-trun]', main).click();
+            });
+        };
       } catch (e) { k.fail(e); }
     };
   };
