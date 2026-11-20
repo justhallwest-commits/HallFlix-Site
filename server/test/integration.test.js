@@ -542,13 +542,24 @@ test('skip marks, scrub previews, the ident, evening look, year in review and wa
   const meta = JSON.parse(await ffprobeJson(Buffer.from(await sheet.arrayBuffer())));
   assert.deepEqual([meta.streams[0].width, meta.streams[0].height], [th.cols * th.w, th.rows * th.h]);
 
-  // An uploaded ident plays last before the feature, and not when resuming or auto-playing the next episode.
+  // An uploaded ident plays before the pre-rolls (or last, if set), and not when resuming or auto-playing the next episode.
   const up = await hf.api('POST', '/api/studio/upload?name=ident.mp4', fs.readFileSync(path.join(media, 'Prerolls', 'hallflix-ident.mp4')));
   const theme = (await hf.api('GET', '/api/studio/look')).theme;
   await hf.api('PUT', '/api/studio/theme', { theme: { ...theme, ident: { enabled: true, video: up.url }, night: { enabled: true, from: '00:00', to: '23:59', theme: { colors: { accent: '#e8b84a' } } } } });
+  // It opens the line-up, before any pre-rolls…
+  await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: true, max: 1 });
+  const all = await hf.api('POST', '/api/studio/prerolls/rules', { name: 'Any clip', clips: { mode: 'all' }, position: 99 });
   let q = await play(signal.id);
-  assert.deepEqual(q.slice(-2).map((x) => [x.kind, x.mode]), [['ident', 'direct'], ['main', q.at(-1).mode]]);
-  assert.equal(q.at(-2).url, up.url);
+  assert.deepEqual(q.map((x) => x.kind), ['ident', 'preroll', 'main']);
+  assert.equal(q[0].url, up.url);
+  // …or, set to play last, right before the feature.
+  await hf.api('PUT', '/api/studio/theme', { theme: { ...theme, ident: { enabled: true, video: up.url, when: 'last' } } });
+  q = await play(signal.id);
+  assert.deepEqual(q.map((x) => x.kind), ['preroll', 'ident', 'main']);
+  await hf.api('DELETE', `/api/studio/prerolls/rules/${all.id}`);
+  await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: false });
+  await hf.api('PUT', '/api/studio/theme', { theme: { ...theme, ident: { enabled: true, video: up.url }, night: { enabled: true, from: '00:00', to: '23:59', theme: { colors: { accent: '#e8b84a' } } } } });
+  q = await play(signal.id);
   assert.ok(!(await play(signal.id, { prerolls: false })).some((x) => x.kind === 'ident'));
   assert.ok(!(await play(signal.id, { start: 90 })).some((x) => x.kind === 'ident'));
 

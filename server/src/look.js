@@ -47,7 +47,7 @@ export const DEFAULT_THEME = {
   profileColors: true, // each profile's colour tints its own session
   // The ident before a feature. `videos` are uploaded idents ({ url, name }), played shuffled or in turn; `builtIn` keeps the
   // built-in animation in the mix (website only). `video` is the older single-video setting, still honoured.
-  ident: { enabled: true, video: '', videos: [], order: 'shuffle', builtIn: false },
+  ident: { enabled: true, video: '', videos: [], order: 'shuffle', builtIn: false, when: 'first' }, // when: 'first' (before any pre-rolls) or 'last' (right before the feature)
   night: { enabled: false, from: '20:00', to: '06:00', theme: {} }, // a second look for the evening, by the viewer's clock
   // Rows on Home and in every library (a library can override any of it): how many titles each row shows (0 = all),
   // how many rows show before "Show more rows" (0 = all), arrows or a visible scroll bar under each row, and whether the

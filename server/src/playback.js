@@ -137,13 +137,14 @@ export function routes(r) {
         try { const e = await entryFor(clip, body.caps, {}, 'preroll'); if (clip._gain != null) e.gain = clip._gain; queue.push(e); } catch { /* unplayable clip: skip it */ }
       }
     }
-    // The HallFlix ident (a logo card) plays last before the feature. An uploaded video reaches every app;
-    // without one, the web app draws its own animation.
+    // The HallFlix ident (a logo card) opens the line-up, before any pre-rolls, or (if set) plays last, right before the
+    // feature. An uploaded video reaches every app; without one, the web app draws its own animation.
     const ident = (await currentLook()).theme.ident;
     const identUrl = item.kind !== 'clip' && body.prerolls !== false && resumeAt < 60 && ident?.enabled ? await pickIdent(ident) : '';
     if (identUrl) {
       const gain = await prerolls.volumeFor(path.join(cfg.dataDir, 'uploads', identUrl.slice(9)), item);
-      queue.push({ kind: 'ident', itemId: 0, title: '', duration: 0, container: 'mp4', mode: 'direct', url: identUrl, audio: [], subs: [], ...(gain != null ? { gain } : {}) });
+      const entry = { kind: 'ident', itemId: 0, title: '', duration: 0, container: 'mp4', mode: 'direct', url: identUrl, audio: [], subs: [], ...(gain != null ? { gain } : {}) };
+      if (ident.when === 'last') queue.push(entry); else queue.unshift(entry);
     }
     const main = await entryFor(item, body.caps, { audio: body.audio, quality: body.quality }, 'main');
     main.resumeAt = resumeAt;
