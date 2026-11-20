@@ -18,6 +18,7 @@ import * as plugins from './plugins.js';
 import * as scan from './scan.js';
 import * as tmdb from './tmdb.js';
 import * as guard from './guard.js';
+import * as access from './access.js';
 import * as meta from './meta.js';
 import * as art from './art.js';
 import * as prerollsMod from './prerolls.js';
@@ -46,7 +47,11 @@ r.get('/api/boot', async (ctx) => {
     profile: profile ? auth.publicProfile(profile) : null,
   };
   if (profile) out.media = { ratings: await ratingsMod.clientSettings(), subtitles: await subtitlesMod.clientSettings() };
-  if (profile) out.libraries = await q(`select id, name, kind from libraries where kind <> 'prerolls' order by position, id`);
+  if (profile) {
+    const acc = await access.forProfile(profile);
+    out.libraries = (await q(`select id, name, kind from libraries where kind <> 'prerolls' order by position, id`)).filter((l) => !acc.libraries.includes(+l.id));
+    out.access = { off: acc.off };
+  }
   else if (!setup && (await getSetting('showProfilesOnLogin', true))) {
     out.profiles = (await q('select id, name, avatar, color from profiles order by id'));
   }
@@ -99,6 +104,7 @@ shelf.routes(r);
 more.routes(r);
 meta.routes(r);
 guard.routes(r);
+access.routes(r);
 art.routes(r);
 prerollsMod.routes(r);
 profilesMod.routes(r);
@@ -197,7 +203,12 @@ async function handle(req, res) {
         if (m.opts.admin && !ctx.profile.is_admin) throw new HttpError(403, 'Only an admin can do that');
         // Content Guard: titles hidden from this profile can't be listed, opened or played.
         if (!m.opts.admin && !pathname.startsWith('/api/studio/')) {
-          ctx.hidden = await guard.hiddenFor(ctx.profile);
+          // Menu access: features and libraries an admin turned off for this profile.
+          ctx.access = await access.forProfile(ctx.profile);
+          if (access.refuse(req.method, url.pathname, ctx.access)) throw new HttpError(403, 'That isn’t turned on for your profile');
+          const lib = access.libraryOf(url.pathname);
+          if (lib && ctx.access.libraries.includes(lib)) throw new HttpError(404, 'Library not found');
+          ctx.hidden = await guard.hiddenFor(ctx.profile, ctx.access);
           if (ctx.hidden) {
             const body = guard.needsBody(req.method, url.pathname) ? await readJson(req) : null;
             if (guard.blocked(url.pathname, ctx.params, body, ctx.hidden)) throw new HttpError(404, 'Not found');

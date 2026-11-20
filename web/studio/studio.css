@@ -361,3 +361,19 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 .tagfacts > div { display: flex; flex-wrap: wrap; gap: 4px; }
 .tagfacts .chip { padding: 2px 9px; border-radius: 99px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); font-size: 12px; }
 .tagfacts .chip.hit { background: var(--cyan); border-color: var(--cyan); color: #06121a; font-weight: 600; }
+
+/* Profiles → Menu access grid */
+.ma-wrap { overflow-x: auto; margin-top: 10px; }
+.ma-t { border-collapse: collapse; min-width: 100%; }
+.ma-t th, .ma-t td { padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.ma-h { text-align: center; vertical-align: bottom; font-weight: 600; min-width: 96px; }
+.ma-h > * { display: block; margin: 0 auto; }
+.ma-h .avatar { width: 34px; height: 34px; margin-bottom: 4px; }
+.ma-quick { font-size: 12px; font-weight: 400; margin-top: 2px; }
+.ma-r { text-align: left; font-weight: 500; white-space: nowrap; }
+.ma-r small { font-weight: 400; }
+.ma-c { text-align: center; }
+.ma-c input { width: 18px; height: 18px; accent-color: var(--cyan); cursor: pointer; }
+.ma-all { color: var(--muted); }
+.ma-g td { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding-top: 16px; border-bottom: 0; }
+.ma-t tbody tr:not(.ma-g):hover { background: rgba(255, 255, 255, 0.03); }

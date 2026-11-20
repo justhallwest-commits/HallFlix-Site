@@ -266,7 +266,12 @@ test('even volume: pre-rolls come turned down to the level of the title after th
   assert.equal(queue.at(-1).gain, undefined);
   const pr = await hf.api('GET', '/api/studio/prerolls');
   assert.ok(pr.clips.every((c) => typeof c.lufs === 'number'));
-  const t = await hf.api('POST', '/api/studio/prerolls/test', { itemId: items['Night Drive'].id });
+  let t;
+  for (let i = 0; i < 60; i++) { // the movie itself is measured in the background too
+    t = await hf.api('POST', '/api/studio/prerolls/test', { itemId: items['Night Drive'].id });
+    if (t.log.some((x) => /Even volume: the movie is about/.test(x.note))) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
   assert.ok(t.clips.every((c) => c.volume > 0.35 && c.volume < 0.7));
   assert.ok(t.log.some((x) => /Even volume: the movie is about -?\d/.test(x.note)));
   await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: false, evenVolume: false, volumeOffset: 0 });
@@ -387,6 +392,40 @@ test('episode tags: a tag taken off a show comes off its episodes, Test shows wh
   await hf.api('PUT', `/api/studio/prerolls/clips/${spooky.id}`, { tags: ['halloween'] });
   await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: false });
   await hf.api('POST', `/api/studio/meta/item/${show}`, { values: { tags: [] } });
+});
+
+test('menu access: an admin turns libraries and menu features off for a profile, and the server enforces it', async () => {
+  const admin = hf.getCookie();
+  const me = (await hf.api('GET', '/api/boot')).profile;
+  const kid = await hf.api('POST', '/api/studio/profiles', { name: 'Menu Kid', password: '1357' });
+  const A = await hf.api('GET', '/api/studio/access');
+  assert.ok(A.features.some((f) => f.key === 'search') && A.profiles.some((p) => p.id === kid.id));
+  const movies = A.libraries.find((l) => l.kind === 'movies');
+  const saved = await hf.api('PUT', '/api/studio/access', { access: { [kid.id]: { libraries: [movies.id, 99999], off: ['search', 'timeline', 'editProfile', 'bogus'] }, [me.id]: { off: ['search'] } } });
+  assert.deepEqual(saved.access, { [kid.id]: { libraries: [movies.id], off: ['search', 'timeline', 'editProfile'] } }); // admins can't be limited
+  const { token } = await hf.api('POST', '/api/login', { profileId: kid.id, password: '1357' });
+  hf.setCookie(admin);
+  const as = async (method, url, body) => { const r = await fetch(`${hf.base}${url}`, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, body: r.headers.get('content-type')?.includes('json') ? await r.json() : null }; };
+  const boot = (await as('GET', '/api/boot')).body;
+  assert.ok(!boot.libraries.some((l) => l.id === movies.id));
+  assert.deepEqual(boot.access.off, ['search', 'timeline', 'editProfile']);
+  assert.equal((await as('GET', `/api/library/${movies.id}`)).status, 404);
+  assert.equal((await as('GET', `/api/items/${items['Night Drive'].id}`)).status, 404);
+  const home = (await as('GET', '/api/home')).body;
+  assert.ok(!JSON.stringify(home).includes('"Night Drive"'));
+  assert.ok(!(home.libraries || []).some((l) => l.id === movies.id));
+  assert.equal((await as('GET', '/api/search?q=Night')).status, 403);
+  assert.equal((await as('GET', '/api/timeline')).status, 403);
+  assert.equal((await as('PUT', '/api/profiles/me', { name: 'Renamed' })).status, 403);
+  assert.equal((await as('GET', '/api/wrapped')).status, 200); // still on
+  // The admin still sees everything.
+  assert.equal((await hf.api('GET', `/api/library/${movies.id}`)).$status ?? 200, 200);
+  assert.ok((await hf.api('GET', '/api/boot')).libraries.some((l) => l.id === movies.id));
+  // Turned back on.
+  await hf.api('PUT', '/api/studio/access', { access: {} });
+  assert.equal((await as('GET', `/api/items/${items['Night Drive'].id}`)).status, 200);
+  assert.equal((await as('GET', '/api/search?q=Night')).status, 200);
+  await hf.api('DELETE', `/api/studio/profiles/${kid.id}`);
 });
 
 test('progress: continue watching, finishing, and what is up next', async () => {

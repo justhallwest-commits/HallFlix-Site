@@ -185,19 +185,22 @@ export function syncArrows(...rows) {
 // Which sidebar icon each kind of library uses (TV).
 const KIND_ICON = { movies: 'film', shows: 'tv', books: 'book', comics: 'comic', music: 'music', audiobooks: 'book' };
 
+/** Whether a menu feature is on for this profile (an admin can turn features off per profile in Studio → Profiles). */
+export const can = (key) => !(state.boot?.access?.off || []).includes(key);
+
 export function shell() {
   const p = state.profile;
   app().innerHTML = String(html`
     <header class="nav"><a class="logo" href="#/" aria-label="Home"><img data-site-logo src="${logoUrl()}" alt="${themeNow()?.siteName || 'HallFlix'}"></a>
-      <nav class="links"><a href="#/" data-nav="home"><i class="ico">${icons.home}</i><span>Home</span></a>${state.libraries.map((l) => html`<a href="#/library/${l.id}" data-nav="library-${l.id}"><i class="ico">${KIND_ICON[l.kind] ? icons[KIND_ICON[l.kind]] : icons.film}</i><span>${l.name}</span></a>`)}<a href="#/timeline" data-nav="timeline"><i class="ico">${icons.clock}</i><span>Timeline</span></a><a href="#/me" data-nav="me"><i class="ico">${icons.user}</i><span>My HallFlix</span></a></nav>
-      <button class="btn round navbtn" data-surprise aria-label="Surprise me" title="Surprise me">${icons.dice}</button>
-      <div class="search"><i class="ico" aria-hidden="true">${icons.search}</i><input type="search" placeholder="Titles, people, genres" aria-label="Search" autocomplete="off">${browse.canListen() ? html`<button class="mic" data-mic aria-label="Search by voice" title="Search by voice">${icons.mic}</button>` : ''}</div>
+      <nav class="links"><a href="#/" data-nav="home"><i class="ico">${icons.home}</i><span>Home</span></a>${state.libraries.map((l) => html`<a href="#/library/${l.id}" data-nav="library-${l.id}"><i class="ico">${KIND_ICON[l.kind] ? icons[KIND_ICON[l.kind]] : icons.film}</i><span>${l.name}</span></a>`)}${can('timeline') ? html`<a href="#/timeline" data-nav="timeline"><i class="ico">${icons.clock}</i><span>Timeline</span></a>` : ''}${can('me') ? html`<a href="#/me" data-nav="me"><i class="ico">${icons.user}</i><span>My HallFlix</span></a>` : ''}</nav>
+      ${can('surprise') ? html`<button class="btn round navbtn" data-surprise aria-label="Surprise me" title="Surprise me">${icons.dice}</button>` : ''}
+      ${can('search') ? html`<div class="search"><i class="ico" aria-hidden="true">${icons.search}</i><input type="search" placeholder="Titles, people, genres" aria-label="Search" autocomplete="off">${browse.canListen() ? html`<button class="mic" data-mic aria-label="Search by voice" title="Search by voice">${icons.mic}</button>` : ''}</div>` : html`<div class="search-gap"></div>`}
       <button class="avatar" style="${avatarStyle(p)}" aria-label="Profile menu" data-menu>${p.avatar ? html`<img src="${p.avatar}" alt="" style="width:100%;height:100%;border-radius:8px;object-fit:cover">` : p.name[0].toUpperCase()}</button>
     </header><main id="view"></main>`);
   initRows();
   addEventListener('scroll', () => $('.nav')?.classList.toggle('solid', scrollY > 30), { passive: true });
   let timer;
-  $('.search input').addEventListener('input', (e) => {
+  $('.search input')?.addEventListener('input', (e) => {
     clearTimeout(timer);
     const qv = e.target.value.trim();
     timer = setTimeout(() => { location.hash = qv ? `#/search/${encodeURIComponent(qv)}` : '#/'; }, 160);
@@ -269,8 +272,8 @@ function toggleMenu() {
   if ($('.menu')) return $('.menu').remove();
   const p = state.profile;
   $('.nav').insertAdjacentHTML('beforeend', String(html`<div class="menu"><div class="who">Signed in as <b>${p.name}</b></div>
-    <button data-do="profile">Edit profile</button><button data-do="switch">Switch profile</button>${p.admin ? html`<a href="/studio">Open the Studio</a><a href="/studio#profiles">Manage profiles</a>` : ''}
-    <a href="#/me">My HallFlix</a><a href="#/remote">Remote for another screen</a><a href="#/wrapped">Your year in review</a>
+    ${can('editProfile') ? html`<button data-do="profile">Edit profile</button>` : ''}<button data-do="switch">Switch profile</button>${p.admin ? html`<a href="/studio">Open the Studio</a><a href="/studio#profiles">Manage profiles</a>` : ''}
+    ${can('me') ? html`<a href="#/me">My HallFlix</a>` : ''}${can('remote') ? html`<a href="#/remote">Remote for another screen</a>` : ''}${can('wrapped') ? html`<a href="#/wrapped">Your year in review</a>` : ''}
     ${themeNow()?.previews !== false && !document.body.classList.contains('tv') ? html`<button data-do="previews">${more.previewsOn() ? 'Turn previews off' : 'Turn previews on'}</button>` : ''}${feel.soundsAvailable() ? html`<button data-do="sounds">${feel.soundsOn() ? 'Turn sounds off' : 'Turn sounds on'}</button>` : ''}
     ${window.HallFlixNative ? html`<button data-do="server">Change server</button>` : ''}<button data-do="signout">Sign out</button></div>`));
   $('.menu button').focus();
@@ -280,7 +283,11 @@ function toggleMenu() {
 function setNav(key) { for (const a of $$('.nav .links a')) a.classList.toggle('on', a.dataset.nav === key); }
 
 // ---------- pages ----------
+// Pages behind a menu feature: a profile with the feature turned off lands on Home instead.
+const FEATURE_PAGE = { me: 'me', timeline: 'timeline', search: 'search', remote: 'remote', wrapped: 'wrapped', pair: 'remote' };
 export async function show(name, arg) {
+  if (FEATURE_PAGE[name] && !can(FEATURE_PAGE[name])) { location.replace('#/'); return; }
+  if (name === 'library' && state.libraries.length && !state.libraries.some((l) => l.id === +arg)) { location.replace('#/'); return; }
   clearInterval(heroTimer);
   stale = false;
   const keepY = base && base.name === name && base.arg === arg ? scrollY : 0;

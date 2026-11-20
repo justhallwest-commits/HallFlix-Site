@@ -3,12 +3,13 @@
 // lists never show a hidden title, and asking for one directly (details, playback, files, covers) answers "not found".
 import { q, q1, getSetting, setSetting } from './db.js';
 import { HttpError, readJson } from './http.js';
+import * as access from './access.js';
 
 const VIDEO = new Set(['movie', 'show', 'season', 'episode']);
 let version = 0; // bumped whenever titles or rules change
 const cache = new Map(); // rule-set key -> { version, at, hidden: Map<id, reason> }
 
-export const changed = () => { version++; };
+export const changed = () => { version++; access.changed(); };
 export async function rules() { return (await getSetting('guard', null))?.rules || []; }
 export async function saveRules(list) { await setSetting('guard', { rules: list }); changed(); }
 
@@ -53,13 +54,25 @@ async function facts() {
 
 const activeFor = (list, profile) => list.filter((r) => r.enabled !== false && (r.profiles || []).map(Number).includes(profile.id));
 
-/** Map of hidden item id -> reason for this profile, or null when no rule applies to it. */
-export async function hiddenFor(profile) {
+/** Map of hidden item id -> reason for this profile, or null when nothing is hidden from it. Covers parental-control
+ *  rule sets and libraries turned off for the profile in Menu access (`acc`, from access.forProfile). */
+export async function hiddenFor(profile, acc = null) {
   if (!profile) return null;
   const mine = activeFor(await rules(), profile);
-  if (!mine.length) return null;
-  return evaluate(mine);
+  const libs = acc?.libraries || [];
+  if (!mine.length && !libs.length) return null;
+  const base = mine.length ? await evaluate(mine) : new Map();
+  if (!libs.length) return base;
+  const key = `${mine.map((r) => r.name).join('|')}#${[...libs].sort().join(',')}`;
+  const hit = merged.get(key);
+  if (hit && hit.version === version && hit.base === base && Date.now() - hit.at < 5 * 60e3) return hit.hidden;
+  const hidden = new Map(base);
+  for (const id of await access.itemsIn(libs)) if (!hidden.has(id)) hidden.set(id, 'Library turned off for this profile');
+  if (merged.size > 30) merged.clear();
+  merged.set(key, { version, base, at: Date.now(), hidden });
+  return hidden;
 }
+const merged = new Map();
 export async function evaluate(list) {
   const key = JSON.stringify(list.map((r) => [r.blockTags, r.blockGenres, r.blockRatings, r.allowTags, !!r.hideUnrated, r.name]));
   const hit = cache.get(key);

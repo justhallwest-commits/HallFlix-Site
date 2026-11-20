@@ -2017,3 +2017,4 @@ body.tv .sheet .cast { padding: 10px 6px 14px !important; }
 
 /* Only what's on screen (web/js/lean.js): a title far off screen is a plain block of the same height. */
 .grid > .lean-ph { min-width: 0; }
+.search-gap { flex: 1; }
