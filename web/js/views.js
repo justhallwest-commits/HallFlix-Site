@@ -12,6 +12,7 @@ import { startLoginMusic, fadeOutLoginMusic, musicNow } from './loginmusic.js';
 /** How the welcome ident sounds: its own audio, silent with the sign-in music carrying on, or silent. */
 export const splashAudio = (S = {}) => (['own', 'music', 'silent'].includes(S.audio) ? S.audio : S.sound === false ? 'silent' : 'own');
 import { initRows } from './rows.js';
+import { effectsOff, startEffect } from './effects.js';
 
 export const extraRows = []; // rows added by plugins through HallFlix.addHomeRow()
 const app = () => $('#app');
@@ -262,6 +263,13 @@ async function onClick(e) {
   const act = t.closest('[data-do]')?.dataset.do;
   if (act === 'signout' || act === 'switch') { await api('POST', '/api/logout'); location.hash = '#/'; location.reload(); }
   if (act === 'server') window.HallFlixNative?.changeServer();
+  if (act === 'fx') {
+    try { localStorage.setItem('hf_fx', effectsOff() ? 'on' : 'off'); } catch { /* private mode */ }
+    $('.menu')?.remove();
+    const t = themeNow() || {};
+    startEffect(effectsOff() ? 'none' : t.effect || 'none', t.effectDensity);
+    toast(effectsOff() ? 'Seasonal effects off on this device' : 'Seasonal effects on'); return;
+  }
   if (act === 'previews') { more.setPreviews(!more.previewsOn()); $('.menu')?.remove(); toast(more.previewsOn() ? 'Previews on' : 'Previews off'); }
   if (act === 'sounds') { feel.setSounds(!feel.soundsOn()); $('.menu')?.remove(); toast(feel.soundsOn() ? 'Sounds on' : 'Sounds off'); }
   if (act === 'profile') { $('.menu')?.remove(); profileEdit.editProfile(); return; }
@@ -274,7 +282,7 @@ function toggleMenu() {
   $('.nav').insertAdjacentHTML('beforeend', String(html`<div class="menu"><div class="who">Signed in as <b>${p.name}</b></div>
     ${can('editProfile') ? html`<button data-do="profile">Edit profile</button>` : ''}<button data-do="switch">Switch profile</button>${p.admin ? html`<a href="/studio">Open the Studio</a><a href="/studio#profiles">Manage profiles</a>` : ''}
     ${can('me') ? html`<a href="#/me">My HallFlix</a>` : ''}${can('remote') ? html`<a href="#/remote">Remote for another screen</a>` : ''}${can('wrapped') ? html`<a href="#/wrapped">Your year in review</a>` : ''}
-    ${themeNow()?.previews !== false && !document.body.classList.contains('tv') ? html`<button data-do="previews">${more.previewsOn() ? 'Turn previews off' : 'Turn previews on'}</button>` : ''}${feel.soundsAvailable() ? html`<button data-do="sounds">${feel.soundsOn() ? 'Turn sounds off' : 'Turn sounds on'}</button>` : ''}
+    ${themeNow()?.previews !== false && !document.body.classList.contains('tv') ? html`<button data-do="previews">${more.previewsOn() ? 'Turn previews off' : 'Turn previews on'}</button>` : ''}${themeNow()?.effect && themeNow().effect !== 'none' && !document.body.classList.contains('tv') ? html`<button data-do="fx">${effectsOff() ? 'Turn seasonal effects on' : 'Turn seasonal effects off'}</button>` : ''}${feel.soundsAvailable() ? html`<button data-do="sounds">${feel.soundsOn() ? 'Turn sounds off' : 'Turn sounds on'}</button>` : ''}
     ${window.HallFlixNative ? html`<button data-do="server">Change server</button>` : ''}<button data-do="signout">Sign out</button></div>`));
   $('.menu button').focus();
   for (const a of $$('.menu a')) a.addEventListener('click', () => $('.menu')?.remove());

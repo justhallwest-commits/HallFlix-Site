@@ -205,7 +205,11 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   $('meta[name=theme-color]')?.setAttribute('content', colors.bg);
   document.title = t.siteName || 'HallFlix';
   for (const img of $$('img[data-site-logo]')) img.src = logoUrl();
-  startEffect(isTV() && TV.effects !== true ? 'none' : t.effect || 'none');
+  startEffect(isTV() && TV.effects !== true ? 'none' : t.effect || 'none', t.effectDensity);
+  // Custom CSS from Studio (the everyday look plus any running season's), laid over everything else.
+  let css = document.getElementById('theme-css');
+  if (!css) { css = document.createElement('style'); css.id = 'theme-css'; document.head.appendChild(css); }
+  if (css.textContent !== (t.css || '')) css.textContent = t.css || '';
   styleLogin(t);
   emit('look', look);
 }

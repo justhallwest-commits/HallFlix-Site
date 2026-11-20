@@ -428,6 +428,15 @@ test('menu access: an admin turns libraries and menu features off for a profile,
   await hf.api('DELETE', `/api/studio/profiles/${kid.id}`);
 });
 
+test('seasons: a season can start and end on holidays that move (Easter, Thanksgiving)', async () => {
+  const saved = await hf.api('POST', '/api/studio/seasons', { name: 'Easter test', starts: 'easter-7', ends: 'easter+1', enabled: false, look: { theme: { effect: 'eggs' } } });
+  assert.equal(saved.starts, 'easter-7');
+  assert.equal((await hf.api('POST', '/api/studio/seasons', { name: 'Bad', starts: 'xmas', ends: '12-26' })).$status, 400);
+  const look = await hf.api('GET', '/api/studio/look');
+  assert.ok(look.dateRules.some(([r]) => r === 'easter') && look.options.effects.includes('fireworks') && look.options.densities.includes('heavy'));
+  await hf.api('DELETE', `/api/studio/seasons/${saved.id}`);
+});
+
 test('progress: continue watching, finishing, and what is up next', async () => {
   let home = await hf.api('GET', '/api/home');
   assert.equal(home.rows[0].id, 'continue'); assert.equal(home.rows[0].items[0].title, 'Night Drive');

@@ -131,7 +131,7 @@ export function routes(r) {
 
   // ----- look
   r.get('/api/studio/look', async () => ({
-    defaults: look.DEFAULT_THEME, theme: await getSetting('theme', {}), options: look.OPTIONS,
+    defaults: look.DEFAULT_THEME, theme: await getSetting('theme', {}), options: look.OPTIONS, dateRules: look.DATE_RULES,
     presets: [...look.PRESETS, ...(await plugins.listPlugins()).filter((p) => p.enabled).flatMap((p) => p.themes)],
     seasons: await q('select * from seasons order by starts, id'),
     // Each library with a recent picture from it, for the Studio's mini tiles (where logos are dragged into place).
@@ -158,7 +158,7 @@ export function routes(r) {
   }, admin);
   r.post('/api/studio/seasons', async ({ req }) => {
     const b = await readJson(req);
-    if (!b.name?.trim() || !/^\d\d-\d\d$/.test(b.starts) || !/^\d\d-\d\d$/.test(b.ends)) throw new HttpError(400, 'A season needs a name, a start date and an end date');
+    if (!b.name?.trim() || !look.validDate(b.starts) || !look.validDate(b.ends)) throw new HttpError(400, 'A season needs a name, a start date and an end date');
     if (b.id) return q1('update seasons set name=$1, starts=$2, ends=$3, enabled=$4, look=$5::jsonb where id=$6 returning *', [b.name.trim(), b.starts, b.ends, b.enabled !== false, JSON.stringify(b.look || {}), b.id]);
     return q1('insert into seasons (name, starts, ends, enabled, look) values ($1,$2,$3,$4,$5::jsonb) returning *', [b.name.trim(), b.starts, b.ends, b.enabled !== false, JSON.stringify(b.look || {})]);
   }, admin);
