@@ -29,7 +29,11 @@ export const DEFAULT_THEME = {
     music: { enabled: false, tracks: [], volume: 0.5, shuffle: false, fade: 3, button: 'corner', showTitle: true },
     tileShape: 'theme', tileMotion: true, tileSize: 132, tileColumns: 0, buttons: 'links', manualButton: true, manualLabel: '', phoneLabel: '', footer: '', footerLink: '' },
   logo: { image: '', height: 46, favicon: '' },
-  effect: 'none', // none | snow | embers | hearts | leaves | confetti | stars | bats
+  effect: 'none', // none | snow | snowflakes | embers | hearts | leaves | petals | clovers | eggs | fireflies | fireworks | confetti | stars | bats
+  effectDensity: 'normal', // light | normal | heavy
+  // Custom CSS laid over everything (the way Jellyfin themes work). A season adds its own after it. Studio lists the
+  // variables (--accent, --bg, --radius…) so a few lines go a long way.
+  css: '',
   artColor: true, // the accent follows the artwork in focus
   heroMotion: 'clip', // none | pan | clip | trailer: what the spotlight does after a moment (clip = a piece of the film itself; trailer = YouTube)
   // Spotlight clips: cut from a random moment between `start` and `end` seconds into the film, `length` seconds long.
@@ -107,12 +111,101 @@ export const PRESETS = [
   P('Autumn', 'Burnt orange and maple with falling leaves', {
     colors: { bg: '#120c07', surface: '#21160d', text: '#fbf1e4', muted: '#c2ab93', accent: '#e07b2a', accent2: '#b5432a' },
     glow: 0.3, effect: 'leaves', texture: 'grain' }),
+  // Looks in the spirit of popular Jellyfin themes, rebuilt from HallFlix's own settings (colours, glow, glass, shape).
+  P('Glass Chrome', 'Frosted glass panels and a soft accent glow, in the spirit of Ultrachromic', {
+    colors: { bg: '#0c0f17', surface: '#1a2030', text: '#eef2fb', muted: '#9aa6bf', accent: '#6aa8ff', accent2: '#a78bfa' },
+    fonts: { display: 'Outfit', body: 'Inter' }, glow: 0.45, glowStyle: 'ambient', radius: 16, glass: true, atmosphere: 'aurora', focusRing: 'aurora' }),
+  P('OLED Black', 'Pure black and white with a single quiet accent, in the spirit of Monochromic', {
+    colors: { bg: '#000000', surface: '#0d0d0d', text: '#ffffff', muted: '#8c8c8c', accent: '#ffffff', accent2: '#7a7a7a' },
+    fonts: { display: 'Inter', body: 'Inter' }, glow: 0, radius: 8, focusRing: 'line', glass: false, interface: 'classic' }),
+  P('Elegant Slate', 'Refined slate and soft violet with gentle rounded cards, in the spirit of ElegantFin', {
+    colors: { bg: '#111318', surface: '#1c2029', text: '#e9e7f2', muted: '#a09cb3', accent: '#9d8cff', accent2: '#5f9df7' },
+    fonts: { display: 'Outfit', body: 'Inter' }, glow: 0.2, glowStyle: 'natural', radius: 14, focusRing: 'line', interface: 'classic' }),
+  P('Neutral Grey', 'Black and graphite, nothing competing with the artwork, in the spirit of NeutralFin', {
+    colors: { bg: '#0e0e0f', surface: '#1b1b1d', text: '#f2f2f2', muted: '#9c9ca1', accent: '#d4d4d8', accent2: '#71717a' },
+    fonts: { display: 'Inter', body: 'Inter' }, glow: 0, radius: 10, focusRing: 'line', interface: 'classic' }),
+  P('Pastel Mocha', 'Soft pastels on warm dark mocha (the Catppuccin Mocha palette)', {
+    colors: { bg: '#1e1e2e', surface: '#313244', text: '#cdd6f4', muted: '#a6adc8', accent: '#cba6f7', accent2: '#f5c2e7' },
+    fonts: { display: 'Outfit', body: 'Inter' }, glow: 0.3, glowStyle: 'natural', radius: 14 }),
+  P('Dracula', 'Purple, pink and green on charcoal (the Dracula palette)', {
+    colors: { bg: '#21222c', surface: '#282a36', text: '#f8f8f2', muted: '#a9abc3', accent: '#bd93f9', accent2: '#ff79c6' },
+    fonts: { display: 'Outfit', body: 'Inter' }, glow: 0.5, radius: 10 }),
+  P('Tokyo Night', 'Midnight blue with neon city blues and magentas', {
+    colors: { bg: '#1a1b26', surface: '#24283b', text: '#c0caf5', muted: '#9aa5ce', accent: '#7aa2f7', accent2: '#bb9af7' },
+    fonts: { display: 'Audiowide', body: 'Inter' }, glow: 0.6, glowStyle: 'neon', radius: 8, texture: 'grid' }),
+  P('Retro Gruvbox', 'Warm retro browns, mustard and orange', {
+    colors: { bg: '#1d2021', surface: '#282828', text: '#ebdbb2', muted: '#a89984', accent: '#fabd2f', accent2: '#fe8019' },
+    fonts: { display: 'Bebas Neue', body: 'Inter' }, glow: 0.15, radius: 4, texture: 'grain' }),
+  // Holidays and seasons (each pairs with a Seasons quick start).
+  P('New Year', 'Black and champagne gold with fireworks', {
+    colors: { bg: '#07070b', surface: '#15141c', text: '#fff8e6', muted: '#b8b09a', accent: '#f3c969', accent2: '#c0c0d8' },
+    fonts: { display: 'Bebas Neue', body: 'Inter' }, glow: 0.7, glowStyle: 'neon', effect: 'fireworks' }),
+  P('St Patrick', 'Emerald and gold with falling clovers', {
+    colors: { bg: '#06120b', surface: '#0e2216', text: '#f1fbf4', muted: '#9dbfa8', accent: '#2ecc71', accent2: '#e8c547' },
+    glow: 0.45, effect: 'clovers' }),
+  P('Spring', 'Pastel blossom and fresh mint with drifting petals', {
+    colors: { bg: '#12101a', surface: '#1f1a2b', text: '#fdf6fb', muted: '#c4b6cc', accent: '#ff9ccf', accent2: '#8fe3c4' },
+    fonts: { display: 'Outfit', body: 'Inter' }, glow: 0.35, radius: 16, effect: 'petals' }),
+  P('Easter', 'Soft pastels with floating painted eggs', {
+    colors: { bg: '#141221', surface: '#221f36', text: '#fbf8ff', muted: '#bfb8d6', accent: '#b9a3ff', accent2: '#ffd36e' },
+    fonts: { display: 'Outfit', body: 'Inter' }, glow: 0.3, radius: 18, effect: 'eggs' }),
+  P('Independence Day', 'Navy, red and white with fireworks', {
+    colors: { bg: '#060b1a', surface: '#0f1a33', text: '#ffffff', muted: '#a8b4cf', accent: '#e63946', accent2: '#4d7cff' },
+    fonts: { display: 'Bebas Neue', body: 'Inter' }, glow: 0.55, effect: 'fireworks' }),
+  P('Summer Nights', 'Warm dusk teal and coral with fireflies', {
+    colors: { bg: '#081416', surface: '#112326', text: '#f2fbf9', muted: '#9fbfba', accent: '#ff8a5c', accent2: '#2ec4b6' },
+    fonts: { display: 'Outfit', body: 'Inter' }, glow: 0.4, glowStyle: 'natural', effect: 'fireflies', atmosphere: 'leak' }),
+  P('Thanksgiving', 'Harvest gold, cranberry and pumpkin with falling leaves', {
+    colors: { bg: '#130d08', surface: '#24180f', text: '#fdf3e3', muted: '#c9b296', accent: '#d9822b', accent2: '#9e2a2b' },
+    fonts: { display: 'Bebas Neue', body: 'Inter' }, glow: 0.3, effect: 'leaves', texture: 'grain' }),
+  P('Hanukkah', 'Deep blue and silver with twinkling stars', {
+    colors: { bg: '#060b1c', surface: '#0f1833', text: '#f4f7ff', muted: '#a7b3d4', accent: '#4f8cff', accent2: '#d6dbe8' },
+    glow: 0.55, effect: 'stars' }),
+  P('Winter Frost', 'Icy blue and white with large drifting snowflakes', {
+    colors: { bg: '#070d17', surface: '#101b2b', text: '#f3f8ff', muted: '#a5b6cc', accent: '#8fd3ff', accent2: '#d9ecff' },
+    fonts: { display: 'Outfit', body: 'Inter' }, glow: 0.45, glowStyle: 'natural', effect: 'snowflakes', atmosphere: 'aurora' }),
 ];
+
+/**
+ * Holidays that move each year, for season and pre-roll dates. A date is "MM-DD", or one of these names with an
+ * optional offset in days ("easter-7" is a week before Easter), or "MM/Nddd" for the Nth weekday of a month ("11/4thu"
+ * is the 4th Thursday of November; "05/lastmon" is the last Monday of May).
+ */
+export const DATE_RULES = [
+  ['easter', 'Easter Sunday'], ['11/4thu', 'Thanksgiving (US, 4th Thursday of November)'], ['10/2mon', 'Thanksgiving (Canada, 2nd Monday of October)'],
+  ['05/2sun', 'Mother’s Day (US, 2nd Sunday of May)'], ['06/3sun', 'Father’s Day (US, 3rd Sunday of June)'], ['05/lastmon', 'Memorial Day (last Monday of May)'],
+  ['09/1mon', 'Labor Day (1st Monday of September)'], ['01/3mon', 'Martin Luther King Jr. Day (3rd Monday of January)'], ['11/4thu+1', 'Black Friday (day after US Thanksgiving)'],
+];
+const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+function easter(y) { // Anonymous Gregorian algorithm
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  return new Date(y, Math.floor((h + l - 7 * m + 114) / 31) - 1, ((h + l - 7 * m + 114) % 31) + 1);
+}
+/** The "MM-DD" a date (fixed or moving) falls on in a given year, or null if it isn't a date. */
+export function dayOf(token, year) {
+  const t = String(token || '').trim().toLowerCase();
+  if (/^\d\d-\d\d$/.test(t)) return t;
+  const m = /^(easter|(\d\d)\/(last|[1-5])(sun|mon|tue|wed|thu|fri|sat))([+-]\d{1,3})?$/.exec(t);
+  if (!m) return null;
+  let d;
+  if (m[1] === 'easter') d = easter(year);
+  else {
+    const month = +m[2] - 1, wd = DAYS.indexOf(m[4]);
+    if (month < 0 || month > 11) return null;
+    if (m[3] === 'last') { d = new Date(year, month + 1, 0); while (d.getDay() !== wd) d.setDate(d.getDate() - 1); }
+    else { d = new Date(year, month, 1); while (d.getDay() !== wd) d.setDate(d.getDate() + 1); d.setDate(d.getDate() + 7 * (+m[3] - 1)); if (d.getMonth() !== month) return null; }
+  }
+  if (m[5]) d.setDate(d.getDate() + +m[5]);
+  return md(d);
+}
+export const validDate = (token) => dayOf(token, 2026) != null;
 
 export const OPTIONS = {
   fonts: ['Outfit', 'Inter', 'Bebas Neue', 'Audiowide', 'Georgia', 'System'],
   textures: ['none', 'grain', 'scanlines', 'grid', 'vignette'],
-  effects: ['none', 'snow', 'embers', 'hearts', 'leaves', 'confetti', 'stars', 'bats'],
+  effects: ['none', 'snow', 'snowflakes', 'embers', 'hearts', 'leaves', 'petals', 'clovers', 'eggs', 'fireflies', 'fireworks', 'confetti', 'stars', 'bats'],
+  densities: ['light', 'normal', 'heavy'],
   cardShapes: ['poster', 'wide'],
   interfaces: ['futuristic', 'classic'],
   heroMotions: ['none', 'pan', 'clip', 'trailer'],
@@ -133,11 +226,12 @@ export function merge(base, patch) {
 }
 
 const md = (date) => `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-/** "MM-DD" ranges, inclusive; a range may wrap the new year (12-20 → 01-02). */
+/** Date ranges, inclusive; each end is "MM-DD" or a moving holiday (see dayOf). A range may wrap the new year (12-20 → 01-02). */
 export function inRange(starts, ends, date = new Date()) {
-  const d = md(date);
-  if (!/^\d\d-\d\d$/.test(starts || '') || !/^\d\d-\d\d$/.test(ends || '')) return false;
-  return starts <= ends ? d >= starts && d <= ends : d >= starts || d <= ends;
+  const d = md(date), y = date.getFullYear();
+  const a = dayOf(starts, y), b = dayOf(ends, y);
+  if (!a || !b) return false;
+  return a <= b ? d >= a && d <= b : d >= a || d <= b;
 }
 
 /** Empty strings in a season or library look mean "not set" and must not blank out the base value. */
@@ -157,6 +251,8 @@ export function resolve({ theme, libraries, seasons, date = new Date(), forceSea
   let out = merge(DEFAULT_THEME, theme || {});
   const active = seasons.filter((s) => (forceSeason != null ? s.id === forceSeason : s.enabled && inRange(s.starts, s.ends, date)));
   for (const s of active) out = merge(out, prune(s.look?.theme || {}));
+  // Custom CSS adds up: the everyday CSS, then each running season's.
+  out.css = [theme?.css, ...active.map((s) => s.look?.theme?.css)].filter((x) => typeof x === 'string' && x.trim()).join('\n\n');
   const libs = {};
   for (const l of libraries) {
     let look = prune(l.look || {});

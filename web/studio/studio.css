@@ -377,3 +377,6 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 .ma-all { color: var(--muted); }
 .ma-g td { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding-top: 16px; border-bottom: 0; }
 .ma-t tbody tr:not(.ma-g):hover { background: rgba(255, 255, 255, 0.03); }
+textarea.code { width: 100%; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; resize: vertical; tab-size: 2; }
+.dates small { margin-left: 8px; }
+.preset .muted.small { display: block; font-weight: 400; }

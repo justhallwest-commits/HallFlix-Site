@@ -21,7 +21,36 @@ function merge(base, patch) {
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const fail = (e) => toast(e.message || 'Something went wrong');
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const niceDate = (md) => (/^\d\d-\d\d$/.test(md || '') ? `${MONTHS[+md.slice(0, 2) - 1]} ${+md.slice(3)}` : '');
+// Holidays that move each year (the server's look.DATE_RULES): Easter, US Thanksgiving, Mother's Day…, plus an offset in days.
+const RULES = [['easter', 'Easter Sunday'], ['11/4thu', 'Thanksgiving (US)'], ['10/2mon', 'Thanksgiving (Canada)'], ['05/2sun', 'Mother’s Day (US)'],
+  ['06/3sun', 'Father’s Day (US)'], ['05/lastmon', 'Memorial Day'], ['09/1mon', 'Labor Day'], ['01/3mon', 'Martin Luther King Jr. Day'], ['11/4thu+1', 'Black Friday']];
+const WD = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+function dayOf(token, year = new Date().getFullYear()) {
+  const t = String(token || '').toLowerCase();
+  if (/^\d\d-\d\d$/.test(t)) return t;
+  const m = /^(easter|(\d\d)\/(last|[1-5])(sun|mon|tue|wed|thu|fri|sat))([+-]\d{1,3})?$/.exec(t);
+  if (!m) return null;
+  let d;
+  if (m[1] === 'easter') {
+    const y = year, a = y % 19, b = Math.floor(y / 100), c = y % 100, dd = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - dd - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, mm = Math.floor((a + 11 * h + 22 * l) / 451);
+    d = new Date(y, Math.floor((h + l - 7 * mm + 114) / 31) - 1, ((h + l - 7 * mm + 114) % 31) + 1);
+  } else {
+    const month = +m[2] - 1, wd = WD.indexOf(m[4]);
+    if (m[3] === 'last') { d = new Date(year, month + 1, 0); while (d.getDay() !== wd) d.setDate(d.getDate() - 1); }
+    else { d = new Date(year, month, 1); while (d.getDay() !== wd) d.setDate(d.getDate() + 1); d.setDate(d.getDate() + 7 * (+m[3] - 1)); }
+  }
+  if (m[5]) d.setDate(d.getDate() + +m[5]);
+  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const splitRule = (v) => { const m = /^(easter|\d\d\/(?:last|[1-5])[a-z]{3})([+-]\d+)?$/.exec(String(v || '').toLowerCase()); if (!m) return null; const known = RULES.find(([r]) => r === v || r === m[1]); return known && known[0] === String(v).toLowerCase() ? { base: known[0], off: 0 } : { base: m[1], off: +(m[2] || 0) }; };
+const fixedNice = (md) => (/^\d\d-\d\d$/.test(md || '') ? `${MONTHS[+md.slice(0, 2) - 1]} ${+md.slice(3)}` : '');
+const niceDate = (md) => {
+  if (/^\d\d-\d\d$/.test(md || '')) return fixedNice(md);
+  const r = splitRule(md); if (!r) return '';
+  const name = RULES.find(([x]) => x === r.base)?.[1] || r.base;
+  return `${r.off ? `${Math.abs(r.off)} day${Math.abs(r.off) === 1 ? '' : 's'} ${r.off < 0 ? 'before' : 'after'} ` : ''}${name} (${fixedNice(dayOf(md))} this year)`;
+};
 const mins = (s) => (s >= 60 ? `${Math.round(s / 60)} min` : `${Math.round(s || 0)} sec`);
 
 const PAGES = [
@@ -36,6 +65,27 @@ const color = (o, p, label) => html`<label class="f"><span>${label}</span><span 
   <input type="color" data-path="${p}" value="${/^#[0-9a-f]{6}$/i.test(get(o, p) || '') ? get(o, p) : '#000000'}"><input type="text" data-path="${p}" data-hex value="${get(o, p) ?? ''}" maxlength="7"></span></label>`;
 const range = (o, p, label, min, max, step, def = min) => html`<label class="f"><span>${label}</span><span class="rangewrap">
   <input type="range" data-path="${p}" min="${min}" max="${max}" step="${step}" value="${get(o, p) ?? def}"><output>${get(o, p) ?? def}</output></span></label>`;
+// Custom CSS, the way Jellyfin themes work: a box, the variables a theme already sets, and a few starting snippets.
+const CSS_SNIPPETS = [
+  ['Glowing row titles', '.row h2 { color: var(--accent); text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.55); letter-spacing: 0.04em; }'],
+  ['Rounder posters', '.card { border-radius: 18px; overflow: hidden; }'],
+  ['Frosted top bar', '.nav { background: rgba(var(--bg-rgb), 0.45) !important; backdrop-filter: blur(16px) saturate(1.4); }'],
+  ['Accent underline on titles', '.row h2::after { content: ""; flex: 0 0 48px; height: 3px; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); align-self: center; }'],
+  ['Seasonal border glow', 'body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 1; box-shadow: inset 0 0 120px rgba(var(--accent-rgb), 0.22); }'],
+];
+const cssCard = (o, p, note) => html`<div class="card"><h2>Custom CSS</h2><p class="muted small">${note} A theme already sets these variables, so a few lines go a long way:
+  <code>--bg --surface --text --muted --accent --accent2</code> (and <code>--accent-rgb</code>, <code>--bg-rgb</code>… for see-through colours), <code>--radius --glow --font-display --font-body --hero-h</code>.</p>
+  <textarea class="code" rows="8" spellcheck="false" data-path="${p}" placeholder="/* For example */
+.row h2 { color: var(--accent); }">${get(o, p) || ''}</textarea>
+  <div class="tools" style="margin-top:8px"><span class="muted small">Add an example:</span>${CSS_SNIPPETS.map(([n], i) => html`<button class="btn sm" data-snippet="${i}" data-for="${p}">${n}</button>`)}</div></div>`;
+// Clicking an example adds it to the box (and fires input so the preview updates).
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('[data-snippet]');
+  if (!b) return;
+  const ta = b.closest('.card').querySelector(`textarea[data-path="${b.dataset.for}"]`);
+  ta.value = `${ta.value.trim() ? `${ta.value.trimEnd()}\n\n` : ''}/* ${CSS_SNIPPETS[+b.dataset.snippet][0]} */\n${CSS_SNIPPETS[+b.dataset.snippet][1]}\n`;
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+});
 const select = (o, p, label, options, blank) => html`<label class="f"><span>${label}</span><select data-path="${p}">
   ${blank ? html`<option value="">${blank}</option>` : ''}${options.map((x) => html`<option value="${x}" ${get(o, p) === x ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`)}</select></label>`;
 const choose = (o, p, label, options, blank) => html`<label class="f"><span>${label}</span><select data-path="${p}">${blank ? html`<option value="">${blank}</option>` : ''}
@@ -118,10 +168,32 @@ const image = (o, p, label) => html`<div class="f block"><span>${label}</span><d
   <input type="text" data-path="${p}" value="${get(o, p) ?? ''}" placeholder="Paste a link, upload, or pick from the NAS">
   <button class="btn sm" data-upload="${p}">Upload</button><button class="btn sm" data-pick="${p}">From NAS</button>
   ${get(o, p) ? html`<button class="btn sm danger" data-clear="${p}" title="Remove">✕</button>` : ''}</div></div>`;
-const dates = (id, label, value) => html`<div class="f"><span>${label}</span><span class="dates">
-  <select data-md="${id}-m">${MONTHS.map((m, i) => html`<option value="${String(i + 1).padStart(2, '0')}" ${+String(value || '').slice(0, 2) === i + 1 ? 'selected' : ''}>${m}</option>`)}</select>
-  <input type="number" min="1" max="31" data-md="${id}-d" value="${+String(value || '01-01').slice(3) || 1}"></span></div>`;
-const readDate = (el, id) => `${$(`[data-md="${id}-m"]`, el).value}-${String(Math.max(1, Math.min(31, +$(`[data-md="${id}-d"]`, el).value || 1))).padStart(2, '0')}`;
+// A date each year: a fixed day, or a holiday that moves (Easter, Thanksgiving…) with an offset of so many days.
+const dates = (id, label, value) => {
+  const r = splitRule(value), fixed = /^\d\d-\d\d$/.test(value || '') || !r ? (value || '01-01') : '01-01';
+  return html`<div class="f"><span>${label}</span><span class="dates">
+  <select data-md="${id}-k" title="A fixed date, or a holiday that moves each year"><option value="">On a date</option>${RULES.map(([v, n]) => html`<option value="${v}" ${r?.base === v ? 'selected' : ''}>${n}</option>`)}</select>
+  <span data-mdfix="${id}" ${r ? 'hidden' : ''}><select data-md="${id}-m">${MONTHS.map((m, i) => html`<option value="${String(i + 1).padStart(2, '0')}" ${+String(fixed).slice(0, 2) === i + 1 ? 'selected' : ''}>${m}</option>`)}</select>
+  <input type="number" min="1" max="31" data-md="${id}-d" value="${+String(fixed).slice(3) || 1}"></span>
+  <span data-mdrule="${id}" ${r ? '' : 'hidden'}><input type="number" min="-60" max="60" data-md="${id}-o" value="${r?.off || 0}" title="Days before (−) or after (+)" style="width:70px"> days</span>
+  <small class="muted" data-mdnote="${id}">${r ? `${fixedNice(dayOf(value))} this year` : ''}</small></span></div>`;
+};
+const readDate = (el, id) => {
+  const k = $(`[data-md="${id}-k"]`, el)?.value;
+  if (k) {
+    const base = k.replace(/[+-]\d+$/, ''), total = Math.round(+$(`[data-md="${id}-o"]`, el).value || 0) + +(/([+-]\d+)$/.exec(k)?.[1] || 0);
+    return total ? `${base}${total > 0 ? '+' : ''}${total}` : base;
+  }
+  return `${$(`[data-md="${id}-m"]`, el).value}-${String(Math.max(1, Math.min(31, +$(`[data-md="${id}-d"]`, el).value || 1))).padStart(2, '0')}`;
+};
+// Switching between a fixed date and a moving holiday, and the "this year" note, anywhere a date picker is shown.
+document.addEventListener('input', (e) => {
+  const m = /^(.+)-(k|o)$/.exec(e.target.dataset?.md || '');
+  if (!m) return;
+  const wrap = e.target.closest('.dates'), id = m[1], k = $(`[data-md="${id}-k"]`, wrap).value;
+  $(`[data-mdfix="${id}"]`, wrap).hidden = !!k; $(`[data-mdrule="${id}"]`, wrap).hidden = !k;
+  $(`[data-mdnote="${id}"]`, wrap).textContent = k ? `${fixedNice(dayOf(readDate(wrap, id)))} this year` : '';
+});
 
 /** Wire a form to an object: any control with data-path writes straight into `obj`. `changed(true)` asks for a redraw. */
 function bind(el, obj, changed) {
@@ -640,13 +712,17 @@ pages.look = async (main) => {
         ${logoCard(libs[lib.id], { ...(theme.tileLogo || {}), pageX: theme.libPage?.x, pageY: theme.libPage?.y }, lib.name)}
         ${coversCard(libs[lib.id], theme.tileCovers || {}, lib.name)}
         ${rowsCard(libs[lib.id], lib.name, !!theme.rows?.panel, theme.rows?.panelHeight ?? 60)}`
-    : html`<div class="card"><h2>Start from a preset</h2><div class="presets">${L.presets.map((p) => html`<button class="preset ${theme.preset === p.id ? 'on' : ''}" data-preset="${p.id}" title="${p.description}">${swatch(p.theme, L.defaults)}<b>${p.name}</b></button>`)}</div></div>
+    : html`<div class="card"><h2>Start from a preset</h2>
+        <div class="tools" style="margin:-4px 0 10px"><button class="btn sm" data-export>Export this look</button><button class="btn sm" data-import>Import a look</button><span class="muted small">A look saves as a small .json file you can keep, share or load on another HallFlix.</span></div>
+        <div class="presets">${L.presets.map((p) => html`<button class="preset ${theme.preset === p.id ? 'on' : ''}" data-preset="${p.id}" title="${p.description}">${swatch(p.theme, L.defaults)}<b>${p.name}</b></button>`)}</div></div>
         <div data-form="theme">
         <div class="card"><h2>Colours</h2>${color(theme, 'colors.bg', 'Background')}${color(theme, 'colors.surface', 'Panels')}${color(theme, 'colors.text', 'Text')}${color(theme, 'colors.muted', 'Quiet text')}${color(theme, 'colors.accent', 'Accent')}${color(theme, 'colors.accent2', 'Second accent')}</div>
         <div class="card"><h2>Type and shape</h2>${select(theme, 'interface', 'Interface style', L.options.interfaces)}${select(theme, 'fonts.display', 'Title font', L.options.fonts)}${select(theme, 'fonts.body', 'Reading font', L.options.fonts)}
           ${range(theme, 'radius', theme.interface === 'classic' ? 'Card corners' : 'Corner cut', 0, 28, 1)}${select(theme, 'cardShape', 'Card shape', L.options.cardShapes)}${range(theme, 'heroHeight', 'Banner height', 40, 100, 5)}</div>
         ${lightCard(theme)}
-        <div class="card"><h2>Texture and effects</h2>${select(theme, 'texture', 'Texture', L.options.textures)}${select(theme, 'effect', 'Moving effect', L.options.effects)}</div>
+        <div class="card"><h2>Texture and effects</h2>${select(theme, 'texture', 'Texture', L.options.textures)}${select(theme, 'effect', 'Moving effect', L.options.effects)}${select(theme, 'effectDensity', 'How many', L.options.densities)}
+          <p class="muted small">Viewers can switch moving effects off on their own device from their profile menu.</p></div>
+        ${cssCard(theme, 'css', 'Laid over the whole app, the way Jellyfin themes work. Seasons can add their own on top.')}
         <div class="card"><h2>Backgrounds</h2>${image(theme, 'background.image', 'Home background picture or video')}${range(theme, 'background.dim', 'Darken', 0, 0.95, 0.05)}${range(theme, 'background.blur', 'Blur', 0, 30, 1)}${choose(theme, 'background.shade', 'Shade', BG_SHADES)}${choose(theme, 'background.position', 'Keep in view', BG_PLACES)}
           <p class="muted small">The sign-in screen has its own background and layout: see the Sign-in page tab.</p></div>
         ${tilesCard(theme)}
@@ -719,6 +795,27 @@ pages.look = async (main) => {
     if (n) { identList(theme)[+n.dataset.idname].name = n.value; touched(false); }
   });
   box.addEventListener('change', (e) => { if (e.target.matches('[data-path="ident.order"]')) draw(); });
+  // Export / import a look as a small JSON file.
+  box.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-export],[data-import]');
+    if (!b) return;
+    if ('export' in b.dataset) {
+      const name = (L.presets.find((p) => p.id === theme.preset)?.name || theme.siteName || 'HallFlix look');
+      const blob = new Blob([JSON.stringify({ format: 'hallflix-look', version: 1, name, theme }, null, 2)], { type: 'application/json' });
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${name.replace(/[^\w-]+/g, '-').toLowerCase()}.hallflix-look.json` });
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); return;
+    }
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.json,application/json' });
+    input.onchange = async () => {
+      try {
+        const data = JSON.parse(await input.files[0].text());
+        const t = data?.format === 'hallflix-look' ? data.theme : data?.theme || data;
+        if (!t || typeof t !== 'object' || !t.colors) throw new Error('That file isn’t a HallFlix look');
+        theme = merge(clone(L.defaults), t); touched(); toast(`Loaded ${data.name || 'the look'}. Save to keep it.`);
+      } catch (err) { fail(err); }
+    };
+    input.click();
+  });
   box.addEventListener('pointerover', (e) => { const v = e.target.closest?.('[data-idv]'); if (v) { v.currentTime = 0; v.play().catch(() => {}); } });
   box.addEventListener('pointerout', (e) => { const v = e.target.closest?.('[data-idv]'); if (v) v.pause(); });
   box.addEventListener('click', async (e) => {
@@ -927,14 +1024,20 @@ pages.seasons = async (main) => {
   main.innerHTML = String(html`<section class="controls"></section>${previewPane(L.libraries)}`);
   const box = $('.controls', main);
   const send = wirePreview(main, () => (cur ? { season: { ...cur, enabled: true } } : { noSeason: true }));
-  const STARTERS = [['Halloween', '10-01', '10-31', 'halloween'], ['Winter Holiday', '12-01', '12-26', 'winter-holiday'], ['Valentine', '02-07', '02-14', 'valentine'], ['Autumn', '11-01', '11-30', 'autumn']];
+  // Quick starts through the year. Easter and Thanksgiving move with the calendar.
+  const STARTERS = [['New Year', '12-31', '01-02', 'new-year'], ['Winter Frost', '01-03', '02-06', 'winter-frost'], ['Valentine', '02-07', '02-14', 'valentine'],
+    ['St Patrick', '03-14', '03-17', 'st-patrick'], ['Easter', 'easter-7', 'easter+1', 'easter'], ['Spring', '03-20', '05-15', 'spring'],
+    ['Independence Day', '07-01', '07-05', 'independence-day'], ['Summer Nights', '06-21', '08-31', 'summer-nights'], ['Autumn', '09-22', '10-01', 'autumn'],
+    ['Halloween', '10-01', '10-31', 'halloween'], ['Thanksgiving', '11/4thu-6', '11/4thu+1', 'thanksgiving'], ['Winter Holiday', '12-01', '12-26', 'winter-holiday'],
+    ['Hanukkah', '12-14', '12-22', 'hanukkah']].filter(([, , , p]) => L.presets.some((x) => x.id === p));
   const fresh = (name = '', starts = '01-01', ends = '01-07', preset = '') => ({ name, starts, ends, enabled: true, look: { theme: preset ? { ...clone(L.presets.find((p) => p.id === preset).theme), preset } : {}, libraries: {} } });
   const draw = () => {
     if (!cur) {
       box.innerHTML = String(html`${head('Seasons', 'A season is a look that switches itself on between two dates each year, then hands back to your everyday look.', html`<button class="btn primary" data-new>New season</button>`)}
         <div class="card">${L.seasons.length ? L.seasons.map((s) => html`<div class="row" data-id="${s.id}"><div class="grow"><b>${s.name} ${L.active === s.name ? html`<span class="pill live">On now</span>` : !s.enabled ? html`<span class="pill">Off</span>` : ''}</b><span>${niceDate(s.starts)} to ${niceDate(s.ends)}, every year</span></div>
           <div class="tools"><button class="btn sm" data-edit>Edit</button><button class="btn sm danger" data-del>Delete</button></div></div>`) : html`<p class="muted">No seasons yet. Start with one of these, or make your own.</p>`}</div>
-        <div class="card"><h2>Quick starts</h2><div class="presets">${STARTERS.map(([n, , , p]) => html`<button class="preset" data-starter="${p}">${swatch(L.presets.find((x) => x.id === p).theme, L.defaults)}<b>${n}</b></button>`)}</div></div>`);
+        <div class="card"><h2>Quick starts</h2><p class="muted small">Each one comes with its dates (Easter and Thanksgiving move with the calendar), colours and moving effect. Change anything before saving. Where two seasons overlap, the one further down the list wins.</p>
+          <div class="presets">${STARTERS.map(([n, a, b, p]) => html`<button class="preset" data-starter="${p}" title="${niceDate(a)} to ${niceDate(b)}">${swatch(L.presets.find((x) => x.id === p).theme, L.defaults)}<b>${n}</b><span class="muted small">${L.seasons.some((x) => x.name === n) ? 'Added' : fixedNice(dayOf(a))}</span></button>`)}</div></div>`);
       return;
     }
     const t = cur.look.theme;
@@ -944,8 +1047,9 @@ pages.seasons = async (main) => {
       <div class="card"><h2>Look</h2><div class="presets" style="margin-bottom:12px">${L.presets.map((p) => html`<button class="preset ${t.preset === p.id ? 'on' : ''}" data-preset="${p.id}" title="${p.description}">${swatch(p.theme, L.defaults)}<b>${p.name}</b></button>`)}</div>
         ${check(cur, 'look.custom', 'Fine-tune the colours')}
         ${cur.look.custom ? html`${color(cur, 'look.theme.colors.bg', 'Background')}${color(cur, 'look.theme.colors.surface', 'Panels')}${color(cur, 'look.theme.colors.accent', 'Accent')}${color(cur, 'look.theme.colors.accent2', 'Second accent')}` : ''}
-        ${select(cur, 'look.theme.effect', 'Moving effect', L.options.effects, 'Keep the usual')}${select(cur, 'look.theme.texture', 'Texture', L.options.textures, 'Keep the usual')}
+        ${select(cur, 'look.theme.effect', 'Moving effect', L.options.effects, 'Keep the usual')}${select(cur, 'look.theme.effectDensity', 'How many', L.options.densities, 'Keep the usual')}${select(cur, 'look.theme.texture', 'Texture', L.options.textures, 'Keep the usual')}
         ${image(cur, 'look.theme.background.image', 'Home background')}${image(cur, 'look.theme.login.image', 'Sign-in background')}${image(cur, 'look.theme.logo.image', 'Seasonal logo')}${image(cur, 'look.theme.ident.video', 'Seasonal ident video (MP4)')}</div>
+      ${cssCard(cur, 'look.theme.css', 'Added on top of your everyday custom CSS while this season is on.')}
       ${L.libraries.length ? html`<div class="card"><h2>Library backgrounds for this season</h2>${L.libraries.map((l) => image(cur, `look.libraries.${l.id}.background`, l.name))}</div>` : ''}
       <div class="savebar"><button class="btn primary" data-save>Save season</button><button class="btn" data-back>Cancel</button></div>`);
   };
@@ -958,6 +1062,7 @@ pages.seasons = async (main) => {
     send();
   });
   box.addEventListener('input', (e) => { if (cur && e.target.matches('[data-md]')) { cur.starts = readDate(box, 's'); cur.ends = readDate(box, 'e'); } });
+  box.addEventListener('change', (e) => { if (cur && e.target.matches('[data-md]')) { cur.starts = readDate(box, 's'); cur.ends = readDate(box, 'e'); } });
   box.addEventListener('click', async (e) => {
     const t = e.target.closest('[data-new],[data-edit],[data-del],[data-starter],[data-preset],[data-save],[data-back]');
     if (!t) return;

@@ -258,3 +258,25 @@ test('shared tags: the most specific shared tag wins', () => {
   const two = pickPrerolls([{ ...rule, count: 2 }], clips, target, { max: 2 }, new Date(), Math.random, {});
   assert.deepEqual(two.map((c) => c.id), [2, 1]);
 });
+
+test('seasons: holidays that move each year, and custom CSS that seasons add to', async () => {
+  const L = await import('../src/look.js');
+  assert.deepEqual([2025, 2026, 2027].map((y) => L.dayOf('easter', y)), ['04-20', '04-05', '03-28']);
+  assert.deepEqual([2025, 2026].map((y) => L.dayOf('11/4thu', y)), ['11-27', '11-26']);
+  assert.equal(L.dayOf('05/lastmon', 2026), '05-25');
+  assert.equal(L.dayOf('easter-7', 2026), '03-29');
+  assert.equal(L.dayOf('11/4thu+1', 2026), '11-27');
+  assert.equal(L.dayOf('02/5mon', 2026), null); // no 5th Monday in February 2026
+  assert.ok(L.validDate('12-25') && L.validDate('easter+1') && !L.validDate('13/1mon') && !L.validDate('xmas'));
+  assert.ok(L.inRange('11/4thu-6', '11/4thu+1', new Date(2026, 10, 21)) && !L.inRange('11/4thu-6', '11/4thu+1', new Date(2026, 10, 19)));
+  assert.ok(L.inRange('12-31', '01-02', new Date(2027, 0, 1)));
+  const seasons = [{ id: 1, name: 'Easter', enabled: true, starts: 'easter-7', ends: 'easter+1', look: { theme: { effect: 'eggs', effectDensity: 'heavy', css: '.row h2 { color: pink; }' } } }];
+  const r = L.resolve({ theme: { css: '.nav { opacity: .9; }' }, libraries: [], seasons, date: new Date(2026, 3, 1) });
+  assert.equal(r.season, 'Easter');
+  assert.equal(r.theme.effect, 'eggs');
+  assert.equal(r.theme.css, '.nav { opacity: .9; }\n\n.row h2 { color: pink; }');
+  assert.equal(L.resolve({ theme: {}, libraries: [], seasons, date: new Date(2026, 5, 1) }).theme.css, '');
+  // Every preset uses only effects the app draws, and the holiday presets are there.
+  for (const p of L.PRESETS) assert.ok(!p.theme.effect || L.OPTIONS.effects.includes(p.theme.effect), p.name);
+  for (const id of ['new-year', 'st-patrick', 'easter', 'independence-day', 'thanksgiving', 'winter-frost', 'glass-chrome', 'oled-black']) assert.ok(L.PRESETS.some((p) => p.id === id), id);
+});
