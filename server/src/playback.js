@@ -125,7 +125,7 @@ export function routes(r) {
   r.post('/api/play', async ({ profile, req }) => {
     const body = await readJson(req);
     const item = await q1(
-      `select i.*, s.title as show_title, s.genres as show_genres, s.studios as show_studios, s.rating as show_rating, s.backdrop as show_backdrop, s.logo as show_logo
+      `select i.*, s.title as show_title, s.genres as show_genres, s.studios as show_studios, s.rating as show_rating, s.tags as show_tags, s.backdrop as show_backdrop, s.logo as show_logo
        from items i left join items s on s.id = i.show_id where i.id=$1`, [body.itemId]);
     if (!item || !item.path || !['movie', 'episode', 'clip'].includes(item.kind)) throw new HttpError(404, 'Nothing to play');
     const prog = await q1('select position_s, watched from progress where profile_id=$1 and item_id=$2', [profile.id, item.id]);

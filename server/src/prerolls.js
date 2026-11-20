@@ -90,7 +90,7 @@ export function pickPrerolls(rules, clips, target, opts = {}, date = new Date(),
     if (why) { log?.push({ rule: rule.name, note: `doesn't apply: ${why}` }); continue; }
     const sel = rule.clips || { mode: 'all' };
     let pool = poolFor(sel, target, usable).filter((cl) => !out.some((o) => o.id === cl.id));
-    if (!pool.length) { log?.push({ rule: rule.name, note: sel.mode === 'match' ? 'no clip is tagged with this title’s genre' : 'no usable clips for it' }); continue; }
+    if (!pool.length) { log?.push({ rule: rule.name, note: sel.mode === 'match' ? `no clip has a tag matching this title’s ${(sel.on?.length ? sel.on : ['genres']).map((x) => ({ genres: 'genre', studios: 'studio', ratings: 'rating', tags: 'tags' })[x]).join(' or ')}` : 'no usable clips for it' }); continue; }
     const before = out.length;
     for (let n = 0; n < (rule.count || 1) && pool.length && out.length < max; n++) {
       const pick = draw(pool, `rule:${rule.id}`, opts.order, rnd, deck);
@@ -104,7 +104,7 @@ export function pickPrerolls(rules, clips, target, opts = {}, date = new Date(),
 }
 /** The clips a rule's choice ("tagged halloween", "tagged with the title's genre"…) allows before a title. */
 function poolFor(sel, target, usable) {
-  const want = new Set(sel.mode === 'match' ? [...((sel.on || ['genres']).includes('genres') ? lower(target.genres) : []), ...((sel.on || []).includes('studios') ? lower(target.studios) : []), ...((sel.on || []).includes('ratings') && target.rating ? [String(target.rating).toLowerCase()] : [])] : []);
+  const want = new Set(sel.mode === 'match' ? [...((sel.on || ['genres']).includes('genres') ? lower(target.genres) : []), ...((sel.on || []).includes('studios') ? lower(target.studios) : []), ...((sel.on || []).includes('ratings') && target.rating ? [String(target.rating).toLowerCase()] : []), ...((sel.on || []).includes('tags') ? lower(target.tags) : [])] : []);
   return usable.filter((cl) => (
     sel.mode === 'pick' ? (sel.ids || []).map(Number).includes(cl.id)
       : sel.mode === 'tag' ? lower(cl.tags).includes(String(sel.tag || '').toLowerCase())
@@ -125,7 +125,7 @@ export function reachOf(rules, clips, titles) {
   // Only conditions about what a title is make a catch-all rule "chosen for it"; "before movies" alone is still general.
   const aimed = (m = {}) => ['genres', 'studios', 'ratings'].some((k) => m[k]?.length) || !!m.title?.trim();
   for (const t of titles) {
-    const target = { kind: t.kind === 'show' ? 'episode' : t.kind, library_id: t.library_id, title: t.title, show_title: t.title, genres: t.genres || [], studios: t.studios || [], rating: t.rating };
+    const target = { kind: t.kind === 'show' ? 'episode' : t.kind, library_id: t.library_id, title: t.title, show_title: t.title, genres: t.genres || [], studios: t.studios || [], rating: t.rating, tags: t.tags || [] };
     let matched = false, any = false;
     for (const r of on) {
       if (titleMismatch(r, target)) continue;
@@ -185,7 +185,8 @@ export async function forPlay(profile, item, resumeAt, { record = true, at = new
   if (!rules.length) return note('There are no pre-roll rules yet');
   const clips = await loadClips('order by i.id');
   const target = { kind: item.kind, library_id: item.library_id, title: item.title, show_title: item.show_title,
-    genres: item.genres?.length ? item.genres : item.show_genres, studios: item.studios?.length ? item.studios : item.show_studios, rating: item.rating || item.show_rating };
+    genres: item.genres?.length ? item.genres : item.show_genres, studios: item.studios?.length ? item.studios : item.show_studios, rating: item.rating || item.show_rating,
+    tags: [...new Set([...(item.tags || []), ...(item.show_tags || [])])] };
   const deck = (await getSetting('prerollDecks', {})) || {};
   const picked = pickPrerolls(rules, clips, target, s, wallClock(at, s.tz), Math.random, record ? deck : structuredClone(deck), log);
   if (s.evenVolume && picked.length) {
@@ -266,7 +267,11 @@ export async function health() {
     for (const lid of r.match?.libraries || []) if (!libs.some((l) => l.id === +lid)) add('warn', `“${r.name}” points at a library that was removed.`);
     for (const g of r.match?.genres || []) if (!genres.has(String(g).toLowerCase())) add('warn', `“${r.name}” needs the genre “${g}”, which no title has.`);
   }
-  if (rules.some((r) => r.enabled && r.clips?.mode === 'match') && ![...tags].some((t) => genres.has(t))) add('warn', 'A rule plays clips matched by genre, but no clip tag is a genre name (for example a clip tagged “horror” for horror films).');
+  if (rules.some((r) => r.enabled && r.clips?.mode === 'match' && (r.clips.on || []).includes('tags'))) {
+    const titleTags = new Set(lower((await q(`select distinct t from items, unnest(tags) t where kind in ('movie','show','episode')`)).map((x) => x.t)));
+    if (![...tags].some((t) => titleTags.has(t))) add('warn', 'A rule plays clips whose tag matches the title’s tags, but no clip tag is used on any movie or show yet. Tag titles in Metadata with the same word as the clip (for example “birthday”).');
+  }
+  if (rules.some((r) => r.enabled && r.clips?.mode === 'match' && (r.clips.on?.length ? r.clips.on : ['genres']).includes('genres') && !(r.clips.on || []).includes('tags')) && ![...tags].some((t) => genres.has(t))) add('warn', 'A rule plays clips matched by genre, but no clip tag is a genre name (for example a clip tagged “horror” for horror films).');
   for (const t of tags) {
     const near = [...genres].find((g) => g !== t && g.length > 3 && (g.startsWith(t.slice(0, -1)) || t.startsWith(g.slice(0, -1))) && Math.abs(g.length - t.length) <= 2);
     if (near && !genres.has(t)) add('warn', `Clip tag “${t}” looks like the genre “${near}”. Rename the tag if it should match.`);
@@ -409,7 +414,7 @@ export function routes(r) {
   // "What would play before this, for this person, at this time?"
   r.post('/api/studio/prerolls/test', async ({ req }) => {
     const b = await readJson(req);
-    const item = await q1(`select i.*, s.title as show_title, s.genres as show_genres, s.studios as show_studios, s.rating as show_rating from items i left join items s on s.id = i.show_id where i.id=$1`, [b.itemId]);
+    const item = await q1(`select i.*, s.title as show_title, s.genres as show_genres, s.studios as show_studios, s.rating as show_rating, s.tags as show_tags from items i left join items s on s.id = i.show_id where i.id=$1`, [b.itemId]);
     if (!item || !['movie', 'episode'].includes(item.kind)) throw new HttpError(400, 'Choose a movie or an episode');
     const profile = b.profileId ? await q1('select * from profiles where id=$1', [b.profileId]) : null;
     const at = b.at ? new Date(b.at) : new Date();
@@ -418,7 +423,7 @@ export function routes(r) {
     const picked = await forPlay(profile, item, b.resume ? 300 : 0, { record: false, at, log });
     return {
       title: item.kind === 'episode' ? `${item.show_title} · S${item.season_no} E${item.episode_no} · ${item.title}` : `${item.title}${item.year ? ` (${item.year})` : ''}`,
-      facts: { genres: item.genres?.length ? item.genres : item.show_genres || [], studios: item.studios?.length ? item.studios : item.show_studios || [], rating: item.rating || item.show_rating || null },
+      facts: { genres: item.genres?.length ? item.genres : item.show_genres || [], studios: item.studios?.length ? item.studios : item.show_studios || [], rating: item.rating || item.show_rating || null, tags: [...new Set([...(item.tags || []), ...(item.show_tags || [])])] },
       clips: picked.map((c) => ({ id: c.id, title: c.title, rule: c._rule, seconds: c.runtime_s, lufs: c._lufs ?? null, volume: c._gain ?? null })), log,
     };
   }, admin);
@@ -438,7 +443,7 @@ export function routes(r) {
   r.get('/api/studio/prerolls/reach', async ({ query }) => {
     const rules = await q('select * from preroll_rules order by position, id');
     const clips = await loadClips('order by i.id');
-    const titles = await q(`select id, kind, title, year, poster, genres, studios, rating, library_id from items
+    const titles = await q(`select id, kind, title, year, poster, genres, studios, rating, tags, library_id from items
       where kind in ('movie','show') and (kind = 'show' or path is not null) order by coalesce(sort_title, title)`);
     const R = reachOf(rules, clips, titles);
     const byId = new Map(titles.map((t) => [t.id, t]));
