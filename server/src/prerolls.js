@@ -12,10 +12,23 @@ import { img } from './catalog.js';
 
 const exec = promisify(execFile);
 const admin = { admin: true };
-export const DEFAULTS = { enabled: true, max: 2, onResume: false, order: 'shuffle', everyMinutes: 0, skipProfiles: [], maxSeconds: 0, tz: '', evenVolume: false, volumeOffset: 0 };
+export const DEFAULTS = { enabled: true, max: 2, onResume: false, order: 'shuffle', everyMinutes: 0, skipProfiles: [], maxSeconds: 0, tz: '', evenVolume: false, volumeOffset: 0,
+  tagMatch: true, tagMatchOnly: true, tagMatchCount: 1 };
+/** The built-in "shared tags" rule: before a title, play a clip that shares one of its tags. It runs first, and by default
+ *  replaces the other rules whenever a clip matches. Not stored with the rules; switched on and off in General. */
+export const SHARED = 'tags';
+export function sharedRule(s) {
+  return { id: SHARED, name: 'Shared tags', enabled: true, position: -1e9, count: Math.max(1, Math.min(6, +s.tagMatchCount || 1)), builtIn: true,
+    clips: { mode: 'match', on: ['tags'] }, match: { stop: s.tagMatchOnly !== false } };
+}
+export async function allRules(s) {
+  const rows = await q('select * from preroll_rules order by position, id');
+  return s.tagMatch === false ? rows : [sharedRule(s), ...rows];
+}
 export async function settings() { return { ...DEFAULTS, ...((await getSetting('prerolls', {})) || {}) }; }
 
 const lower = (list) => (list || []).map((x) => String(x).toLowerCase());
+const plural2 = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 // ---------- Pre-roll tags: only the pre-roll tool uses them (not the metadata tags) ----------
 /** Clips with their pre-roll tags: the sub-folders they sit in ("halloween/bump.mp4" → "halloween") plus tags typed in the Studio. */
@@ -26,9 +39,11 @@ export function folderTags(clip) {
   const rel = path.relative(clip.lib_path, path.dirname(clip.path));
   return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel.split(path.sep).filter(Boolean).map((t) => t.toLowerCase()) : [];
 }
+/** A clip's tags come from three places: its sub-folders, tags typed on the Pre-rolls → Clips tab, and tags given to it in
+ *  Metadata (the same tool used for movies and shows), so a clip and a movie tagged alike in Metadata match. */
 function withTags(c) {
-  const folder = folderTags(c), own = c.own_tags || [];
-  return { ...c, folderTags: folder, ownTags: own, tags: [...new Set([...folder, ...own])], lib_path: undefined, own_tags: undefined };
+  const folder = folderTags(c), own = c.own_tags || [], meta = [...new Set((c.tags || []).map((t) => String(t).trim().toLowerCase()).filter(Boolean))];
+  return { ...c, folderTags: folder, ownTags: own, metaTags: meta, tags: [...new Set([...folder, ...own, ...meta])], lib_path: undefined, own_tags: undefined };
 }
 export async function loadClips(where = '', args = []) { return (await q(`${CLIPS} ${where}`, args)).map(withTags); }
 const cleanTag = (t) => String(t ?? '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 40);
@@ -82,7 +97,7 @@ export function pickPrerolls(rules, clips, target, opts = {}, date = new Date(),
   const max = opts.max ?? 2;
   const out = [];
   const usable = clips.filter((c) => !c.extra?.off && !(opts.maxSeconds > 0 && (c.runtime_s || 0) > opts.maxSeconds));
-  const sorted = [...rules].sort((x, y) => x.position - y.position || x.id - y.id);
+  const sorted = [...rules].sort((x, y) => x.position - y.position || String(x.id).localeCompare(String(y.id), undefined, { numeric: true }));
   for (const rule of sorted) {
     if (out.length >= max) { log?.push({ rule: rule.name, note: 'skipped: the clip limit was already reached' }); continue; }
     if (!rule.enabled) { log?.push({ rule: rule.name, note: 'off' }); continue; }
@@ -120,8 +135,8 @@ function poolFor(sel, target, usable) {
  */
 export function reachOf(rules, clips, titles) {
   const usable = clips.filter((c) => !c.extra?.off && !c.off);
-  const on = [...rules].filter((r) => r.enabled).sort((x, y) => x.position - y.position || x.id - y.id);
-  const groups = new Map(), ruleHits = new Map(on.map((r) => [r.id, []])), cls = { matched: [], general: [], none: [] };
+  const on = [...rules].filter((r) => r.enabled).sort((x, y) => x.position - y.position || String(x.id).localeCompare(String(y.id), undefined, { numeric: true }));
+  const groups = new Map(), ruleHits = new Map(on.map((r) => [r.id, []])), cls = { matched: [], general: [], none: [] }, clipHits = new Map();
   // Only conditions about what a title is make a catch-all rule "chosen for it"; "before movies" alone is still general.
   const aimed = (m = {}) => ['genres', 'studios', 'ratings'].some((k) => m[k]?.length) || !!m.title?.trim();
   for (const t of titles) {
@@ -132,7 +147,10 @@ export function reachOf(rules, clips, titles) {
       const sel = r.clips || { mode: 'all' }, pool = poolFor(sel, target, usable);
       if (!pool.length) continue;
       any = true; ruleHits.get(r.id).push(t.id);
-      if (sel.mode !== 'all' || aimed(r.match)) matched = true;
+      if (sel.mode !== 'all' || aimed(r.match)) {
+        matched = true;
+        for (const c of pool) { const set = clipHits.get(c.id) || new Set(); set.add(t.id); clipHits.set(c.id, set); }
+      }
       if (sel.mode === 'tag' || sel.mode === 'match') {
         for (const tag of new Set(pool.flatMap((c) => lower(c.tags)).filter((x) => sel.mode === 'match' || x === String(sel.tag).toLowerCase()))) {
           const g = groups.get(tag) || { tag, titles: new Set(), rules: new Set(), when: new Set() };
@@ -151,6 +169,7 @@ export function reachOf(rules, clips, titles) {
   return {
     groups: [...groups.values()].map((g) => ({ tag: g.tag, titles: [...g.titles], rules: [...g.rules], when: [...g.when].map((w) => w.split('|')) })),
     rules: Object.fromEntries([...ruleHits].map(([id, ids]) => [id, ids])),
+    clips: Object.fromEntries([...clipHits].map(([id, set]) => [id, [...set]])),
     classes: cls,
     gaps: [...gaps].sort((x, y) => y[1] - x[1]).map(([genre, count]) => ({ genre, count })),
   };
@@ -181,8 +200,8 @@ export async function forPlay(profile, item, resumeAt, { record = true, at = new
     const last = await q1(`select played_at from preroll_plays where profile_id=$1 and played_at > $2 order by played_at desc limit 1`, [profile.id, new Date(at - s.everyMinutes * 60e3)]);
     if (last) return note(`${profile.name} saw a pre-roll ${Math.max(1, Math.round((at - new Date(last.played_at)) / 60e3))} min ago; the limit is one every ${s.everyMinutes} min`);
   }
-  const rules = await q('select * from preroll_rules order by position, id');
-  if (!rules.length) return note('There are no pre-roll rules yet');
+  const rules = await allRules(s);
+  if (!rules.length) return note('There are no pre-roll rules yet, and shared tags are switched off');
   const clips = await loadClips('order by i.id');
   const target = { kind: item.kind, library_id: item.library_id, title: item.title, show_title: item.show_title,
     genres: item.genres?.length ? item.genres : item.show_genres, studios: item.studios?.length ? item.studios : item.show_studios, rating: item.rating || item.show_rating,
@@ -243,7 +262,7 @@ async function overview() {
   const s = await settings();
   const rules = await q('select * from preroll_rules order by position, id');
   const plays = new Map((await q(`select clip_id, count(*)::int as plays, max(played_at) as last_played from preroll_plays group by clip_id`)).map((x) => [x.clip_id, x]));
-  const clips = (await loadClips('order by i.sort_title')).map((c) => ({ id: c.id, title: c.title, tags: c.tags, folderTags: c.folderTags, ownTags: c.ownTags, runtime_s: c.runtime_s,
+  const clips = (await loadClips('order by i.sort_title')).map((c) => ({ id: c.id, title: c.title, tags: c.tags, folderTags: c.folderTags, ownTags: c.ownTags, metaTags: c.metaTags, runtime_s: c.runtime_s,
     library_id: c.library_id, extra: c.extra, path: c.path, plays: plays.get(c.id)?.plays || 0, last_played: plays.get(c.id)?.last_played || null }));
   const deck = (await getSetting('prerollDecks', {})) || {};
   const levels = new Map((await q('select l.path, l.lufs from loudness l join items i on i.path = l.path and i.mtime = l.mtime where i.kind = \'clip\'')).map((x) => [x.path, x.lufs]));
@@ -258,7 +277,14 @@ export async function health() {
   if (!libs.some((l) => l.kind === 'prerolls')) add('bad', 'There is no pre-roll library yet, so nothing can play.', 'libraries');
   else if (!clips.length) add('bad', 'The pre-roll library is empty. Put some short videos in its folder and scan it.', 'libraries');
   if (s.enabled === false) add('warn', 'Pre-rolls are switched off in General.');
-  if (clips.length && !rules.length) add('warn', 'There are clips but no rules, so nothing plays yet. Add a rule or start from a preset.');
+  if (clips.length && !rules.length) add('warn', s.tagMatch === false ? 'There are clips but no rules, so nothing plays yet. Add a rule or start from a preset.'
+    : 'There are no rules yet, so clips only play before titles they share a tag with. Add a rule or a preset for everything else.');
+  if (s.tagMatch !== false && clips.length) {
+    const titleTags = new Set(lower((await q(`select distinct t from items, unnest(tags) t where kind in ('movie','show','episode')`)).map((x) => x.t)));
+    const shared = [...new Set(clips.filter((c) => !c.off).flatMap((c) => lower(c.tags)))].filter((t) => titleTags.has(t));
+    if (!shared.length) add('warn', 'Shared tags are on, but no clip shares a tag with any movie or show yet. Give a clip and some titles the same tag (for example “birthday”), on the Clips tab or in Metadata.');
+    else add('info', `Shared tags: ${plural2(shared.length, 'tag')} link clips to titles (${shared.slice(0, 5).map((t) => `“${t}”`).join(', ')}${shared.length > 5 ? '…' : ''}).`);
+  }
   const tags = new Set(clips.flatMap((c) => lower(c.tags)));
   const genres = new Set(lower((await q(`select distinct g from items, unnest(genres) g`)).map((x) => x.g)));
   for (const r of rules.filter((x) => x.enabled)) {
@@ -318,6 +344,8 @@ export function routes(r) {
     next.skipProfiles = (next.skipProfiles || []).map(Number).filter(Boolean);
     next.tz = String(next.tz || '');
     next.evenVolume = !!next.evenVolume;
+    next.tagMatch = next.tagMatch !== false; next.tagMatchOnly = next.tagMatchOnly !== false;
+    next.tagMatchCount = Math.max(1, Math.min(6, Math.round(+next.tagMatchCount || 1)));
     next.volumeOffset = Math.max(-9, Math.min(9, Math.round(+next.volumeOffset || 0)));
     if (next.tz) { try { new Intl.DateTimeFormat('en-US', { timeZone: next.tz }); } catch { throw new HttpError(400, `“${next.tz}” is not a time zone`); } }
     await setSetting('prerolls', next);
@@ -362,7 +390,7 @@ export function routes(r) {
     const [c] = await loadClips('and i.id = $1', [params.id]);
     if (!c) throw new HttpError(404, 'Clip not found');
     if (b.tags) {
-      const own = [...new Set(b.tags.map(cleanTag).filter((t) => t && !c.folderTags.includes(t)))];
+      const own = [...new Set(b.tags.map(cleanTag).filter((t) => t && !c.folderTags.includes(t) && !c.metaTags.includes(t)))];
       await q('delete from preroll_tags where clip_id = $1', [c.id]);
       if (own.length) await q('insert into preroll_tags (clip_id, tag) select $1, unnest($2::text[]) on conflict do nothing', [c.id, own]);
     }
@@ -371,7 +399,7 @@ export function routes(r) {
       await q('update items set extra=$1::jsonb, edits=$2::jsonb where id=$3', [JSON.stringify(extra), JSON.stringify(edits), c.id]);
     }
     const [now] = await loadClips('and i.id = $1', [c.id]);
-    return { ok: true, tags: now.tags, folderTags: now.folderTags, off: !!now.extra?.off };
+    return { ok: true, tags: now.tags, folderTags: now.folderTags, metaTags: now.metaTags, off: !!now.extra?.off };
   }, admin);
   // Tags across clips: add a tag to several clips, take it off them, rename a tag everywhere (rules follow), or delete it.
   r.post('/api/studio/prerolls/tags', async ({ req }) => {
@@ -441,7 +469,7 @@ export function routes(r) {
   // Who the rules and tag groups reach. Lists are trimmed to `limit` titles each; ask with ?list=tag:x | rule:5 | none |
   // general | matched for one whole list.
   r.get('/api/studio/prerolls/reach', async ({ query }) => {
-    const rules = await q('select * from preroll_rules order by position, id');
+    const rules = await allRules(await settings());
     const clips = await loadClips('order by i.id');
     const titles = await q(`select id, kind, title, year, poster, genres, studios, rating, tags, library_id from items
       where kind in ('movie','show') and (kind = 'show' or path is not null) order by coalesce(sort_title, title)`);
@@ -450,7 +478,7 @@ export function routes(r) {
     const card = (id) => { const t = byId.get(id); return { id, kind: t.kind, title: t.title, year: t.year, poster: img(t.poster, 'w185'), genres: (t.genres || []).slice(0, 3) }; };
     if (query.list) {
       const [kind, key] = String(query.list).split(/:(.*)/);
-      const ids = kind === 'tag' ? R.groups.find((g) => g.tag === key)?.titles : kind === 'rule' ? R.rules[key] : R.classes[kind];
+      const ids = kind === 'tag' ? R.groups.find((g) => g.tag === key)?.titles : kind === 'rule' ? R.rules[key] : kind === 'clip' ? R.clips[key] : R.classes[kind];
       return { titles: (ids || []).map(card) };
     }
     const limit = Math.max(0, Math.min(200, +query.limit || 24));
@@ -458,6 +486,7 @@ export function routes(r) {
       total: titles.length,
       groups: R.groups.map((g) => ({ ...g, count: g.titles.length, titles: g.titles.slice(0, limit).map(card) })).sort((x, y) => x.tag.localeCompare(y.tag)),
       rules: Object.fromEntries(Object.entries(R.rules).map(([id, ids]) => [id, ids.length])),
+      clips: Object.fromEntries(Object.entries(R.clips).map(([id, ids]) => [id, ids.length])),
       classes: Object.fromEntries(Object.entries(R.classes).map(([k2, ids]) => [k2, { count: ids.length, titles: ids.slice(0, limit).map(card) }])),
       gaps: R.gaps.slice(0, 12),
     };
