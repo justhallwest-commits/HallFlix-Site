@@ -291,6 +291,33 @@ test('pre-roll reach: tag groups list the titles they play before, and coverage'
   await hf.api('DELETE', `/api/studio/prerolls/rules/${rule.id}`);
 });
 
+test('pre-rolls matched to the title’s own tags: a “birthday” clip before titles tagged “birthday”', async () => {
+  const pr = await hf.api('GET', '/api/studio/prerolls');
+  const spooky = pr.clips.find((c) => c.title === 'spooky bump');
+  const others = pr.rules.map((r) => r.id);
+  for (const id of others) await hf.api('DELETE', `/api/studio/prerolls/rules/${id}`);
+  await hf.api('PUT', `/api/studio/prerolls/clips/${spooky.id}`, { tags: ['halloween', 'Birthday'] });
+  await hf.api('POST', `/api/studio/meta/item/${items['Night Drive'].id}`, { values: { tags: ['Birthday'] } });
+  const lib = pr.libraries.find((l) => l.kind === 'movies');
+  const rule = await hf.api('POST', '/api/studio/prerolls/rules', { name: 'Tag match', clips: { mode: 'match', on: ['tags'] }, match: { libraries: [lib.id] }, position: 0 });
+  await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: true, max: 2 });
+  const pre = async (id) => (await hf.api('POST', '/api/play', { itemId: id, caps: browser, start: 0 })).queue.filter((e) => e.kind === 'preroll').map((e) => e.itemId);
+  assert.deepEqual(await pre(items['Night Drive'].id), [spooky.id]);
+  const other = Object.values(items).find((x) => x?.id && x.id !== items['Night Drive'].id && x.kind === 'movie') || items['Signal Fires'];
+  if (other) assert.deepEqual(await pre(other.id), []);
+  const t = await hf.api('POST', '/api/studio/prerolls/test', { itemId: items['Night Drive'].id });
+  assert.deepEqual(t.facts.tags, ['Birthday']);
+  const reach = await hf.api('GET', '/api/studio/prerolls/reach');
+  assert.deepEqual(reach.groups.find((g) => g.tag === 'birthday').titles.map((x) => x.title), ['Night Drive']);
+  const h = await hf.api('GET', '/api/studio/prerolls/health');
+  assert.ok(!h.some((x) => /no clip tag is used on any movie/.test(x.text)));
+  await hf.api('DELETE', `/api/studio/prerolls/rules/${rule.id}`);
+  await hf.api('PUT', `/api/studio/prerolls/clips/${spooky.id}`, { tags: ['halloween'] });
+  await hf.api('POST', `/api/studio/meta/item/${items['Night Drive'].id}`, { values: { tags: [] } });
+  await hf.api('PUT', '/api/studio/prerolls/settings', { enabled: false, max: 2 });
+  for (const r of pr.rules) await hf.api('POST', '/api/studio/prerolls/rules', { ...r, id: undefined, stop: r.match?.stop });
+});
+
 test('progress: continue watching, finishing, and what is up next', async () => {
   let home = await hf.api('GET', '/api/home');
   assert.equal(home.rows[0].id, 'continue'); assert.equal(home.rows[0].items[0].title, 'Night Drive');
