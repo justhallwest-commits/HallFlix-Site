@@ -10,7 +10,7 @@ const bgUrl = (u) => `url("${String(u || '').replace(/"/g, '%22')}")`;
 export const moodBar = (moods, current) => (!moods?.length ? '' : html`<div class="moods" role="group" aria-label="Mood">
   <button class="mood ${current ? '' : 'on'}" data-mood="">Everything</button>
   ${moods.map((m) => html`<button class="mood ${current === m.id ? 'on' : ''}" data-mood="${m.id}">${m.name}</button>`)}
-  <button class="mood surprise-btn" data-surprise>${icons.dice} Surprise me</button></div>`);
+  ${(state.boot?.access?.off || []).includes('surprise') ? '' : html`<button class="mood surprise-btn" data-surprise>${icons.dice} Surprise me</button>`}</div>`);
 
 // ---------- collections on Home ----------
 export const collectionsRow = (list) => (!list?.length ? '' : html`<section class="row keep" data-row="collections"><h2>Collections</h2>

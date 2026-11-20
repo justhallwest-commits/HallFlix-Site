@@ -1002,18 +1002,39 @@ pages.profiles = async (main) => {
   let me = null, list = [], gallery = [];
   try { me = (await api('GET', '/api/boot')).profile; } catch { /* fine */ }
   const draw = async () => {
-    let guard;
-    [list, guard, gallery] = await Promise.all([api('GET', '/api/studio/profiles'), api('GET', '/api/studio/guard').catch(() => ({ rules: [] })), api('GET', '/api/avatars').catch(() => [])]);
+    let guard, A;
+    [list, guard, gallery, A] = await Promise.all([api('GET', '/api/studio/profiles'), api('GET', '/api/studio/guard').catch(() => ({ rules: [] })), api('GET', '/api/avatars').catch(() => []), api('GET', '/api/studio/access').catch(() => null)]);
+    // Menu access: a grid of what each profile can reach (libraries and menu features). Ticked means they can.
+    const acc = (id) => A?.access?.[id] || { libraries: [], off: [] };
+    const offCount = (id) => acc(id).libraries.length + acc(id).off.length;
+    const accessCard = () => {
+      if (!A) return '';
+      const viewers = A.profiles;
+      const cell = (p, type, key) => p.admin ? html`<td class="ma-c"><span class="ma-all" title="Admins always see everything">✓</span></td>`
+        : html`<td class="ma-c"><input type="checkbox" data-ma="${p.id}" data-mt="${type}" data-mk="${key}" ${(type === 'lib' ? acc(p.id).libraries.includes(+key) : acc(p.id).off.includes(key)) ? '' : 'checked'} aria-label="${p.name}: ${key}"></td>`;
+      return html`<div class="card ma" id="menu-access"><h2>Menu access</h2><p class="muted small">What each profile can reach from the menu. Untick to turn something off for that person. A library turned off is locked, not just hidden: its titles leave Home, search and every list, and links to them don't open. Admins always see everything. Changes apply the next time they open HallFlix or refresh.</p>
+        <div class="ma-wrap"><table class="ma-t"><thead><tr><th></th>${viewers.map((p) => html`<th class="ma-h">${face(p)}<span>${p.name}</span>${p.admin ? html`<small class="muted">Admin</small>` : html`<span class="ma-quick"><button class="linkbtn" data-maall="${p.id}">All</button> · <button class="linkbtn" data-manone="${p.id}">None</button></span>`}</th>`)}</tr></thead>
+          <tbody><tr class="ma-g"><td colspan="${viewers.length + 1}">Libraries</td></tr>
+          ${A.libraries.map((l) => html`<tr><th class="ma-r">${l.name}<small class="muted"> · ${l.kind}</small></th>${viewers.map((p) => cell(p, 'lib', l.id))}</tr>`)}
+          <tr class="ma-g"><td colspan="${viewers.length + 1}">Menu</td></tr>
+          <tr><th class="ma-r">Home<small class="muted"> · always on</small></th>${viewers.map(() => html`<td class="ma-c"><span class="ma-all">✓</span></td>`)}</tr>
+          ${A.features.map((f) => html`<tr><th class="ma-r" title="${f.about}">${f.name}<small class="muted"> · ${f.about}</small></th>${viewers.map((p) => cell(p, 'feat', f.key))}</tr>`)}
+          </tbody></table></div><p class="muted small" data-manote></p></div>`;
+    };
+    const saveAccess = async () => {
+      try { A.access = (await api('PUT', '/api/studio/access', { access: A.access })).access; $('[data-manote]', main).textContent = 'Saved.'; } catch (e) { fail(e); }
+    };
     const rulesFor = (id) => (guard.rules || []).filter((r) => r.enabled !== false && (r.profiles || []).includes(id)).map((r) => r.name);
     main.innerHTML = String(html`${head('Profiles', 'Everyone who watches gets a profile with their own picture, history, list and sign-in. Click a profile to change anything about it.', html`<button class="btn primary" data-new>Add a profile</button>`)}
       <div class="pf-grid">${list.map((p) => {
         const rules = rulesFor(p.id);
         return html`<button class="pf-tile" data-edit="${p.id}" aria-label="Edit ${p.name}">${face(p, true)}<span class="pf-edit">Edit</span>
           <b>${p.name}${p.id === me?.id ? html` <small class="muted">(you)</small>` : ''}</b>
-          <span class="pf-tags">${p.admin ? html`<span class="pill live">Admin</span>` : html`<span class="pill">Viewer</span>`}${rules.length ? html`<span class="pill bad" title="${rules.join(', ')}">Parental controls</span>` : ''}</span>
+          <span class="pf-tags">${p.admin ? html`<span class="pill live">Admin</span>` : html`<span class="pill">Viewer</span>`}${rules.length ? html`<span class="pill bad" title="${rules.join(', ')}">Parental controls</span>` : ''}${!p.admin && offCount(p.id) ? html`<span class="pill" title="Some menu items are turned off">Limited menu</span>` : ''}</span>
           <span class="muted small">${ago(p.seen)}${p.devices ? ` · ${p.devices} device${p.devices === 1 ? '' : 's'}` : ''}</span>
           <span class="muted small">${p.watched} watched · ${p.read} read</span></button>`;
       })}<button class="pf-tile pf-add" data-new><span class="avatar xl">+</span><b>Add a profile</b><span class="muted small">For someone else who watches</span></button></div>
+      ${accessCard()}
       <div class="card pf-gallery"><div class="pf-ghead"><div><h2>Picture gallery</h2><p class="muted small">Add pictures once, then give them to anyone: drag a picture onto a profile above, or click it and choose who gets it.
         You can also drop a picture from your computer straight onto a profile. Pictures are cut to a square from the middle; use “Add one and frame it” to choose the part yourself.</p></div>
         <div class="tools"><button class="btn primary" data-gadd>Add pictures</button><button class="btn" data-gframe>Add one and frame it</button><input type="file" accept="image/*" multiple hidden data-gin></div></div>
@@ -1032,6 +1053,7 @@ pages.profiles = async (main) => {
           <label class="f"><span>${p ? 'New password or PIN' : 'Password or PIN'}</span><input type="password" data-path="password" autocomplete="new-password" placeholder="${p ? 'Leave empty to keep the current one' : 'At least 4 characters'}"></label>
           ${check(v, 'admin', 'Admin (can open the Studio and change everything)')}
           ${p ? html`<div class="f"><span>Parental controls</span><span>${rules.length ? rules.join(', ') : html`<span class="muted">None</span>`} · <a href="#guard" data-x>Change</a></span></div>
+            <div class="f"><span>Menu access</span><span>${p.admin ? html`<span class="muted">Admins see everything</span>` : offCount(p.id) ? `${[...acc(p.id).libraries.map((id) => A.libraries.find((l) => l.id === id)?.name).filter(Boolean), ...acc(p.id).off.map((k) => A.features.find((f) => f.key === k)?.name)].join(', ')} turned off` : html`<span class="muted">Everything</span>`} · <button class="linkbtn" data-goaccess>Change</button></span></div>
             <div class="pf-danger"><h3>Account</h3><p class="muted small">${ago(p.seen)} · ${p.devices || 0} signed-in device${p.devices === 1 ? '' : 's'} · added ${new Date(p.created).toLocaleDateString()}</p>
               <div class="pf-actions"><button class="btn sm" data-signout ${p.devices ? '' : 'disabled'}>Sign out on all devices</button><button class="btn sm" data-clearhist>Clear watch and reading history</button>
               ${p.id !== me?.id ? html`<button class="btn sm danger" data-del>Delete profile</button>` : ''}</div></div>` : ''}</div></div>`;
@@ -1051,12 +1073,27 @@ pages.profiles = async (main) => {
         if (t.closest('[data-pic]')) { const res = await editAvatar({ profile: preview(), title: `A picture for ${v.name || 'this profile'}`, manage: true }); if (res) { pic = res; redraw(); } return; }
         if (t.closest('[data-nopic]')) { pic = { remove: true }; redraw(); return; }
         if (t.closest('[data-x]')) { d.close(); return; }
+        if (t.closest('[data-goaccess]')) { d.close(); $('#menu-access', main)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
         if (t.closest('[data-signout]')) { await api('POST', `/api/studio/profiles/${p.id}/signout`).then(() => toast(`${p.name} is signed out everywhere${p.id === me?.id ? ' else' : ''}`), fail); d.close(); draw(); return; }
         if (t.closest('[data-clearhist]')) { d.close(); confirmBox(`Clear ${p.name}'s history?`, 'Everything they have watched and read, and where they stopped, is forgotten. Their list and playlists stay.', 'Clear history', async () => { await api('POST', `/api/studio/profiles/${p.id}/clear`); toast('History cleared'); draw(); }); return; }
         if (t.closest('[data-del]')) { d.close(); confirmBox(`Delete ${p.name}?`, 'Their watch history, list and playlists are deleted too.', 'Delete', async () => { await api('DELETE', `/api/studio/profiles/${p.id}`); draw(); }); }
       });
     };
+    main.onchange = (e) => {
+      const c = e.target.closest('[data-ma]');
+      if (!c) return;
+      const id = c.dataset.ma, a = A.access[id] = A.access[id] || { libraries: [], off: [] };
+      const field = c.dataset.mt === 'lib' ? 'libraries' : 'off', key = c.dataset.mt === 'lib' ? +c.dataset.mk : c.dataset.mk;
+      a[field] = c.checked ? a[field].filter((x) => x !== key) : [...new Set([...a[field], key])];
+      saveAccess();
+    };
     main.onclick = async (e) => {
+      const all = e.target.closest('[data-maall]'), none = e.target.closest('[data-manone]');
+      if (all || none) {
+        const id = (all || none).dataset[all ? 'maall' : 'manone'];
+        A.access[id] = all ? { libraries: [], off: [] } : { libraries: A.libraries.map((l) => l.id), off: A.features.map((f) => f.key) };
+        await saveAccess(); draw(); return;
+      }
       if (e.target.closest('[data-new]')) return form(null);
       if (e.target.closest('[data-gadd]')) return $('[data-gin]', main).click();
       if (e.target.closest('[data-gframe]')) { const res = await editAvatar({ title: 'Add a picture to the gallery' }); if (res?.blob) { await addToGallery(res.blob).then(() => toast('Added to the gallery'), fail); draw(); } return; }

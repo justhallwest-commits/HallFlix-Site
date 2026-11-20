@@ -83,10 +83,10 @@ export async function continueRow(pid) {
 }
 
 export function routes(r) {
-  r.get('/api/home', async ({ profile, query }) => {
+  r.get('/api/home', async ({ profile, query, access: acc }) => {
     const pid = profile.id;
     const day = new Date().toISOString().slice(0, 10);
-    const libs = await q(`select id, name, kind from libraries where kind <> 'prerolls' order by position, id`);
+    const libs = (await q(`select id, name, kind from libraries where kind <> 'prerolls' order by position, id`)).filter((l) => !(acc?.libraries || []).includes(+l.id));
     const home = await getSetting('home', {});
     const sec = { continue: [], reading: [], mylist: [], top10: [], foryou: await forYouRows(pid), recent: [], top: [], genres: [] };
     const t10 = await top10Row(pid); if (t10) sec.top10.push(t10);
