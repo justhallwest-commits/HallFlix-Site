@@ -23,24 +23,42 @@ A working example is in [`plugins-examples/retro-arcade`](../plugins-examples/re
 
 - `id`: lowercase letters, numbers and dashes. It is also the folder name on the server.
 - `css` and `js`: files loaded into the web app for every viewer while the plugin is on.
-- `themes`: presets that appear in **Studio → Look and feel** and in the season editor.
+- `themes`: presets that appear in **Studio → Look and feel** and in the season editor. Each is either a theme file in the
+  plugin (`"themes/neon.json"`, recommended) or written inline (`{ "name", "description", "theme" }`).
 
 ## Themes
 
-A theme lists only what it changes; everything else comes from the default.
+The theme is the single source of truth for a look: the web app, the Studio, Android/Fire TV and Roku all read the same
+values. A theme lists only what it changes; everything else comes from the default.
 
-| Key | Values |
-| --- | --- |
-| `colors` | `bg`, `surface`, `text`, `muted`, `accent`, `accent2` as `#rrggbb` |
-| `fonts` | `display`, `body`: Outfit, Inter, Bebas Neue, Audiowide, Georgia, System |
-| `radius` | card corner in pixels, 0 to 28 |
-| `glow` | neon strength, 0 to 1 |
-| `texture` | none, grain, scanlines, grid, vignette |
-| `cardShape` | poster, wide |
-| `heroHeight` | banner height, 40 to 100 (percent of the screen) |
-| `effect` | none, snow, embers, hearts, leaves, confetti, stars, bats, or one a plugin registers |
-| `background` | `{ image, dim, blur }` |
-| `logo` | `{ image, height }` |
+### Theme files
+
+```json
+{
+  "$schema": "https://new.hallflix.net/api/theme.schema.json",
+  "name": "Obsidian Neon",
+  "description": "Deep black with cyan and violet neon",
+  "theme": {
+    "colors": { "bg": "#07070c", "surface": "#11111a", "accent": "#00f3ff", "accent2": "#bf00ff" },
+    "fonts": { "display": "Audiowide", "body": "Inter" },
+    "glow": 0.9, "glowStyle": "neon", "texture": "grain",
+    "background": { "image": "assets/bg.jpg", "dim": 0.55 }
+  }
+}
+```
+
+- **Autocomplete and checking in your editor:** point `$schema` at [`theme.schema.json`](theme.schema.json) (or your
+  server's `/api/theme.schema.json`). VS Code then lists every setting, its choices and its range as you type.
+- **Pictures, videos and sounds** can sit in the plugin: a relative path (`assets/bg.jpg`, `./logo.png`) is served from the
+  plugin's folder. Web links and `/uploads/…` paths are used as they are.
+- **Every theme is checked** when HallFlix reads it, against the same rules Studio uses. Colours must be `#rrggbb`;
+  choices must be ones HallFlix knows; numbers outside their range are brought back inside it; unknown settings are left
+  out. **Studio → Plugins** lists anything that was fixed or left out, so a typo never reaches a TV.
+
+The schema is generated from the server's theme contract (`server/src/themespec.js`). After changing `DEFAULT_THEME` or the
+rules, run `node src/main.js theme-schema` in `server/`; a test fails if the file is out of date.
+
+### The main settings
 
 ## CSS
 

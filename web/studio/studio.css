@@ -380,3 +380,7 @@ ol.tl { margin: 8px 0; padding-left: 22px; line-height: 2; }
 textarea.code { width: 100%; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; resize: vertical; tab-size: 2; }
 .dates small { margin-left: 8px; }
 .preset .muted.small { display: block; font-weight: 400; }
+/* A plugin's theme values that were fixed or left out by the theme check */
+.row .grow details.problems { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+.row .grow details.problems summary { cursor: pointer; color: #f0b44c; }
+.row .grow details.problems ul { margin: 4px 0 0 18px; padding: 0; white-space: normal; }

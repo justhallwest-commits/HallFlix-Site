@@ -280,3 +280,57 @@ test('seasons: holidays that move each year, and custom CSS that seasons add to'
   for (const p of L.PRESETS) assert.ok(!p.theme.effect || L.OPTIONS.effects.includes(p.theme.effect), p.name);
   for (const id of ['new-year', 'st-patrick', 'easter', 'independence-day', 'thanksgiving', 'winter-frost', 'glass-chrome', 'oled-black']) assert.ok(L.PRESETS.some((p) => p.id === id), id);
 });
+
+test('theme contract: bad values are fixed or left out, and every built-in look already passes', async () => {
+  const { checkTheme, pluginAssetUrls } = await import('../src/themespec.js');
+  const { theme, problems } = checkTheme({
+    colors: { accent: '#ABC', bg: 'rgba(0,0,0,1)' }, fonts: { display: 'Comic Sans', body: 'Inter' }, radius: 99, glow: '0.5',
+    effect: 'pixels', texture: 'lava', heroMotion: '', tv: { width: 4000, stills: 'true' }, night: { theme: { colors: { text: 'red' } } }, bogus: 1,
+  });
+  assert.deepEqual(theme.colors, { accent: '#aabbcc' });
+  assert.deepEqual(theme.fonts, { body: 'Inter' });
+  assert.equal(theme.radius, 28); assert.equal(theme.glow, 0.5); assert.equal(theme.effect, 'pixels'); // a plugin's own effect is allowed
+  assert.equal(theme.heroMotion, ''); // empty means "not set" and is kept
+  assert.deepEqual(theme.tv, { width: 1920, stills: true });
+  assert.ok(!('texture' in theme) && !('bogus' in theme));
+  for (const want of ['colors.bg', 'fonts.display', 'radius', 'texture', 'tv.width', 'night.theme.colors.text', 'bogus']) {
+    assert.ok(problems.some((p) => p.startsWith(want + ':')), `a problem for ${want}`);
+  }
+  // Studio keeps settings the contract doesn't know yet, but still fixes the ones it does.
+  assert.deepEqual(checkTheme({ newThing: 1, radius: -5 }, { unknown: 'keep' }).theme, { newThing: 1, radius: 0 });
+  assert.deepEqual(checkTheme(look.DEFAULT_THEME).problems, []);
+  for (const p of look.PRESETS) assert.deepEqual(checkTheme(p.theme).problems, [], p.name);
+  // A plugin's own pictures point into its folder; web links, uploads and CSS are left alone.
+  assert.deepEqual(pluginAssetUrls({ background: { image: 'assets/bg.jpg' }, logo: { image: './logo.png' }, login: { image: 'https://x.test/a.jpg' }, splash: { image: '/uploads/s.png' }, css: 'a{background:url(assets/x.png)}' }, 'neon'),
+    { background: { image: '/plugins/neon/assets/bg.jpg' }, logo: { image: '/plugins/neon/logo.png' }, login: { image: 'https://x.test/a.jpg' }, splash: { image: '/uploads/s.png' }, css: 'a{background:url(assets/x.png)}' });
+});
+
+test('theme contract: docs/theme.schema.json is up to date (regenerate with `node src/main.js theme-schema`)', async () => {
+  const { themeFileSchema } = await import('../src/themespec.js');
+  const fsm = await import('node:fs');
+  const onDisk = JSON.parse(fsm.readFileSync(new URL('../../docs/theme.schema.json', import.meta.url), 'utf8'));
+  assert.deepEqual(onDisk, themeFileSchema());
+  // Every theme key HallFlix has is described, so editors can autocomplete all of it.
+  assert.deepEqual(Object.keys(onDisk.$defs.theme.properties).filter((k) => k !== '$schema').sort(), Object.keys(look.DEFAULT_THEME).sort());
+});
+
+test('theme contract: every choice and slider Studio offers is allowed by the contract', async () => {
+  const { checkTheme } = await import('../src/themespec.js');
+  const fsm = await import('node:fs');
+  const src = fsm.readFileSync(new URL('../../web/studio/studio.js', import.meta.url), 'utf8');
+  const at = (o, p) => p.split('.').reduce((x, k) => x?.[k], o);
+  const put = (p, v) => p.split('.').reduceRight((acc, k) => ({ [k]: acc }), v);
+  let n = 0;
+  for (const m of src.matchAll(/choose\(theme, '([\w.]+)', [^[]*?(\[\[.*?\]\])\)/g)) {
+    if (at(look.DEFAULT_THEME, m[1]) === undefined) continue;
+    for (const v of [...m[2].matchAll(/\['([^']*)',/g)].map((x) => x[1])) {
+      const value = typeof at(look.DEFAULT_THEME, m[1]) === 'number' ? +v : v;
+      assert.deepEqual(checkTheme(put(m[1], value)).problems, [], `Studio offers ${m[1]} = ${v}`); n++;
+    }
+  }
+  for (const m of src.matchAll(/range\(theme, '([\w.]+)', (?:[^,]|,(?! -?\d))*?, (-?[\d.]+), (-?[\d.]+),/g)) {
+    if (at(look.DEFAULT_THEME, m[1]) === undefined) continue;
+    for (const v of [+m[2], +m[3]]) { assert.deepEqual(checkTheme(put(m[1], v)).problems, [], `Studio slider ${m[1]} = ${v}`); n++; }
+  }
+  assert.ok(n > 50, `checked ${n} Studio values`);
+});

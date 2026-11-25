@@ -3,20 +3,16 @@
   "name": "Retro Arcade",
   "version": "1.0.0",
   "author": "HallFlix",
-  "description": "An example plugin: one theme, a little extra styling and a falling-pixels effect.",
+  "description": "An example plugin: a theme file, a little extra styling and a falling-pixels effect.",
   "contributes": {
-    "css": ["style.css"],
-    "js": ["main.js"],
+    "css": [
+      "style.css"
+    ],
+    "js": [
+      "main.js"
+    ],
     "themes": [
-      {
-        "name": "Retro Arcade",
-        "description": "Hot pink and electric yellow on black",
-        "theme": {
-          "colors": { "bg": "#08060f", "surface": "#15102a", "text": "#fff8e7", "muted": "#b9aee0", "accent": "#ffe14d", "accent2": "#ff3db8" },
-          "fonts": { "display": "Audiowide", "body": "Inter" },
-          "radius": 0, "glow": 1, "texture": "grid", "effect": "pixels"
-        }
-      }
+      "themes/retro-arcade.json"
     ]
   }
 }

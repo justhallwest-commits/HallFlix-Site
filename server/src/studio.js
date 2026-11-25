@@ -12,6 +12,7 @@ import * as scan from './scan.js';
 import * as tmdb from './tmdb.js';
 import * as look from './look.js';
 import * as plugins from './plugins.js';
+import { checkTheme } from './themespec.js';
 import { IMAGE_EXT, isVideo } from './names.js';
 
 const AUDIO_EXT = ['mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac'];
@@ -141,13 +142,14 @@ export function routes(r) {
     active: (await look.currentLook()).season,
   }), admin);
   r.put('/api/studio/theme', async ({ req }) => {
-    const theme = (await readJson(req)).theme || {};
+    // Checked against the theme contract before it is saved: what the apps read is always something they can draw.
+    const { theme, problems } = checkTheme((await readJson(req)).theme || {}, { unknown: 'keep' });
     const before = (await getSetting('theme', {})).heroClips || {};
     await setSetting('theme', theme);
     // New clip window or length: the old clips no longer fit, so they are made again as the banner asks for them.
     const after = theme.heroClips || {};
     if (['start', 'end', 'length'].some((k) => (before[k] ?? null) !== (after[k] ?? null))) clearClips();
-    return { ok: true };
+    return { ok: true, theme, problems };
   }, admin);
   r.post('/api/studio/look/preview', async ({ req }) => {
     const b = await readJson(req);
@@ -159,6 +161,7 @@ export function routes(r) {
   r.post('/api/studio/seasons', async ({ req }) => {
     const b = await readJson(req);
     if (!b.name?.trim() || !look.validDate(b.starts) || !look.validDate(b.ends)) throw new HttpError(400, 'A season needs a name, a start date and an end date');
+    if (b.look?.theme) b.look = { ...b.look, theme: checkTheme(b.look.theme, { unknown: 'keep' }).theme };
     if (b.id) return q1('update seasons set name=$1, starts=$2, ends=$3, enabled=$4, look=$5::jsonb where id=$6 returning *', [b.name.trim(), b.starts, b.ends, b.enabled !== false, JSON.stringify(b.look || {}), b.id]);
     return q1('insert into seasons (name, starts, ends, enabled, look) values ($1,$2,$3,$4,$5::jsonb) returning *', [b.name.trim(), b.starts, b.ends, b.enabled !== false, JSON.stringify(b.look || {})]);
   }, admin);

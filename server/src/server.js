@@ -33,9 +33,13 @@ import * as ratingsMod from './ratings.js';
 import * as videosMod from './videos.js';
 import * as subtitlesMod from './subtitles.js';
 import { IMAGE_EXT } from './names.js';
+import { themeFileSchema } from './themespec.js';
 
 const open = { auth: false };
 const r = new Router();
+
+// The theme contract as a JSON Schema, for editors and plugin authors (the same file as docs/theme.schema.json).
+r.get('/api/theme.schema.json', async () => themeFileSchema(), open);
 
 // Everything an app needs to draw its first screen, in one request.
 r.get('/api/boot', async (ctx) => {
