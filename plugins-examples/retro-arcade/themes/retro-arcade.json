@@ -1,0 +1,13 @@
+{
+  "$schema": "../../../docs/theme.schema.json",
+  "name": "Retro Arcade",
+  "description": "Hot pink and electric yellow on black",
+  "theme": {
+    "colors": { "bg": "#08060f", "surface": "#15102a", "text": "#fff8e7", "muted": "#b9aee0", "accent": "#ffe14d", "accent2": "#ff3db8" },
+    "fonts": { "display": "Audiowide", "body": "Inter" },
+    "radius": 0,
+    "glow": 1,
+    "texture": "grid",
+    "effect": "pixels"
+  }
+}

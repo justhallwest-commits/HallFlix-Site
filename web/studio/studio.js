@@ -987,9 +987,11 @@ pages.look = async (main) => {
     else if (t.hasAttribute('data-save')) {
       try {
         if (theme.night) theme.night.theme = clone(L.presets.find((x) => x.id === theme.night.preset)?.theme || {});
-        await api('PUT', '/api/studio/theme', { theme });
+        const saved = await api('PUT', '/api/studio/theme', { theme });
+        if (saved?.theme) theme = saved.theme; // the server's checked copy: what every device now shows
         for (const l of L.libraries) if (JSON.stringify(libs[l.id]) !== JSON.stringify(l.look)) { await api('PUT', `/api/studio/libraries/${l.id}`, { look: libs[l.id] }); l.look = clone(libs[l.id]); }
-        dirty = false; draw(); toast('Saved. The new look is live on every device.');
+        dirty = false; draw();
+        toast(saved?.problems?.length ? `Saved, with ${saved.problems.length} fix${saved.problems.length > 1 ? 'es' : ''}: ${saved.problems.slice(0, 3).join('; ')}${saved.problems.length > 3 ? '…' : ''}` : 'Saved. The new look is live on every device.', saved?.problems?.length ? 8000 : undefined);
       } catch (err) { fail(err); }
     }
   });
@@ -1553,7 +1555,8 @@ pages.plugins = async (main) => {
     const list = await api('GET', '/api/studio/plugins');
     main.innerHTML = String(html`${head('Plugins', 'Plugins add themes, styles and features without touching HallFlix itself. Install one from a .zip file.', html`<button class="btn primary" data-install>Install from .zip</button>`)}
       <div class="card">${list.length ? list.map((p) => html`<div class="row" data-id="${p.id}"><div class="grow"><b>${p.name} ${p.version ? html`<span class="pill">v${p.version}</span>` : ''} ${p.broken ? html`<span class="pill bad">Broken</span>` : ''}</b>
-        <span>${p.broken || p.description || ''}${p.themes?.length ? ` · adds ${p.themes.length} theme${p.themes.length > 1 ? 's' : ''}` : ''}</span></div>
+        <span>${p.broken || p.description || ''}${p.themes?.length ? ` · adds ${p.themes.length} theme${p.themes.length > 1 ? 's' : ''}` : ''}</span>
+        ${p.problems?.length ? html`<details class="problems"><summary>${p.problems.length} theme value${p.problems.length > 1 ? 's' : ''} fixed or left out</summary><ul>${p.problems.map((x) => html`<li>${x}</li>`)}</ul></details>` : ''}</div>
         <div class="tools">${p.broken ? '' : html`<label class="check"><input type="checkbox" data-toggle ${p.enabled ? 'checked' : ''}> On</label>`}<button class="btn sm danger" data-del>Remove</button></div></div>`)
     : html`<p class="muted">No plugins installed. See <code>docs/PLUGINS.md</code> in the HallFlix repo for how to make one.</p>`}</div>
       <p class="muted small">Only install plugins you trust: a plugin's code runs inside HallFlix for everyone who signs in.</p>`);

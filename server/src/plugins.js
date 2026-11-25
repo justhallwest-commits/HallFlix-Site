@@ -6,6 +6,7 @@ import zlib from 'node:zlib';
 import { cfg } from './config.js';
 import { getSetting, setSetting } from './db.js';
 import { HttpError, safeJoin } from './http.js';
+import { checkTheme, pluginAssetUrls } from './themespec.js';
 
 export const pluginsDir = () => path.join(cfg.dataDir, 'plugins');
 const ID = /^[a-z0-9][a-z0-9-]{1,40}$/;
@@ -46,12 +47,34 @@ export async function listPlugins() {
         // Ratings and subtitle services work the same way: an address to ask and where the answer sits.
         ratings: services(c.ratings, m.name || d.name, RATING_FIELDS),
         subtitles: services(c.subtitles, m.name || d.name, SUBTITLE_FIELDS),
-        themes: (Array.isArray(c.themes) ? c.themes : []).filter((t) => t && t.name && typeof t.theme === 'object')
-          .map((t) => ({ id: `${d.name}:${String(t.name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, name: String(t.name), description: String(t.description || `From ${m.name || d.name}`), theme: t.theme })),
+        ...(await pluginThemes(c.themes, d.name, m.name || d.name)),
       });
-    } catch (e) { out.push({ id: d.name, name: d.name, enabled: false, broken: `plugin.json: ${e.message}`, css: [], js: [], themes: [], lyrics: [], ratings: [], subtitles: [] }); }
+    } catch (e) { out.push({ id: d.name, name: d.name, enabled: false, broken: `plugin.json: ${e.message}`, css: [], js: [], themes: [], problems: [], lyrics: [], ratings: [], subtitles: [] }); }
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * A plugin's themes: each entry is either inline ({ name, description, theme }) or the path of a theme file in the
+ * plugin ("themes/neon.json") holding the same thing. Every theme is checked against the theme contract
+ * (themespec.js) so the apps only see values they can draw; what was fixed or left out is listed in `problems`.
+ */
+async function pluginThemes(list, id, from) {
+  const themes = [], problems = [];
+  for (const [i, entry] of (Array.isArray(list) ? list : []).slice(0, 50).entries()) {
+    let t = entry, where = `themes[${i}]`;
+    if (typeof entry === 'string') {
+      where = entry;
+      if (!/^[\w./-]+\.json$/.test(entry) || entry.includes('..')) { problems.push(`${where}: not a .json file inside the plugin`); continue; }
+      try { t = JSON.parse(await fs.promises.readFile(safeJoin(path.join(pluginsDir(), id), entry), 'utf8')); }
+      catch (e) { problems.push(`${where}: ${e.code === 'ENOENT' ? 'file not found' : e.message}`); continue; }
+    }
+    if (!t || typeof t !== 'object' || !t.name || !t.theme || typeof t.theme !== 'object') { problems.push(`${where}: needs a "name" and a "theme" object`); continue; }
+    const checked = checkTheme(pluginAssetUrls(t.theme, id));
+    for (const p of checked.problems) problems.push(`${t.name}: ${p}`);
+    themes.push({ id: `${id}:${String(t.name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, name: String(t.name).slice(0, 60), description: String(t.description || `From ${from}`).slice(0, 200), theme: checked.theme });
+  }
+  return { themes, problems };
 }
 
 /** What the apps load at start: only enabled, working plugins. */

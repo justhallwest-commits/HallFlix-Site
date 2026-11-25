@@ -554,6 +554,40 @@ test('plugins install from a zip and reach the apps', async () => {
   assert.deepEqual(await hf.api('GET', '/api/studio/plugins').then((l) => [...l].filter((p) => p.id === 'retro-pack')), []);
 });
 
+test('plugins: theme files are checked against the theme contract and their pictures point into the plugin', async () => {
+  const neon = { $schema: 'https://hallflix.net/theme.schema.json', name: 'Obsidian Neon', description: 'Deep black and neon',
+    theme: { colors: { bg: '#07070c', accent: '#00f3ff', accent2: 'violet' }, fonts: { display: 'Audiowide' }, texture: 'grain', radius: 40,
+      background: { image: 'assets/bg.jpg', dim: 0.5 }, sparkle: true } };
+  const pkg = zip({
+    'plugin.json': JSON.stringify({ id: 'neon-pack', name: 'Neon Pack', version: '1.0.0', contributes: { themes: ['themes/neon.json', 'themes/missing.json', { name: 'Inline', theme: { glow: 0.2 } }] } }),
+    'themes/neon.json': JSON.stringify(neon), 'assets/bg.jpg': 'jpeg',
+  });
+  assert.equal((await hf.api('POST', '/api/studio/plugins', pkg)).id, 'neon-pack');
+  const p = (await hf.api('GET', '/api/studio/plugins')).find((x) => x.id === 'neon-pack');
+  assert.deepEqual(p.themes.map((t) => t.id), ['neon-pack:obsidian-neon', 'neon-pack:inline']);
+  const t = p.themes[0].theme;
+  assert.deepEqual(t.colors, { bg: '#07070c', accent: '#00f3ff' });
+  assert.equal(t.radius, 28);
+  assert.equal(t.background.image, '/plugins/neon-pack/assets/bg.jpg');
+  assert.equal((await fetch(hf.base + t.background.image)).status, 200);
+  assert.ok(!('sparkle' in t));
+  assert.ok(['colors.accent2', 'radius', 'sparkle'].every((k) => p.problems.some((x) => x.startsWith(`Obsidian Neon: ${k}:`))));
+  assert.ok(p.problems.some((x) => x.startsWith('themes/missing.json: file not found')));
+  const presets = (await hf.api('GET', '/api/studio/look')).presets;
+  assert.deepEqual(presets.find((x) => x.id === 'neon-pack:obsidian-neon').theme, t);
+  await hf.api('DELETE', '/api/studio/plugins/neon-pack');
+
+  // Studio saves are checked too, and the schema is public for editors.
+  const before = (await hf.api('GET', '/api/studio/look')).theme;
+  const saved = await hf.api('PUT', '/api/studio/theme', { theme: { ...before, colors: { ...before.colors, accent: 'hotpink' }, glow: 3 } });
+  assert.equal(saved.theme.glow, 1);
+  assert.ok(saved.problems.some((x) => x.startsWith('colors.accent:')));
+  assert.notEqual((await hf.api('GET', '/api/boot')).look.theme.colors.accent, 'hotpink');
+  await hf.api('PUT', '/api/studio/theme', { theme: before });
+  const schema = await (await fetch(hf.base + '/api/theme.schema.json')).json();
+  assert.equal(schema.title, 'HallFlix theme file');
+});
+
 test('profiles: separate history, no Studio access, and guessing is slowed down', async () => {
   const kid = await hf.api('POST', '/api/studio/profiles', { name: 'Guest', password: '4321' });
   assert.equal(kid.admin, false);

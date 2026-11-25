@@ -1,0 +1,1058 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hallflix.net/theme.schema.json",
+  "title": "HallFlix theme file",
+  "description": "A theme for a HallFlix plugin. List only what the theme changes; everything else comes from the default look. Generated from server/src/themespec.js: do not edit by hand.",
+  "type": "object",
+  "required": [
+    "name",
+    "theme"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 60
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "theme": {
+      "$ref": "#/$defs/theme"
+    }
+  },
+  "$defs": {
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "preset": {
+          "type": "string",
+          "default": "neon-marquee"
+        },
+        "interface": {
+          "enum": [
+            "futuristic",
+            "classic",
+            ""
+          ],
+          "default": "futuristic"
+        },
+        "siteName": {
+          "type": "string",
+          "maxLength": 60,
+          "default": "HallFlix"
+        },
+        "colors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bg": {
+              "type": "string",
+              "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}))?$",
+              "default": "#0a0814"
+            },
+            "surface": {
+              "type": "string",
+              "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}))?$",
+              "default": "#16122b"
+            },
+            "text": {
+              "type": "string",
+              "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}))?$",
+              "default": "#f4f2ff"
+            },
+            "muted": {
+              "type": "string",
+              "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}))?$",
+              "default": "#a8a3c7"
+            },
+            "accent": {
+              "type": "string",
+              "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}))?$",
+              "default": "#35d0d0"
+            },
+            "accent2": {
+              "type": "string",
+              "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}))?$",
+              "default": "#b344d6"
+            }
+          }
+        },
+        "fonts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "display": {
+              "enum": [
+                "Outfit",
+                "Inter",
+                "Bebas Neue",
+                "Audiowide",
+                "Georgia",
+                "System",
+                ""
+              ],
+              "default": "Outfit"
+            },
+            "body": {
+              "enum": [
+                "Outfit",
+                "Inter",
+                "Bebas Neue",
+                "Audiowide",
+                "Georgia",
+                "System",
+                ""
+              ],
+              "default": "Inter"
+            }
+          }
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 28,
+          "default": 10
+        },
+        "glow": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7
+        },
+        "glowStyle": {
+          "enum": [
+            "neon",
+            "natural",
+            "ambient",
+            ""
+          ],
+          "default": "natural"
+        },
+        "focusRing": {
+          "enum": [
+            "glow",
+            "line",
+            "aurora",
+            ""
+          ],
+          "default": "glow"
+        },
+        "atmosphere": {
+          "enum": [
+            "none",
+            "aurora",
+            "leak",
+            "both",
+            ""
+          ],
+          "default": "none"
+        },
+        "pointerLight": {
+          "type": "boolean",
+          "default": false
+        },
+        "tiles3d": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "style": {
+              "enum": [
+                "flat",
+                "tilt",
+                "layered",
+                ""
+              ],
+              "default": "layered"
+            },
+            "depth": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.6
+            },
+            "thickness": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 16,
+              "default": 6
+            },
+            "shine": {
+              "type": "boolean",
+              "default": true
+            },
+            "video": {
+              "type": "boolean",
+              "default": true
+            },
+            "sway": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "texture": {
+          "enum": [
+            "none",
+            "grain",
+            "scanlines",
+            "grid",
+            "vignette",
+            ""
+          ],
+          "default": "none"
+        },
+        "cardShape": {
+          "enum": [
+            "poster",
+            "wide",
+            ""
+          ],
+          "default": "poster"
+        },
+        "heroHeight": {
+          "type": "number",
+          "minimum": 40,
+          "maximum": 100,
+          "default": 80
+        },
+        "background": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "type": "string",
+              "default": ""
+            },
+            "dim": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.95,
+              "default": 0.6
+            },
+            "blur": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 30,
+              "default": 0
+            }
+          }
+        },
+        "login": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "type": "string",
+              "default": ""
+            },
+            "dim": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.95,
+              "default": 0.45
+            },
+            "blur": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 30,
+              "default": 0
+            },
+            "logo": {
+              "type": "string",
+              "default": ""
+            },
+            "logoPlace": {
+              "type": "string",
+              "default": "above"
+            },
+            "logoSize": {
+              "type": "number",
+              "minimum": 40,
+              "maximum": 340,
+              "default": 150
+            },
+            "x": {
+              "type": "string",
+              "default": "center"
+            },
+            "y": {
+              "enum": [
+                "top",
+                "middle",
+                "bottom",
+                ""
+              ],
+              "default": "middle"
+            },
+            "panel": {
+              "type": "string",
+              "default": "none"
+            },
+            "panelOpacity": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1,
+              "default": 0.72
+            },
+            "panelBlur": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 40,
+              "default": 18
+            },
+            "darkWhere": {
+              "type": "string",
+              "default": "none"
+            },
+            "dark": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.5
+            },
+            "blurWhere": {
+              "type": "string",
+              "default": "all"
+            },
+            "focusBlur": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 40,
+              "default": 0
+            },
+            "title": {
+              "type": "string",
+              "default": ""
+            },
+            "layout": {
+              "enum": [
+                "floating",
+                "split",
+                ""
+              ],
+              "default": "floating"
+            },
+            "side": {
+              "enum": [
+                "left",
+                "right",
+                ""
+              ],
+              "default": "left"
+            },
+            "sideWidth": {
+              "type": "number",
+              "minimum": 20,
+              "maximum": 70,
+              "default": 33
+            },
+            "sideColor": {
+              "type": "string",
+              "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}))?$",
+              "default": ""
+            },
+            "sideOpacity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.96
+            },
+            "divider": {
+              "type": "boolean",
+              "default": true
+            },
+            "sidePicture": {
+              "enum": [
+                "beside",
+                "behind",
+                ""
+              ],
+              "default": "beside"
+            },
+            "sideBlur": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 40,
+              "default": 0
+            },
+            "sideEdge": {
+              "enum": [
+                "",
+                "line",
+                "none",
+                "fade"
+              ],
+              "default": ""
+            },
+            "fadeWidth": {
+              "type": "number",
+              "minimum": 4,
+              "maximum": 45,
+              "default": 18
+            },
+            "music": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "tracks": {
+                  "type": "array"
+                },
+                "volume": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "default": 0.5
+                },
+                "shuffle": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "fade": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10,
+                  "default": 3
+                },
+                "button": {
+                  "enum": [
+                    "corner",
+                    "hidden",
+                    ""
+                  ],
+                  "default": "corner"
+                },
+                "showTitle": {
+                  "type": "boolean",
+                  "default": true
+                }
+              }
+            },
+            "tileShape": {
+              "type": "string",
+              "default": "theme"
+            },
+            "tileMotion": {
+              "type": "boolean",
+              "default": true
+            },
+            "tileSize": {
+              "type": "number",
+              "minimum": 56,
+              "maximum": 220,
+              "default": 132
+            },
+            "tileColumns": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 8,
+              "default": 0
+            },
+            "buttons": {
+              "enum": [
+                "links",
+                "outlined",
+                "filled",
+                ""
+              ],
+              "default": "links"
+            },
+            "manualButton": {
+              "type": "boolean",
+              "default": true
+            },
+            "manualLabel": {
+              "type": "string",
+              "default": ""
+            },
+            "phoneLabel": {
+              "type": "string",
+              "default": ""
+            },
+            "footer": {
+              "type": "string",
+              "default": ""
+            },
+            "footerLink": {
+              "type": "string",
+              "default": ""
+            }
+          }
+        },
+        "logo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "type": "string",
+              "default": ""
+            },
+            "height": {
+              "type": "number",
+              "minimum": 20,
+              "maximum": 120,
+              "default": 46
+            },
+            "favicon": {
+              "type": "string",
+              "default": ""
+            }
+          }
+        },
+        "effect": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "snow",
+                "snowflakes",
+                "embers",
+                "hearts",
+                "leaves",
+                "petals",
+                "clovers",
+                "eggs",
+                "fireflies",
+                "fireworks",
+                "confetti",
+                "stars",
+                "bats"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+            }
+          ],
+          "default": "none"
+        },
+        "effectDensity": {
+          "enum": [
+            "light",
+            "normal",
+            "heavy",
+            ""
+          ],
+          "default": "normal"
+        },
+        "css": {
+          "type": "string",
+          "maxLength": 200000,
+          "default": ""
+        },
+        "artColor": {
+          "type": "boolean",
+          "default": true
+        },
+        "heroMotion": {
+          "enum": [
+            "none",
+            "pan",
+            "clip",
+            "trailer",
+            ""
+          ],
+          "default": "clip"
+        },
+        "heroClips": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "start": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 600,
+              "default": 60
+            },
+            "end": {
+              "type": "number",
+              "minimum": 60,
+              "maximum": 1800,
+              "default": 600
+            },
+            "length": {
+              "type": "number",
+              "minimum": 10,
+              "maximum": 60,
+              "default": 30
+            },
+            "sound": {
+              "type": "boolean",
+              "default": false
+            },
+            "tv": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        },
+        "tv": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "width": {
+              "type": "number",
+              "minimum": 960,
+              "maximum": 1920,
+              "default": 1600
+            },
+            "focus": {
+              "enum": [
+                "white",
+                "accent",
+                ""
+              ],
+              "default": "white"
+            },
+            "stills": {
+              "type": "boolean",
+              "default": false
+            },
+            "effects": {
+              "type": "boolean",
+              "default": false
+            },
+            "textures": {
+              "type": "boolean",
+              "default": false
+            },
+            "glow": {
+              "type": "boolean",
+              "default": false
+            },
+            "wash": {
+              "type": "boolean",
+              "default": false
+            },
+            "tileVideos": {
+              "type": "boolean",
+              "default": false
+            },
+            "rowItems": {
+              "type": "number",
+              "minimum": 6,
+              "maximum": 40,
+              "default": 12
+            },
+            "rows": {
+              "type": "number",
+              "minimum": 2,
+              "maximum": 20,
+              "default": 6
+            }
+          }
+        },
+        "depth": {
+          "type": "boolean",
+          "default": true
+        },
+        "sounds": {
+          "enum": [
+            "off",
+            "soft",
+            "arcade",
+            "cinema",
+            "glass",
+            "scifi",
+            "custom",
+            ""
+          ],
+          "default": "off"
+        },
+        "soundFx": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "volume": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.8
+            },
+            "events": {
+              "type": "object"
+            }
+          }
+        },
+        "previews": {
+          "type": "boolean",
+          "default": true
+        },
+        "glass": {
+          "type": "boolean",
+          "default": true
+        },
+        "screensaver": {
+          "enum": [
+            "off",
+            "tv",
+            "all",
+            ""
+          ],
+          "default": "tv"
+        },
+        "profileColors": {
+          "type": "boolean",
+          "default": true
+        },
+        "ident": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "video": {
+              "type": "string",
+              "default": ""
+            },
+            "videos": {
+              "type": "array"
+            },
+            "order": {
+              "enum": [
+                "shuffle",
+                "order",
+                ""
+              ],
+              "default": "shuffle"
+            },
+            "builtIn": {
+              "type": "boolean",
+              "default": false
+            },
+            "when": {
+              "enum": [
+                "first",
+                "last",
+                ""
+              ],
+              "default": "first"
+            }
+          }
+        },
+        "night": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "from": {
+              "type": "string",
+              "pattern": "^(\\d\\d:\\d\\d)?$",
+              "default": "20:00"
+            },
+            "to": {
+              "type": "string",
+              "pattern": "^(\\d\\d:\\d\\d)?$",
+              "default": "06:00"
+            },
+            "theme": {
+              "$ref": "#/$defs/theme"
+            }
+          }
+        },
+        "rows": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 200,
+              "default": 15
+            },
+            "sections": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 8
+            },
+            "scroll": {
+              "type": "string",
+              "default": "arrows"
+            },
+            "panel": {
+              "type": "boolean",
+              "default": false
+            },
+            "panelHeight": {
+              "type": "number",
+              "minimum": 30,
+              "maximum": 90,
+              "default": 60
+            }
+          }
+        },
+        "homeTiles": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "width": {
+              "type": "number",
+              "minimum": 180,
+              "maximum": 900,
+              "default": 320
+            },
+            "height": {
+              "type": "number",
+              "minimum": 20,
+              "maximum": 80,
+              "default": 44
+            },
+            "brightness": {
+              "type": "number",
+              "minimum": 20,
+              "maximum": 160,
+              "default": 100
+            }
+          }
+        },
+        "bannerLogo": {
+          "type": "number",
+          "minimum": 30,
+          "maximum": 250,
+          "default": 100
+        },
+        "tileLogo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "place": {
+              "type": "string",
+              "default": "bl"
+            },
+            "size": {
+              "type": "number",
+              "minimum": 30,
+              "maximum": 300,
+              "default": 100
+            },
+            "x": {
+              "type": "number",
+              "minimum": -45,
+              "maximum": 45,
+              "default": 0
+            },
+            "y": {
+              "type": "number",
+              "minimum": -45,
+              "maximum": 45,
+              "default": 0
+            },
+            "count": {
+              "type": "string",
+              "default": "yes"
+            }
+          }
+        },
+        "libLogoSize": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 260,
+          "default": 0
+        },
+        "libPage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "place": {
+              "type": "string",
+              "default": "left"
+            },
+            "x": {
+              "type": "number",
+              "minimum": -400,
+              "maximum": 400,
+              "default": 0
+            },
+            "y": {
+              "type": "number",
+              "minimum": -300,
+              "maximum": 300,
+              "default": 0
+            }
+          }
+        },
+        "splash": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "type": "string",
+              "default": ""
+            },
+            "size": {
+              "type": "number",
+              "minimum": 30,
+              "maximum": 250,
+              "default": 100
+            },
+            "motion": {
+              "enum": [
+                "pulse",
+                "breathe",
+                "glow",
+                "still",
+                ""
+              ],
+              "default": "pulse"
+            },
+            "background": {
+              "type": "string",
+              "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}))?$",
+              "default": ""
+            },
+            "video": {
+              "type": "string",
+              "default": ""
+            },
+            "when": {
+              "enum": [
+                "signin",
+                "open",
+                "never",
+                ""
+              ],
+              "default": "signin"
+            },
+            "sound": {
+              "type": "boolean",
+              "default": true
+            },
+            "audio": {
+              "enum": [
+                "",
+                "own",
+                "music",
+                "silent"
+              ],
+              "default": ""
+            }
+          }
+        },
+        "ranked": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "style": {
+              "enum": [
+                "outline",
+                "solid",
+                "glow",
+                "badge",
+                "hidden",
+                ""
+              ],
+              "default": "outline"
+            },
+            "place": {
+              "enum": [
+                "behind",
+                "front",
+                "beside",
+                ""
+              ],
+              "default": "behind"
+            },
+            "size": {
+              "type": "number",
+              "minimum": 40,
+              "maximum": 160,
+              "default": 100
+            },
+            "font": {
+              "enum": [
+                "theme",
+                "Outfit",
+                "Inter",
+                "Bebas Neue",
+                "Audiowide",
+                "Georgia",
+                "System",
+                ""
+              ],
+              "default": "theme"
+            },
+            "color": {
+              "enum": [
+                "text",
+                "accent",
+                "gradient",
+                ""
+              ],
+              "default": "text"
+            },
+            "strength": {
+              "type": "number",
+              "minimum": 15,
+              "maximum": 100,
+              "default": 62
+            },
+            "scrollbar": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        },
+        "tileCovers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "show": {
+              "type": "string",
+              "default": "yes"
+            },
+            "place": {
+              "type": "string",
+              "default": "br"
+            },
+            "size": {
+              "type": "number",
+              "minimum": 20,
+              "maximum": 100,
+              "default": 56
+            },
+            "count": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 6,
+              "default": 3
+            },
+            "style": {
+              "type": "string",
+              "default": "angled"
+            },
+            "x": {
+              "type": "number",
+              "minimum": -40,
+              "maximum": 40,
+              "default": 0
+            },
+            "y": {
+              "type": "number",
+              "minimum": -40,
+              "maximum": 40,
+              "default": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}
