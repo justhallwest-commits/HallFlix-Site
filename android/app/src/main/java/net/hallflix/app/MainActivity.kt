@@ -10,6 +10,8 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.speech.RecognizerIntent
 import android.view.KeyEvent
@@ -40,6 +42,14 @@ class MainActivity : Activity() {
     private var server = ""
     private var loadFailed = false
     private var playerOpen = false
+    private val ui = Handler(Looper.getMainLooper())
+    /** If the server hasn't drawn anything after this long, stop waiting and say so instead of showing the logo forever. */
+    private val slow = Runnable {
+        if (web.visibility == View.VISIBLE) return@Runnable
+        web.stopLoading()
+        loadFailed = true
+        showPanel("HallFlix is taking too long", "Couldn't reach $server. ${AWAY_HINT}", retry = true)
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,6 +92,8 @@ class MainActivity : Activity() {
                 return true
             }
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) { loadFailed = false }
+            // Show the page as soon as it starts drawing (Android 6+), not only once every picture and video has loaded.
+            override fun onPageCommitVisible(view: WebView, url: String) { if (!loadFailed) reveal() }
             override fun onPageFinished(view: WebView, url: String) {
                 if (loadFailed) return
                 // If the server sent us somewhere else on the same site (usually http → https), remember that address.
@@ -90,16 +102,13 @@ class MainActivity : Activity() {
                     server = landed
                     Server.save(this@MainActivity, landed)
                 }
-                web.visibility = View.VISIBLE
-                splash.visibility = View.GONE
-                panel.visibility = View.GONE
-                web.requestFocus()
+                reveal()
                 CookieManager.getInstance().flush()
             }
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                 if (!request.isForMainFrame) return
                 loadFailed = true
-                showPanel("Can't reach HallFlix", "Check that the NAS is on and that this device is on the same network, or change the server address.", retry = true)
+                showPanel("Can't reach HallFlix", "Check that HallFlix is running, or change the server address. $AWAY_HINT", retry = true)
             }
         }
 
@@ -130,20 +139,37 @@ class MainActivity : Activity() {
     private fun load() {
         panel.visibility = View.GONE
         splash.visibility = View.VISIBLE
+        ui.removeCallbacks(slow)
+        ui.postDelayed(slow, LOAD_TIMEOUT_MS)
         web.loadUrl("$server/")
     }
 
+    private fun reveal() {
+        ui.removeCallbacks(slow)
+        if (web.visibility == View.VISIBLE) return
+        web.visibility = View.VISIBLE
+        splash.visibility = View.GONE
+        panel.visibility = View.GONE
+        web.requestFocus()
+    }
+
     private fun showPanel(title: String, text: String, retry: Boolean) {
+        ui.removeCallbacks(slow)
         web.visibility = View.INVISIBLE
         splash.visibility = View.GONE
         panel.visibility = View.VISIBLE
         findViewById<TextView>(R.id.panel_title).text = title
         findViewById<TextView>(R.id.panel_text).text = text
         val field = findViewById<EditText>(R.id.server)
-        if (field.text.isEmpty()) field.setText(server.ifEmpty { "http://192.168.1.83:8780" })
+        if (field.text.isEmpty()) field.setText(server.ifEmpty { DEFAULT_SERVER })
         val retryButton = findViewById<Button>(R.id.retry)
         retryButton.visibility = if (retry) View.VISIBLE else View.GONE
         (if (retry) retryButton else findViewById<Button>(R.id.connect)).requestFocus()
+    }
+
+    override fun onDestroy() {
+        ui.removeCallbacks(slow)
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -252,6 +278,10 @@ class MainActivity : Activity() {
 }
 
 private const val VOICE = 41
+private const val LOAD_TIMEOUT_MS = 20_000L
+/** Works at home and away. A home-network address (192.168.…) only works on the home Wi-Fi. */
+private const val DEFAULT_SERVER = "https://new.hallflix.net"
+private const val AWAY_HINT = "Away from home? An address like 192.168.… only works on your home Wi-Fi, so use https://new.hallflix.net instead."
 
 object BuildConfigVersion {
     fun name(ctx: Context): String = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1" } catch (e: Exception) { "1" }
