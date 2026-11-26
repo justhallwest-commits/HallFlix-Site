@@ -73,6 +73,7 @@ const RULES = {
   'homeTiles.width': { min: 180, max: 900 },
   'homeTiles.height': { min: 20, max: 80 },
   'homeTiles.brightness': { min: 20, max: 160 },
+  'homeTiles.columns': { min: 0, max: 4 },
   bannerLogo: { min: 30, max: 250 },
   'tileLogo.size': { min: 30, max: 300 },
   'tileLogo.x': { min: -45, max: 45 },

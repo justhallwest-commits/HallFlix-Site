@@ -188,6 +188,10 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   root.setProperty('--libs-min', `${Math.max(180, Math.min(900, +H.width || 320))}px`);
   root.setProperty('--libs-ratio', String(Math.max(20, Math.min(80, +H.height || 44)) / 100));
   root.setProperty('--tile-bright', String(Math.max(20, Math.min(160, +H.brightness || 100)) / 100));
+  // A set number of tiles side by side (e.g. two on a phone), instead of as many as fit at the tile width.
+  const cols = Math.max(0, Math.min(4, Math.round(+H.columns || 0)));
+  if (cols) { root.setProperty('--libs-cols', String(cols)); document.documentElement.dataset.libsCols = String(cols); }
+  else { root.removeProperty('--libs-cols'); delete document.documentElement.dataset.libsCols; }
   // Remember the loading screen's look on this device for the next time the app opens (see splash.js).
   try {
     const S = t.splash || {};

@@ -132,7 +132,8 @@ function tileEditor(l, own, base, bright = 100) {
 }
 /** Home: how big the library tiles are, how bright their pictures, and the film logo on the banner. */
 const homeCard = (theme) => html`<div class="card"><h2>Home page</h2>
-  ${range(theme, 'homeTiles.width', 'Library tile width (pixels; smaller fits more in a row)', 180, 900, 10, 320)}
+  ${choose(theme, 'homeTiles.columns', 'Library tiles in a row', [['0', 'Automatic (as many as fit at the width below)'], ['1', '1 (full width)'], ['2', '2 side by side'], ['3', '3 side by side'], ['4', '4 side by side']])}
+  ${+theme.homeTiles?.columns ? '' : range(theme, 'homeTiles.width', 'Library tile width (pixels; smaller fits more in a row)', 180, 900, 10, 320)}
   ${range(theme, 'homeTiles.height', 'Library tile height (% of its width)', 20, 80, 1, 44)}
   ${range(theme, 'homeTiles.brightness', 'Brightness of the tile pictures (%)', 20, 160, 5, 100)}
   <p class="muted small">Each library can have its own brightness: use its slider under “Logo on each tile”, or on its tab.</p>
@@ -841,7 +842,7 @@ pages.look = async (main) => {
   // On the Sign-in page tab, some choices show or hide others (panel strength, how dark, where to blur).
   box.addEventListener('change', (e) => { if (tab === 'signin' && e.target.matches('select[data-path^="login."], [data-path="login.focusBlur"]')) draw(); });
   // Choices that show or hide others on the Whole app tab.
-  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"], [data-path="ranked.style"], [data-path="heroMotion"]')) draw(); });
+  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"], [data-path="ranked.style"], [data-path="heroMotion"], [data-path="homeTiles.columns"]')) draw(); });
   // Sounds and sign-in music: test, upload, reorder and remove.
   const touched = (redraw = true) => { dirty = true; if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false; send(); };
   const music = () => { const o = editing(); o.login ||= {}; o.login.music ||= {}; if (!Array.isArray(o.login.music.tracks)) o.login.music.tracks = clone(view().login?.music?.tracks || []); return o.login.music; };
