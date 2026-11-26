@@ -384,3 +384,15 @@ textarea.code { width: 100%; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo,
 .row .grow details.problems { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
 .row .grow details.problems summary { cursor: pointer; color: #f0b44c; }
 .row .grow details.problems ul { margin: 4px 0 0 18px; padding: 0; white-space: normal; }
+
+/* Look and feel: which device the form edits, and the settings set for that device only */
+.devsw { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; flex-wrap: wrap; }
+.devsw > span { color: var(--muted); font-size: 13px; }
+.devsw .tabs { margin: 0; }
+.card.devnote { border-color: var(--cyan); }
+.card.devnote .tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.own-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); vertical-align: middle; }
+.f.own > span:first-child::after, .check.own::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); margin: 0 6px; vertical-align: middle; }
+.f.own, .check.own { position: relative; }
+.own-reset { margin-left: 8px; padding: 0 7px; line-height: 22px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; }
+.own-reset:hover { color: var(--text); border-color: var(--cyan); }

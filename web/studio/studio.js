@@ -499,11 +499,11 @@ function previewPane(libraries) {
     <div class="tabs" style="margin:0"><button class="on" data-pv-size="tv">TV / computer</button><button data-pv-size="phone">Phone</button></div></div>
     <div class="stage"><iframe src="/?preview=1" title="Preview of HallFlix"></iframe></div></section>`;
 }
-function wirePreview(main, payload) {
+function wirePreview(main, payload, device = () => null) {
   const frame = $('iframe', main); let ready = false, lib = null;
   const send = debounce(async () => {
     if (!ready || !frame.isConnected) return;
-    try { frame.contentWindow.postMessage({ type: 'hallflix-look', look: await api('POST', '/api/studio/look/preview', payload()), library: lib }, location.origin); } catch { /* preview is best effort */ }
+    try { frame.contentWindow.postMessage({ type: 'hallflix-look', look: await api('POST', '/api/studio/look/preview', payload()), library: lib, device: device() || 'none' }, location.origin); } catch { /* preview is best effort */ }
   }, 120);
   const onMsg = (e) => { if (e.source === frame.contentWindow && e.data?.type === 'hallflix-ready') { ready = true; send(); } };
   addEventListener('message', onMsg);
@@ -689,13 +689,44 @@ pages.look = async (main) => {
   let theme = merge(clone(L.defaults), L.theme);
   const libs = Object.fromEntries(L.libraries.map((l) => [l.id, clone(l.look)]));
   let tab = 'theme', dirty = false;
+  // Which device the form edits: '' is everywhere; 'phone' and 'tv' edit theme.devices[dev], which holds only what
+  // differs on that device. The form shows that device's look (everyday + its own settings) and writes its changes there.
+  let dev = '';
+  const over = () => { theme.devices ||= {}; return (theme.devices[dev] ||= {}); };
+  const view = () => (dev ? merge(theme, over()) : theme);
+  const editing = () => (dev ? over() : theme);
   main.innerHTML = String(html`<section class="controls"></section>${previewPane(L.libraries)}`);
   const box = $('.controls', main);
-  const send = wirePreview(main, () => ({ theme, libraries: libs, noSeason: true }));
+  const send = wirePreview(main, () => ({ theme, libraries: libs, noSeason: true }), () => dev);
+  const leaves = (o, pre = '') => Object.entries(o || {}).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? leaves(v, `${pre}${k}.`) : [`${pre}${k}`]));
+  // Mark each setting this device changes, with a button to go back to the everywhere value.
+  const markOwn = () => {
+    if (!dev) return;
+    const own = new Set(leaves(over()));
+    for (const el of $$('.f, .check', box)) {
+      const inp = $('[data-path]', el); if (!inp) continue;
+      const p = inp.dataset.path, mine = [...own].some((x) => x === p || x.startsWith(p + '.'));
+      el.classList.toggle('own', mine);
+      const btn = $('.own-reset', el);
+      if (mine && !btn) el.insertAdjacentHTML('beforeend', `<button type="button" class="own-reset" data-own-reset="${p}" title="Use the Everywhere setting">↺</button>`);
+      if (!mine && btn) btn.remove();
+    }
+    const n = $('[data-own-count]', box);
+    if (n) n.textContent = own.size ? `${own.size} setting${own.size > 1 ? 's' : ''} set for ${DEV_NAMES[dev]}` : `No settings set for ${DEV_NAMES[dev]} yet`;
+  };
+  const DEV_NAMES = { phone: 'phones', tv: 'TVs' };
   const draw = () => {
+    if (dev && tab.startsWith('lib-')) tab = 'theme'; // library looks are shared by every device
+    const theme = view(); // what this device sees; edits go to editing()
     const lib = L.libraries.find((l) => `lib-${l.id}` === tab);
     box.innerHTML = String(html`${head('Look and feel', 'Changes show in the preview straight away. Nothing goes live until you save.')}
-      <div class="tabs"><button data-tab="theme" class="${tab === 'theme' ? 'on' : ''}">Whole app</button><button data-tab="signin" class="${tab === 'signin' ? 'on' : ''}">Sign-in page</button>${L.libraries.map((l) => html`<button data-tab="lib-${l.id}" class="${tab === `lib-${l.id}` ? 'on' : ''}">${l.name}</button>`)}</div>
+      <div class="devsw"><span>Editing for</span><div class="tabs"><button data-dev="" class="${dev ? '' : 'on'}">Everywhere</button><button data-dev="phone" class="${dev === 'phone' ? 'on' : ''}">📱 Phones</button><button data-dev="tv" class="${dev === 'tv' ? 'on' : ''}">📺 TVs</button></div></div>
+      ${dev ? html`<div class="card devnote"><h2>${dev === 'phone' ? 'Phone look' : 'TV look'}</h2>
+        <p class="muted small">${dev === 'phone' ? 'Used by the HallFlix app on Android phones and tablets.' : 'Used by the Fire TV and Android TV apps, Roku and TV web browsers.'}
+          Change anything below and it changes on ${DEV_NAMES[dev]} only; settings marked <b class="own-dot"></b> are set for ${DEV_NAMES[dev]}, and everything else follows Everywhere. Seasons still apply on top.</p>
+        ${dev === 'phone' ? html`<label class="check"><input type="checkbox" data-phone-browsers ${theme.devices?.phoneBrowsers ? 'checked' : ''}> Also use the phone look in web browsers on phones</label>` : ''}
+        <div class="tools"><span class="muted small" data-own-count>No settings set for ${DEV_NAMES[dev]} yet</span><button class="btn sm danger" data-dev-reset>Reset the ${dev === 'phone' ? 'phone' : 'TV'} look</button></div></div>` : ''}
+      <div class="tabs"><button data-tab="theme" class="${tab === 'theme' ? 'on' : ''}">Whole app</button><button data-tab="signin" class="${tab === 'signin' ? 'on' : ''}">Sign-in page</button>${dev ? '' : L.libraries.map((l) => html`<button data-tab="lib-${l.id}" class="${tab === `lib-${l.id}` ? 'on' : ''}">${l.name}</button>`)}</div>
       ${tab === 'signin' ? signinCards(theme) : lib ? html`<div class="card" data-form="lib"><h2>${lib.name} only</h2><p class="muted small">Leave anything empty to use the whole-app look.</p>
           ${image(libs[lib.id], 'background', 'Library page background (picture or video). The Home tile has its own setting below.')}${range(libs[lib.id], 'dim', 'Darken background', 0, 0.95, 0.05, theme.background.dim)}
           ${range(libs[lib.id], 'blur', 'Blur background', 0, 30, 1, theme.background.blur || 0)}${choose(libs[lib.id], 'shade', 'Shade', BG_SHADES, 'Same as whole app')}${choose(libs[lib.id], 'position', 'Keep in view', BG_PLACES, 'Same as whole app')}
@@ -729,7 +760,7 @@ pages.look = async (main) => {
         ${rowsCard(theme, '')}
         ${rankedCard(theme, L.options.fonts || [])}
         ${homeCard(theme)}
-        ${tilesEditorCard(L.libraries, libs, theme.tileLogo || {}, theme.homeTiles?.brightness ?? 100)}
+        ${dev ? '' : tilesEditorCard(L.libraries, libs, theme.tileLogo || {}, theme.homeTiles?.brightness ?? 100)}
         ${logoCard(theme, theme.tileLogo || {}, '')}
         ${coversCard(theme, theme.tileCovers || {}, '')}
         <div class="card"><h2>Motion</h2>
@@ -745,7 +776,7 @@ pages.look = async (main) => {
           ${check(theme, 'profileColors', 'Tint each profile’s session with its own colour')}
           ${check(theme, 'glass', 'Glass controls that pick up the picture behind them')}${check(theme, 'previews', 'Open a larger preview when the pointer rests on a title')}
           ${select(theme, 'screensaver', 'Screensaver after five idle minutes', L.options.screensavers)}<p class="muted small">“tv” shows drifting artwork on TVs only, “all” on every screen. Glass and previews switch themselves off on TVs to keep them fast.</p></div>
-        <div class="card"><h2>TVs (Fire TV and Android TV)</h2>
+        ${dev === 'phone' ? '' : html`<div class="card"><h2>TVs (Fire TV and Android TV)</h2>
           <p class="muted small">A Fire TV Stick has far less power than a computer, so TVs get a lighter HallFlix. These settings only change TVs.</p>
           ${choose(theme, 'tv.width', 'Size of everything on the TV screen', [['1600', 'Like a computer (smallest, fits the most)'], ['1280', 'Medium'], ['960', 'Large (easiest to read from the sofa)']])}
           ${choose(theme, 'tv.focus', 'What is selected is outlined in', [['white', 'White (clearest on any picture)'], ['accent', 'The accent colour']])}
@@ -757,19 +788,20 @@ pages.look = async (main) => {
           ${check(theme, 'tv.wash', 'Colour wash that follows the banner')}
           ${check(theme, 'tv.tileVideos', 'Videos on library tiles')}
           ${check(theme, 'tv.stills', 'Show background videos and GIFs (sign-in page included) as still pictures (fastest)')}
-          <p class="muted small">Banner clips on TVs are under Motion (“Play clips on TVs too”). The TV picks up changes the next time HallFlix opens on it.</p></div>
-        ${soundsCard(theme)}
+          <p class="muted small">Banner clips on TVs are under Motion (“Play clips on TVs too”). The TV picks up changes the next time HallFlix opens on it.</p></div>`}
+        ${dev ? '' : html`${soundsCard(theme)}
         ${identCard(theme)}
         <div class="card"><h2>Evening look</h2>${check(theme, 'night.enabled', 'Switch to a second look in the evening')}
           <label class="f"><span>From</span><input type="time" data-path="night.from" value="${theme.night?.from || '20:00'}"></label>
           <label class="f"><span>Until</span><input type="time" data-path="night.to" value="${theme.night?.to || '06:00'}"></label>
           <label class="f"><span>Look</span><select data-path="night.preset"><option value="">Choose a look</option>${L.presets.map((p) => html`<option value="${p.id}" ${theme.night?.preset === p.id ? 'selected' : ''}>${p.name}</option>`)}</select></label>
-          <p class="muted small">Each device goes by its own clock. A running season takes priority.</p></div>
+          <p class="muted small">Each device goes by its own clock. A running season takes priority.</p></div>`}
         <div class="card"><h2>Name and logo</h2>${text(theme, 'siteName', 'Site name')}${image(theme, 'logo.image', 'Logo (empty uses the HallFlix neon logo)')}${range(theme, 'logo.height', 'Logo size', 20, 120, 2)}${image(theme, 'logo.favicon', 'Browser tab icon (a small square picture; empty uses the HallFlix crown)')}</div></div>`}
       <div class="savebar"><button class="btn primary" data-save ${dirty ? '' : 'disabled'}>Save and go live</button><button class="btn" data-undo ${dirty ? '' : 'disabled'}>Undo changes</button></div>`);
+    markOwn();
   };
   const curLib = () => L.libraries.find((l) => `lib-${l.id}` === tab);
-  const target = () => (curLib() ? libs[curLib().id] : theme);
+  const target = () => (curLib() ? libs[curLib().id] : editing());
   // The form edits whichever of the whole-app theme or the open library is showing.
   bind(box, new Proxy({}, { get: (_, k) => target()[k], set: (_, k, v) => { target()[k] = v; return true; } }), (redraw) => {
     const l = curLib();
@@ -779,8 +811,32 @@ pages.look = async (main) => {
       if (shown !== !!o.useAccent) redraw = true;
     }
     dirty = true;
-    if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false;
+    if (redraw) draw(); else { for (const b of $$('.savebar button', box)) b.disabled = false; markOwn(); }
     send();
+  });
+  // Device switcher, the phone-browsers choice, and putting a setting back to its everywhere value.
+  box.addEventListener('click', (e) => {
+    const d = e.target.closest('[data-dev]');
+    if (d) {
+      dev = d.dataset.dev; draw(); send();
+      // The preview takes the size of the device being edited.
+      const size = $(`[data-pv-size="${dev === 'phone' ? 'phone' : 'tv'}"]`, main); size?.click();
+      return;
+    }
+    const r = e.target.closest('[data-own-reset]');
+    if (r) {
+      e.preventDefault();
+      const ks = r.dataset.ownReset.split('.'), o = over();
+      const parents = ks.slice(0, -1).reduce((acc, k) => [...acc, (acc.at(-1) || o)?.[k]], []);
+      delete (parents.at(-1) || o)[ks.at(-1)];
+      for (let i = parents.length - 1; i >= 0; i--) if (parents[i] && !Object.keys(parents[i]).length) delete (parents[i - 1] || o)[ks[i]];
+      dirty = true; draw(); send(); return;
+    }
+    if (e.target.closest('[data-dev-reset]')) { theme.devices[dev] = {}; dirty = true; draw(); send(); }
+  });
+  box.addEventListener('change', (e) => {
+    if (!e.target.matches('[data-phone-browsers]')) return;
+    theme.devices ||= {}; theme.devices.phoneBrowsers = e.target.checked; dirty = true; draw(); send();
   });
   // On the Sign-in page tab, some choices show or hide others (panel strength, how dark, where to blur).
   box.addEventListener('change', (e) => { if (tab === 'signin' && e.target.matches('select[data-path^="login."], [data-path="login.focusBlur"]')) draw(); });
@@ -788,7 +844,7 @@ pages.look = async (main) => {
   box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"], [data-path="ranked.style"], [data-path="heroMotion"]')) draw(); });
   // Sounds and sign-in music: test, upload, reorder and remove.
   const touched = (redraw = true) => { dirty = true; if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false; send(); };
-  const music = () => { theme.login ||= {}; theme.login.music ||= {}; if (!Array.isArray(theme.login.music.tracks)) theme.login.music.tracks = []; return theme.login.music; };
+  const music = () => { const o = editing(); o.login ||= {}; o.login.music ||= {}; if (!Array.isArray(o.login.music.tracks)) o.login.music.tracks = clone(view().login?.music?.tracks || []); return o.login.music; };
   const stopSong = () => { studioSong.a?.pause(); studioSong.a = null; studioSong.i = -1; };
   box.addEventListener('input', (e) => {
     const n = e.target.closest('[data-idname]');
@@ -800,8 +856,9 @@ pages.look = async (main) => {
     const b = e.target.closest('[data-export],[data-import]');
     if (!b) return;
     if ('export' in b.dataset) {
-      const name = (L.presets.find((p) => p.id === theme.preset)?.name || theme.siteName || 'HallFlix look');
-      const blob = new Blob([JSON.stringify({ format: 'hallflix-look', version: 1, name, theme }, null, 2)], { type: 'application/json' });
+      const shown = view(), name = (L.presets.find((p) => p.id === shown.preset)?.name || shown.siteName || 'HallFlix look') + (dev ? ` (${dev})` : '');
+      const out = dev ? { ...shown, devices: undefined } : theme;
+      const blob = new Blob([JSON.stringify({ format: 'hallflix-look', version: 1, name, theme: out }, null, 2)], { type: 'application/json' });
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${name.replace(/[^\w-]+/g, '-').toLowerCase()}.hallflix-look.json` });
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); return;
     }
@@ -811,7 +868,10 @@ pages.look = async (main) => {
         const data = JSON.parse(await input.files[0].text());
         const t = data?.format === 'hallflix-look' ? data.theme : data?.theme || data;
         if (!t || typeof t !== 'object' || !t.colors) throw new Error('That file isn’t a HallFlix look');
-        theme = merge(clone(L.defaults), t); touched(); toast(`Loaded ${data.name || 'the look'}. Save to keep it.`);
+        // On a device, the imported look becomes that device's look; everywhere, the device looks are kept.
+        if (dev) theme.devices[dev] = { ...clone(t), devices: undefined };
+        else theme = { ...merge(clone(L.defaults), t), devices: theme.devices };
+        touched(); toast(`Loaded ${data.name || 'the look'}${dev ? ` for ${DEV_NAMES[dev]}` : ''}. Save to keep it.`);
       } catch (err) { fail(err); }
     };
     input.click();
@@ -969,7 +1029,7 @@ pages.look = async (main) => {
     const lp = e.target.closest('[data-lpos]');
     if (lp) {
       const [x, y] = lp.dataset.lpos.split(',');
-      theme.login = { ...(theme.login || {}), x, y };
+      const o = editing(); o.login = { ...(o.login || {}), x, y };
       dirty = true; draw(); send();
       return;
     }
@@ -980,8 +1040,12 @@ pages.look = async (main) => {
       const sel = $('[data-pv-go]', main); sel.value = curLib() ? `#/library/${curLib().id}` : tab === 'signin' ? '#/signin' : '#/'; sel.onchange({ target: sel });
     } else if (t.dataset.preset) {
       const p = L.presets.find((x) => x.id === t.dataset.preset);
-      const keep = { siteName: theme.siteName, logo: theme.logo, background: theme.background, login: theme.login };
-      theme = { ...merge(clone(L.defaults), p.theme), ...keep, preset: p.id };
+      // On a device, a preset becomes that device's look (its name, logo, backgrounds and sign-in page still follow Everywhere).
+      if (dev) theme.devices[dev] = { ...clone(p.theme), preset: p.id };
+      else {
+        const keep = { siteName: theme.siteName, logo: theme.logo, background: theme.background, login: theme.login, devices: theme.devices };
+        theme = { ...merge(clone(L.defaults), p.theme), ...keep, preset: p.id };
+      }
       dirty = true; draw(); send();
     } else if (t.hasAttribute('data-undo')) route();
     else if (t.hasAttribute('data-save')) {

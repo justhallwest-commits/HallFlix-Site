@@ -334,3 +334,30 @@ test('theme contract: every choice and slider Studio offers is allowed by the co
   }
   assert.ok(n > 50, `checked ${n} Studio values`);
 });
+
+test('device looks: phones and TVs get their own settings over the everyday look, and seasons still reach them', () => {
+  const theme = { heroHeight: 80, css: 'a{}', colors: { accent: '#ff0000' },
+    devices: { phone: { heroHeight: 50, colors: { accent: '#00ff00' }, css: 'b{}', rows: { items: 10 }, logo: { image: '' } }, tv: {}, phoneBrowsers: true } };
+  const season = { id: 1, enabled: true, starts: '01-01', ends: '12-31', look: { theme: { colors: { bg: '#123456' } } } };
+  const r = look.resolve({ theme, libraries: [{ id: 1, look: {} }], seasons: [season] });
+  assert.equal(r.theme.heroHeight, 80);
+  assert.ok(!('devices' in r.theme), 'the everyday theme carries no device looks');
+  const phone = r.devices.phone.theme;
+  assert.equal(phone.heroHeight, 50);
+  assert.equal(phone.colors.accent, '#00ff00');
+  assert.equal(phone.colors.bg, '#123456'); // the running season applies on phones too
+  assert.equal(phone.css, 'a{}\n\nb{}'); // phone CSS adds to the everyday CSS
+  assert.equal(phone.rows.items, 10);
+  assert.equal(phone.logo.image, look.DEFAULT_THEME.logo.image); // an empty setting follows the everyday look
+  assert.ok(!('tv' in r.devices), 'no TV look when nothing is set for TVs');
+  assert.equal(r.devices.phoneBrowsers, true);
+  // No device settings at all: the apps get only the everyday look.
+  assert.deepEqual(look.resolve({ theme: {}, libraries: [], seasons: [] }).devices, { phoneBrowsers: false });
+});
+
+test('device looks: checked like any theme, and a device look cannot nest another', async () => {
+  const { checkTheme } = await import('../src/themespec.js');
+  const { theme, problems } = checkTheme({ devices: { phone: { radius: 99, colors: { bg: 'blue', accent: '#0f0' }, devices: { tv: {} } }, phoneBrowsers: 'true', laptop: {} } });
+  assert.deepEqual(theme, { devices: { phone: { radius: 28, colors: { accent: '#00ff00' } }, phoneBrowsers: true } });
+  for (const want of ['devices.phone.devices', 'devices.phone.radius', 'devices.phone.colors.bg', 'devices.laptop']) assert.ok(problems.some((p) => p.startsWith(want + ':')), want);
+});

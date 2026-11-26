@@ -16,7 +16,7 @@ window.HallFlix = {
   get look() { return state.look; },
   get profile() { return state.profile; },
   get libraries() { return state.libraries; },
-  registerEffect(name, def) { effects[name] = def; if (state.look?.theme?.effect === name) { startEffect('none'); startEffect(name); } },
+  registerEffect(name, def) { effects[name] = def; if (themeNow()?.effect === name) { startEffect('none'); startEffect(name); } },
   addHomeRow(def) { views.extraRows.push(def); views.markStale(); },
   navigate(hash) { location.hash = hash; },
   /** A lyrics service in the browser: { name, find(track) } resolving to { synced: "LRC text" | [{ t, text }], plain }. See docs/PLUGINS.md. */
@@ -144,7 +144,7 @@ async function boot() {
     state.preview = true;
     addEventListener('message', (e) => {
       if (e.origin !== location.origin || !e.data) return;
-      if (e.data.type === 'hallflix-look') applyLook(e.data.look, e.data.library ?? undefined);
+      if (e.data.type === 'hallflix-look') { if ('device' in e.data) state.device = e.data.device || 'none'; applyLook(e.data.look, e.data.library ?? undefined); }
       if (e.data.type === 'hallflix-go') {
         if (e.data.hash === '#/signin') signinPreview();
         else if (state.signinPreview) { location.hash = e.data.hash; location.reload(); } // back to the signed-in app

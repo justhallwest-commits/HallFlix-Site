@@ -100,13 +100,14 @@ const RULES = {
 };
 // Keys whose value is free-form: a map Studio fills in, or a list of uploads.
 const FREE = new Set(['soundFx.events', 'login.music.tracks', 'ident.videos']);
-const NESTED_THEME = 'night.theme'; // the evening look is itself a (partial) theme
+// The evening look and each device's look are themselves (partial) themes.
+const NESTED_THEMES = new Set(['night.theme', 'devices.phone', 'devices.tv']);
 
 /** What kind of value a path holds, from its default and its rule. */
 function kindOf(path, def) {
   const rule = RULES[path] || {};
   if (FREE.has(path)) return Array.isArray(def) ? 'list' : 'map';
-  if (path === NESTED_THEME) return 'theme';
+  if (NESTED_THEMES.has(path)) return 'theme';
   if (rule.color || path.startsWith('colors.')) return 'color';
   if (rule.enum || rule.pattern) return 'choice';
   if (typeof def === 'boolean') return 'boolean';
@@ -159,9 +160,13 @@ function checkValue(path, value, def, problems, opts) {
     case 'map':
       if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(problems, path, 'expected an object'), { ok: false };
       return { ok: true, value };
-    case 'theme':
+    case 'theme': {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(problems, path, 'expected a theme object'), { ok: false };
-      return { ok: true, value: walk(value, DEFAULT_THEME, '', problems, opts, path + '.') };
+      // A nested look can't hold its own device looks (a phone look inside the phone look).
+      const { devices, ...rest } = value;
+      if (devices !== undefined) fail(problems, `${path}.devices`, 'a nested look cannot have device looks, ignored');
+      return { ok: true, value: walk(rest, DEFAULT_THEME, '', problems, { ...opts, unknown: opts.unknown === 'keep' ? 'keep' : 'drop' }, path + '.') };
+    }
     case 'object':
       if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(problems, path, 'expected an object'), { ok: false };
       return { ok: true, value: walk(value, def, path + '.', problems, opts) };

@@ -53,6 +53,10 @@ export const DEFAULT_THEME = {
   // built-in animation in the mix (website only). `video` is the older single-video setting, still honoured.
   ident: { enabled: true, video: '', videos: [], order: 'shuffle', builtIn: false, when: 'first' }, // when: 'first' (before any pre-rolls) or 'last' (right before the feature)
   night: { enabled: false, from: '20:00', to: '06:00', theme: {} }, // a second look for the evening, by the viewer's clock
+  // Looks for one kind of device, laid over the everyday look: `phone` for the HallFlix app on Android phones and
+  // tablets (and phone web browsers when `phoneBrowsers` is on), `tv` for the Fire TV / Android TV apps, Roku and TV
+  // browsers. Each holds only what differs; seasons still apply on top, so holiday looks reach every device.
+  devices: { phone: {}, tv: {}, phoneBrowsers: false },
   // Rows on Home and in every library (a library can override any of it): how many titles each row shows (0 = all),
   // how many rows show before "Show more rows" (0 = all), arrows or a visible scroll bar under each row, and whether the
   // rows sit in their own scrolling panel so the background stays in view.
@@ -247,8 +251,32 @@ function prune(o) {
   return out;
 }
 
+export const DEVICES = ['phone', 'tv'];
+
+/**
+ * The look as the apps get it. `theme` and `night` are the everyday look; `devices.phone` / `devices.tv` (only when
+ * that device has settings of its own) are the same thing worked out for that device: its settings laid over the
+ * everyday look first, then any running season, then its evening look. Each device picks its own (core.js lookFor).
+ */
 export function resolve({ theme, libraries, seasons, date = new Date(), forceSeason = null }) {
+  const { devices, ...everyday } = theme || {};
+  const base = resolveOne({ theme: everyday, libraries, seasons, date, forceSeason });
+  const out = { ...base, devices: { phoneBrowsers: !!devices?.phoneBrowsers } };
+  for (const d of DEVICES) {
+    const patch = prune(devices?.[d] || {});
+    if (!Object.keys(patch).length) continue;
+    const own = merge(everyday, patch);
+    // A device's own CSS adds to the everyday CSS rather than replacing it.
+    own.css = [everyday.css, patch.css].filter((x) => typeof x === 'string' && x.trim()).join('\n\n');
+    const r = resolveOne({ theme: own, libraries: [], seasons, date, forceSeason });
+    out.devices[d] = { theme: r.theme, night: r.night };
+  }
+  return out;
+}
+
+function resolveOne({ theme, libraries, seasons, date, forceSeason }) {
   let out = merge(DEFAULT_THEME, theme || {});
+  delete out.devices;
   const active = seasons.filter((s) => (forceSeason != null ? s.id === forceSeason : s.enabled && inRange(s.starts, s.ends, date)));
   for (const s of active) out = merge(out, prune(s.look?.theme || {}));
   // Custom CSS adds up: the everyday CSS, then each running season's.

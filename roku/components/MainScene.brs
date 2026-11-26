@@ -222,6 +222,8 @@ end sub
 sub applyLook(look as dynamic)
     if look = invalid or look.theme = invalid then return
     t = look.theme
+    ' The TV look from the Studio (Look and feel → Editing for TVs), when one is set.
+    if look.devices <> invalid and look.devices.tv <> invalid and look.devices.tv.theme <> invalid then t = look.devices.tv.theme
     if t.colors <> invalid then
         m.bg.color = color(t.colors.bg, "0x0A0814FF")
         m.top.findNode("dim").color = color(t.colors.bg, "0x0A0814FF")

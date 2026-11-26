@@ -1,7 +1,7 @@
 // How HallFlix feels: colour drawn from the artwork in focus, depth on posters, the living spotlight,
 // navigation sounds, and the open animation. Everything here is optional polish: it switches itself off on
 // TVs and for people who ask for reduced motion, and never runs during playback.
-import { $, state, themeNow, applyLook, on, api, isTV } from './core.js';
+import { $, state, themeNow, applyLook, on, api, isTV, lookFor, isNight } from './core.js';
 import { playSound, preload } from './sounds.js';
 
 const tv = () => document.body.classList.contains('tv');
@@ -260,9 +260,8 @@ export function identSound() {
 // ---------- evening look ----------
 function watchClock() {
   setInterval(() => {
-    if (!state.look?.night || state.preview || !$('#player').hidden) return;
-    const due = (() => { const n = state.look.night, d = new Date(), now = d.getHours() * 60 + d.getMinutes(), m = (s) => +s.slice(0, 2) * 60 + +s.slice(3); const a = m(n.from), z = m(n.to); return a <= z ? now >= a && now < z : now >= a || now < z; })();
-    if (due !== state.night) applyLook();
+    if (!lookFor()?.night || state.preview || !$('#player').hidden) return;
+    if (isNight() !== state.night) applyLook();
   }, 60e3);
 }
 

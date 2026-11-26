@@ -172,7 +172,7 @@ const TV_UA = /AFT|Android TV|GoogleTV|BRAVIA|SmartTV|Tizen|Web0S/i;
 async function tvPage(req, html) {
   if (!TV_UA.test(req.headers['user-agent'] || '')) return html;
   let w = 1600;
-  try { w = Math.max(960, Math.min(1920, +(await look.currentLook()).theme?.tv?.width || 1600)); } catch {}
+  try { const lk = await look.currentLook(); w = Math.max(960, Math.min(1920, +(lk.devices?.tv?.theme || lk.theme)?.tv?.width || 1600)); } catch {}
   return html.replace(/<meta name="viewport" content="[^"]*">/, `<meta name="viewport" content="width=${w}, viewport-fit=cover">`);
 }
 async function serveStatic(req, res, pathname) {

@@ -97,15 +97,36 @@ const isVideo = (u) => !/^\/api\/fit\?/.test(u || '') && /\.(mp4|webm)(\?|$)/i.t
 let currentLibrary = null;
 
 const mins = (hm) => +hm.slice(0, 2) * 60 + +hm.slice(3);
+
+/**
+ * Which device look this screen uses: 'tv' (Fire TV / Android TV apps, smart TVs, ?tv), 'phone' (the HallFlix app on a
+ * phone or tablet, and phone browsers when the look says so), or null (everything else). ?device=phone|tv|none forces
+ * it, which is how the Studio previews a device.
+ */
+export function deviceKind(look = state.look) {
+  const forced = state.device ?? new URLSearchParams(location.search).get('device');
+  if (forced === 'phone' || forced === 'tv') return forced;
+  if (forced === 'none') return null;
+  if (isTV()) return 'tv';
+  if (/HallFlixApp/.test(navigator.userAgent)) return 'phone';
+  if (look?.devices?.phoneBrowsers && matchMedia('(pointer: coarse) and (max-width: 900px)').matches) return 'phone';
+  return null;
+}
+/** This device's look ({ theme, night }): its own when it has one, otherwise the everyday look. */
+export function lookFor(look = state.look) {
+  const d = deviceKind(look);
+  return (d && look?.devices?.[d]) || look;
+}
+
 /** Is the evening look due right now, by this device's clock? */
 export function isNight(look = state.look, d = new Date()) {
-  const n = look?.night;
+  const n = lookFor(look)?.night;
   if (!n) return false;
   const now = d.getHours() * 60 + d.getMinutes(), a = mins(n.from), z = mins(n.to);
   return a <= z ? now >= a && now < z : now >= a || now < z;
 }
 /** The theme in force: the evening look when it is due, otherwise the everyday (or seasonal) one. */
-export const themeNow = (look = state.look) => (isNight(look) ? look.night.theme : look?.theme);
+export const themeNow = (look = state.look) => { const v = lookFor(look); return isNight(look) ? v.night.theme : v?.theme; };
 
 /** Apply the look. `libraryId` adds that library's own background, accent and logo on top. */
 export function applyLook(look = state.look, libraryId = currentLibrary) {
