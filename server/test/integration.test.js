@@ -588,6 +588,21 @@ test('plugins: theme files are checked against the theme contract and their pict
   assert.equal(schema.title, 'HallFlix theme file');
 });
 
+test('device looks: saved from the Studio, sent to every app, and previewed per device', async () => {
+  const before = (await hf.api('GET', '/api/studio/look')).theme;
+  const saved = await hf.api('PUT', '/api/studio/theme', { theme: { ...before, devices: { phone: { heroHeight: 55, colors: { accent: '#00ff88' } }, tv: {}, phoneBrowsers: false } } });
+  assert.deepEqual(saved.problems, []);
+  const boot = await hf.api('GET', '/api/boot');
+  assert.equal(boot.look.devices.phone.theme.heroHeight, 55);
+  assert.equal(boot.look.devices.phone.theme.colors.accent, '#00ff88');
+  assert.equal(boot.look.theme.heroHeight, before.heroHeight ?? 80);
+  assert.ok(!boot.look.devices.tv);
+  const pv = await hf.api('POST', '/api/studio/look/preview', { theme: { ...before, devices: { tv: { radius: 3 } } }, noSeason: true });
+  assert.equal(pv.devices.tv.theme.radius, 3);
+  assert.ok(!pv.devices.phone);
+  await hf.api('PUT', '/api/studio/theme', { theme: before });
+});
+
 test('profiles: separate history, no Studio access, and guessing is slowed down', async () => {
   const kid = await hf.api('POST', '/api/studio/profiles', { name: 'Guest', password: '4321' });
   assert.equal(kid.admin, false);

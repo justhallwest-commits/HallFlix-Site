@@ -767,6 +767,22 @@
             }
           }
         },
+        "devices": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "phone": {
+              "$ref": "#/$defs/theme"
+            },
+            "tv": {
+              "$ref": "#/$defs/theme"
+            },
+            "phoneBrowsers": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        },
         "rows": {
           "type": "object",
           "additionalProperties": false,
