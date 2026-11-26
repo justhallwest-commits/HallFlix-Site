@@ -1746,6 +1746,13 @@ body.tv .cap-panel { -webkit-mask-image: none; mask-image: none; }
 .libs .lib-tile .tile-text.placed .tile-name { font-size: calc(clamp(16px, 9.5cqw, 56px) * var(--tl-k, 1) * min(1, var(--libs-ratio, 0.4375) / 0.4375 + 0.25)); }
 .libs .lib-tile .tile-count { font-size: clamp(10.5px, 3.3cqw, 15px); }
 .lib-tile .tile-art { filter: brightness(var(--tile-bright, 1)); }
+/* "Library tiles in a row" set in the Studio: exactly that many side by side, whatever the screen width. */
+:root[data-libs-cols] .libs, :root[data-libs-cols] .libs[data-count="1"] { grid-template-columns: repeat(var(--libs-cols), minmax(0, 1fr)); }
+/* Small tiles (two or more across a phone): the name gets the whole tile, and the cover stack shrinks to fit. */
+@container (max-width: 260px) {
+  .libs .lib-tile .tile-text { right: 10px; }
+  .libs .lib-tile .tile-text.placed { max-width: 92%; }
+}
 .hero .banner-logo { max-width: min(86vw, calc(460px * var(--banner-logo-k, 1))); max-height: calc(190px * var(--banner-logo-k, 1)); }
 
 /* ---------- The library page's logo: left (usual), centre, right, the name instead, or hidden; nudged from there ---------- */
