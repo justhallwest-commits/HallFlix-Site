@@ -19,8 +19,8 @@ import org.json.JSONObject
 
 /**
  * The native TV home screen: a big picture of the focused title, the top menu, library tiles, and the Studio's home rows
- * (Continue watching, My List, new in each library, genres…). Rows, order and hidden sections come from /api/home,
- * so the Studio's Home layout applies here too.
+ * (Continue watching, My List, new in each library, genres…). Rows, order and hidden sections come from /api/home, so
+ * the Studio's Home layout applies; sizes, the big picture, the menu and the tiles follow Studio → Fire TV app.
  */
 class TvHomeActivity : Activity() {
     private lateinit var heroImage: ImageView
@@ -33,7 +33,9 @@ class TvHomeActivity : Activity() {
     private lateinit var rows: RecyclerView
     private lateinit var status: TextView
     private lateinit var nav: LinearLayout
+    private var homeTab: TextView? = null
 
+    private val heroOn get() = TvLook.flag("hero", "show", true)
     private var spotlight = listOf<JSONObject>()
     private var spot = 0
     private var shown: JSONObject? = null
@@ -59,47 +61,65 @@ class TvHomeActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        // Back from the player or a title page: Continue Watching and My List may have changed.
+        // Back from the player: Continue Watching and My List may have changed.
         if (refreshOnReturn) { refreshOnReturn = false; load(quiet = true) }
     }
-
 
     private fun build() {
         val root = FrameLayout(this).apply { setBackgroundColor(TvLook.bg) }
         val w = resources.displayMetrics.widthPixels
         val h = resources.displayMetrics.heightPixels
+        val clear = TvLook.bg and 0x00FFFFFF
 
-        // The big picture: right-hand two thirds, fading into the background on the left and at the bottom.
-        heroImage = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
-        root.addView(heroImage, FrameLayout.LayoutParams((w * 0.72).toInt(), (h * 0.74).toInt(), Gravity.END or Gravity.TOP))
-        root.addView(View(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(TvLook.bg, TvLook.bg and 0x00FFFFFF or 0xCC000000.toInt(), TvLook.bg and 0x00FFFFFF))
-        }, FrameLayout.LayoutParams((w * 0.72).toInt(), (h * 0.74).toInt(), Gravity.END or Gravity.TOP).apply { })
-        root.addView(View(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(TvLook.bg, TvLook.bg and 0x00FFFFFF))
-        }, FrameLayout.LayoutParams(-1, (h * 0.34).toInt(), Gravity.TOP).apply { topMargin = (h * 0.42).toInt() })
-        root.addView(View(this).apply { setBackgroundColor(TvLook.bg) }, FrameLayout.LayoutParams(-1, (h * 0.26).toInt(), Gravity.BOTTOM))
+        // The app's background picture (Studio → Fire TV app → Background), dimmed.
+        TvLook.background?.let { url ->
+            val bgImg = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+            loadImage(bgImg, url)
+            root.addView(bgImg, FrameLayout.LayoutParams(-1, -1))
+            root.addView(View(this).apply { setBackgroundColor(TvLook.bg); alpha = TvLook.num("background", "dim", 70) / 100f }, FrameLayout.LayoutParams(-1, -1))
+        }
 
-        // The top menu.
+        // The big picture: the right-hand part of the screen, fading into the background on the left and at the bottom.
+        val heroW = (w * TvLook.num("hero", "width", 72) / 100f).toInt()
+        val rowsTop = (h * TvLook.num("hero", "height", 56) / 100f).toInt()
+        val heroH = (rowsTop * 1.32f).toInt().coerceAtMost(h)
+        heroImage = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; brightness(TvLook.num("hero", "brightness", 100)) }
+        if (heroOn) {
+            root.addView(heroImage, FrameLayout.LayoutParams(heroW, heroH, Gravity.END or Gravity.TOP))
+            root.addView(View(this).apply {
+                background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(TvLook.bg, clear or 0xCC000000.toInt(), clear))
+            }, FrameLayout.LayoutParams((heroW * 0.6f).toInt(), heroH, Gravity.END or Gravity.TOP).apply { marginEnd = (heroW * 0.4f).toInt() })
+            if (heroW < w) root.addView(View(this).apply { setBackgroundColor(TvLook.bg) }, FrameLayout.LayoutParams(w - heroW, heroH, Gravity.START or Gravity.TOP))
+            root.addView(View(this).apply {
+                background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(TvLook.bg, clear))
+            }, FrameLayout.LayoutParams(-1, (heroH * 0.45f).toInt(), Gravity.TOP).apply { topMargin = (heroH * 0.55f).toInt() })
+            root.addView(View(this).apply { setBackgroundColor(TvLook.bg) }, FrameLayout.LayoutParams(-1, (h - heroH).coerceAtLeast(0), Gravity.BOTTOM))
+        }
+
+        // The top menu (Studio → Fire TV app → Menu).
         nav = row().apply { setPadding(dp(40), dp(18), dp(40), 0) }
         val logo = ImageView(this).apply { adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_START }
         if (TvLook.logo != null) loadImage(logo, TvLook.logo) else logo.setImageResource(R.drawable.logo)
-        nav.addView(logo, LinearLayout.LayoutParams(-2, dp(30)).apply { marginEnd = dp(26) })
+        nav.addView(logo, LinearLayout.LayoutParams(-2, dp(TvLook.num("nav", "logoHeight", 30))).apply { marginEnd = dp(26) })
+        val centre = TvLook.str("nav", "align", "left") == "center"
+        if (centre) nav.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         fun tab(text: String, action: () -> Unit) = label(15f, TvLook.muted, bold = true).apply {
             this.text = text
             setPadding(dp(12), dp(7), dp(12), dp(7))
             isFocusable = true; isClickable = true
-            background = focusRing(dp(16).toFloat()).apply { }
-            zoomOnFocus(1.06f) { has -> setTextColor(if (has) TvLook.text else TvLook.muted) }
+            background = focusRing(dp(16).toFloat())
+            zoomOnFocus(1.06f) { has -> setTextColor(if (has || this === homeTab) TvLook.text else TvLook.muted) }
             setOnClickListener { action() }
         }
-        nav.addView(tab("Home") { focusHero() }.apply { setTextColor(TvLook.text) })
-        for (lib in TvLook.libraries.objects()) nav.addView(tab(lib.optString("name")) { TvNav.openLibrary(this, lib) })
-        nav.addView(tab("Search") { TvNav.toWeb(this, "location.hash = '#/search/'") })
-        nav.addView(tab("My List") { TvNav.toWeb(this, "location.hash = '#/list'") })
+        homeTab = tab("Home") { focusTop() }.apply { setTextColor(TvLook.text) }
+        nav.addView(homeTab)
+        if (TvLook.flag("nav", "libraries", true)) for (lib in TvLook.libraries.objects()) nav.addView(tab(lib.optString("name")) { TvNav.openLibrary(this, lib) })
+        if (TvLook.flag("nav", "search", true)) nav.addView(tab("Search") { TvNav.toWeb(this, "location.hash = '#/search/'") })
+        if (TvLook.flag("nav", "myList", true)) nav.addView(tab("My List") { TvNav.toWeb(this, "location.hash = '#/list'") })
         nav.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         nav.addView(tab(TvLook.profileName.ifEmpty { "Profile" }) { profileMenu() })
-        root.addView(nav, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+        val navOn = TvLook.flag("nav", "show", true)
+        if (navOn) root.addView(nav, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
 
         // What the big picture is about.
         val info = column().apply { setPadding(dp(48), 0, 0, 0) }
@@ -110,13 +130,13 @@ class TvHomeActivity : Activity() {
         heroMeta = label(14f, TvLook.muted, bold = true)
         info.addView(heroMeta, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(10) })
         heroText = label(15f, TvLook.text, lines = 3).apply { setLineSpacing(0f, 1.15f); alpha = 0.92f }
-        info.addView(heroText, LinearLayout.LayoutParams((w * 0.42).toInt(), -2).apply { bottomMargin = dp(16) })
+        if (TvLook.flag("hero", "overview", true)) info.addView(heroText, LinearLayout.LayoutParams((w * 0.42).toInt(), -2).apply { bottomMargin = dp(16) })
         heroButtons = row()
         playBtn = tvButton("Play", primary = true) { shown?.let { playItem(it) } }
         heroButtons.addView(playBtn, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(12) })
         heroButtons.addView(tvButton("More info") { shown?.let { TvNav.openItem(this, it) } })
         info.addView(heroButtons)
-        root.addView(info, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply { topMargin = dp(78) })
+        if (heroOn) root.addView(info, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply { topMargin = if (navOn) dp(78) else dp(40) })
 
         // The rows: the focused row's top always sits at the same height.
         rows = RecyclerView(this).apply {
@@ -127,7 +147,8 @@ class TvHomeActivity : Activity() {
             isFocusable = false
             descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
-        root.addView(rows, FrameLayout.LayoutParams(-1, -1).apply { topMargin = (h * 0.56).toInt() })
+        val top = if (heroOn) rowsTop else if (navOn) dp(78) else dp(32)
+        root.addView(rows, FrameLayout.LayoutParams(-1, -1).apply { topMargin = top })
 
         status = label(16f, TvLook.muted, lines = 3).apply { gravity = Gravity.CENTER }
         root.addView(status, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
@@ -142,19 +163,20 @@ class TvHomeActivity : Activity() {
         if (!quiet) status.text = "Loading…"
         TvApi.get(this, "/api/home?lite=1", { data ->
             status.text = ""
-            spotlight = data.optJSONArray("spotlight")?.objects().orEmpty()
+            spotlight = if (heroOn) data.optJSONArray("spotlight")?.objects().orEmpty() else emptyList()
             val list = mutableListOf<HomeRow>()
-            val tiles = data.optJSONArray("libraries")?.objects().orEmpty()
+            val tiles = if (TvLook.flag("tiles", "show", true)) data.optJSONArray("libraries")?.objects().orEmpty() else emptyList()
+            val tilesTitle = TvLook.str("tiles", "title", "Libraries")
             val tilesAt = data.optJSONObject("layout")?.optInt("tilesAt", -1) ?: -1
             val rowList = data.optJSONArray("rows")?.objects().orEmpty()
             rowList.forEachIndexed { i, r ->
-                if (i == tilesAt && tiles.isNotEmpty()) list += HomeRow("Libraries", tiles, Shape.WIDE, tiles = true)
+                if (i == tilesAt && tiles.isNotEmpty()) list += HomeRow(tilesTitle, tiles, Shape.WIDE, tiles = true)
                 val items = r.optJSONArray("items")?.objects().orEmpty()
                 if (items.isEmpty()) return@forEachIndexed
                 val shape = when (r.optString("shape")) { "wide" -> Shape.WIDE; "square" -> Shape.SQUARE; else -> Shape.POSTER }
                 list += HomeRow(r.optString("title"), items, shape, cont = r.optString("id") == "continue")
             }
-            if (tilesAt >= rowList.size && tiles.isNotEmpty()) list += HomeRow("Libraries", tiles, Shape.WIDE, tiles = true)
+            if (tilesAt >= rowList.size && tiles.isNotEmpty()) list += HomeRow(tilesTitle, tiles, Shape.WIDE, tiles = true)
             if (list.isEmpty() && spotlight.isEmpty()) { status.text = "Your library is empty.\nAdd folders in the Studio on a computer."; return@get }
             val inRows = rows.hasFocus()
             rows.adapter = RowsAdapter(list)
@@ -184,30 +206,33 @@ class TvHomeActivity : Activity() {
         if (spotlight.isEmpty()) { heroButtons.visibility = View.GONE; return }
         heroButtons.visibility = View.VISIBLE
         show(spotlight[spot % spotlight.size], wide = true)
-        // While the big picture's buttons have focus, it moves on to the next spotlight title every 12 seconds.
-        rotate.postDelayed({ if (heroButtons.hasFocus() && spotlight.size > 1) { spot++; showSpot() } else showSpot() }, 12_000)
+        // While the big picture's buttons have focus, it moves on to the next spotlight title (Studio: every N seconds).
+        val every = TvLook.num("hero", "rotate", 12)
+        if (every > 0) rotate.postDelayed({ if (heroButtons.hasFocus() && spotlight.size > 1) spot++; showSpot() }, every * 1000L)
     }
 
+    private fun isTile(it: JSONObject) = it.has("count") && !it.has("year") && !it.has("progress")
+
     private fun show(it: JSONObject, wide: Boolean) {
-        if (shown === it) return
+        if (!heroOn || shown === it) return
         shown = it
-        loadImage(heroImage, it.optString("backdrop").ifEmpty { it.optString("poster") }.takeIf { s -> s.isNotEmpty() && s != "null" })
-        val logo = it.optString("logo").takeIf { s -> s.isNotEmpty() && s != "null" }
+        val pic = if (isTile(it)) TvLook.tilePicture(it) else it.optString("backdrop").ifEmpty { it.optString("poster") }.takeIf { s -> s.isNotEmpty() && s != "null" }
+        loadImage(heroImage, pic)
+        val logo = if (TvLook.flag("hero", "logos", true)) (it.optString("logo").takeIf { s -> s.isNotEmpty() && s != "null" } ?: if (isTile(it)) TvLook.tileLogo(it) else null) else null
         val name = it.optJSONObject("show")?.optString("title")?.ifEmpty { null } ?: it.optString("title").ifEmpty { it.optString("name") }
         if (logo != null) { heroLogo.visibility = View.VISIBLE; heroTitle.visibility = View.GONE; loadImage(heroLogo, logo) }
         else { heroLogo.visibility = View.GONE; heroTitle.visibility = View.VISIBLE; heroTitle.text = name }
-        heroMeta.text = if (it.has("count") && it.has("kind") && !it.has("year") && it.optString("kind") in listOf("movies", "shows", "music", "books", "comics"))
-            "${it.optInt("count")} titles" + (if (it.optInt("fresh") > 0) "  ·  ${it.optInt("fresh")} new" else "")
+        heroMeta.text = if (isTile(it)) "${it.optInt("count")} titles" + (if (it.optInt("fresh") > 0) "  ·  ${it.optInt("fresh")} new" else "")
         else metaLine(it)
         heroText.text = it.optString("overview").takeIf { s -> s != "null" }.orEmpty()
         playBtn.text = if (progressOf(it) >= 0) "Resume" else "Play"
         if (!wide) heroButtons.alpha = 0f
     }
 
-    private fun focusHero() {
+    private fun focusTop() {
         rows.scrollToPosition(0)
-        heroButtons.alpha = 1f
-        if (spotlight.isNotEmpty()) { showSpot(); playBtn.requestFocus() }
+        if (spotlight.isNotEmpty()) { heroButtons.alpha = 1f; showSpot(); playBtn.requestFocus() }
+        else rows.post { rows.getChildAt(0)?.let { firstCard(it)?.requestFocus() } }
     }
 
     private fun playItem(it: JSONObject) {
@@ -220,18 +245,20 @@ class TvHomeActivity : Activity() {
     }
 
     private fun profileMenu() {
-        val opts = arrayOf("Switch profile", "My HallFlix", "Use the web version of the TV screens", "Change server")
+        val opts = arrayOf("Search", "My List", "Switch profile", "My HallFlix", "Use the web version of the TV screens", "Change server")
         AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
             .setTitle(TvLook.profileName.ifEmpty { "HallFlix" })
             .setItems(opts) { _, which ->
                 when (which) {
-                    0 -> TvNav.toWeb(this, "HallFlix.api('POST','/api/logout').then(function(){location.hash='#/';location.reload();})")
-                    1 -> TvNav.toWeb(this, "location.hash = '#/me'")
-                    2 -> {
+                    0 -> TvNav.toWeb(this, "location.hash = '#/search/'")
+                    1 -> TvNav.toWeb(this, "location.hash = '#/list'")
+                    2 -> TvNav.toWeb(this, "HallFlix.api('POST','/api/logout').then(function(){location.hash='#/';location.reload();})")
+                    3 -> TvNav.toWeb(this, "location.hash = '#/me'")
+                    4 -> {
                         getSharedPreferences("hallflix", MODE_PRIVATE).edit().putBoolean("nativeTv", false).apply()
                         TvNav.toWeb(this, "location.hash = '#/'; window.dispatchEvent(new Event('hallflix-native-closed'))")
                     }
-                    3 -> TvNav.toWeb(this, "window.HallFlixNative && HallFlixNative.changeServer()")
+                    5 -> TvNav.toWeb(this, "window.HallFlixNative && HallFlixNative.changeServer()")
                 }
             }
             .show()
@@ -241,14 +268,16 @@ class TvHomeActivity : Activity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            // In the rows or the menu: back to the big picture first. There: press twice to close HallFlix.
-            if (!heroButtons.hasFocus() && spotlight.isNotEmpty()) { focusHero(); return true }
+            // Down in the rows: back to the top first. At the top: press twice to close HallFlix.
+            val atTop = heroButtons.hasFocus() || nav.hasFocus() || (spotlight.isEmpty() && rows.getChildAt(0)?.hasFocus() == true && rows.computeVerticalScrollOffset() == 0)
+            if (!atTop) { focusTop(); return true }
             val now = SystemClock.uptimeMillis()
             if (now - backAt < 2500) { if (MusicService.isPlaying) moveTaskToBack(true) else finishAffinity(); return true }
             backAt = now
             Toast.makeText(this, "Press Back again to close HallFlix", Toast.LENGTH_SHORT).show()
             return true
         }
+        // The remote's Menu button always opens the menu (the only way to it when the top menu is hidden).
         if (keyCode == KeyEvent.KEYCODE_MENU) { profileMenu(); return true }
         return super.onKeyDown(keyCode, event)
     }
@@ -258,13 +287,19 @@ class TvHomeActivity : Activity() {
     private class HomeRow(val title: String, val items: List<JSONObject>, val shape: Shape, val cont: Boolean = false, val tiles: Boolean = false)
     private class RowHolder(val root: LinearLayout, val title: TextView, val list: RowRecycler) : RecyclerView.ViewHolder(root)
 
+    private fun captionsFor(r: HomeRow): Boolean = when (TvLook.str("rows", "captions", "auto")) {
+        "always" -> true
+        "never" -> false
+        else -> r.cont || r.shape == Shape.WIDE
+    }
+
     private inner class RowsAdapter(val list: List<HomeRow>) : RecyclerView.Adapter<RowHolder>() {
         private val pool = RecyclerView.RecycledViewPool()
         override fun getItemCount() = list.size
-        override fun getItemViewType(position: Int) = list[position].shape.ordinal * 2 + if (list[position].tiles || list[position].cont) 1 else 0
+        override fun getItemViewType(position: Int) = list[position].let { r -> if (r.tiles) 99 else r.shape.ordinal * 2 + if (captionsFor(r)) 1 else 0 }
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RowHolder {
-            val col = column().apply { layoutParams = RecyclerView.LayoutParams(-1, -2); setPadding(0, 0, 0, dp(18)) }
-            val t = label(17f, bold = true).apply { setPadding(dp(48), 0, 0, dp(10)) }
+            val col = column().apply { layoutParams = RecyclerView.LayoutParams(-1, -2); setPadding(0, 0, 0, dp(TvLook.num("rows", "gap", 18))) }
+            val t = label(TvLook.num("rows", "titleSize", 17).toFloat(), bold = true).apply { setPadding(dp(48), 0, 0, dp(10)) }
             col.addView(t)
             val rv = RowRecycler(this@TvHomeActivity).apply {
                 layoutManager = LeadLayoutManager(this@TvHomeActivity, RecyclerView.HORIZONTAL, dp(48))
@@ -272,7 +307,7 @@ class TvHomeActivity : Activity() {
                 clipToPadding = false
                 clipChildren = false
                 itemAnimator = null
-                setRecycledViewPool(pool)
+                if (viewType != 99) setRecycledViewPool(pool)
                 setHasFixedSize(true)
             }
             col.addView(rv, LinearLayout.LayoutParams(-1, -2))
@@ -282,15 +317,51 @@ class TvHomeActivity : Activity() {
         override fun onBindViewHolder(h: RowHolder, position: Int) {
             val r = list[position]
             h.title.text = r.title
-            h.list.adapter = CardAdapter(this@TvHomeActivity, r.items, r.shape, captions = r.tiles || r.cont,
-                onFocus = { it -> heroButtons.alpha = 0f; follow.run { show(it, wide = false) } },
+            h.title.visibility = if (r.title.isBlank()) View.GONE else View.VISIBLE
+            val focus = { it: JSONObject ->
+                heroButtons.alpha = 0f
+                if (TvLook.flag("hero", "follow", true)) follow.run { show(it, wide = false) }
+            }
+            h.list.adapter = if (r.tiles) TileAdapter(r.items, focus) else CardAdapter(this@TvHomeActivity, r.items, r.shape, captions = captionsFor(r),
+                onFocus = focus,
                 onPick = { it ->
-                    when {
-                        r.tiles -> TvNav.openLibrary(this@TvHomeActivity, it)
-                        r.cont -> { refreshOnReturn = true; TvNav.play(this@TvHomeActivity, it.optLong("id"), null) } // Continue watching carries straight on
-                        else -> TvNav.openItem(this@TvHomeActivity, it)
-                    }
+                    if (r.cont) { refreshOnReturn = true; TvNav.play(this@TvHomeActivity, it.optLong("id"), null) } // Continue watching carries straight on
+                    else TvNav.openItem(this@TvHomeActivity, it)
                 })
         }
     }
+
+    /** Library tiles: each library's own picture, logo and brightness from its look; the name and count if wanted. */
+    private inner class TileAdapter(val tiles: List<JSONObject>, val onFocus: (JSONObject) -> Unit) : RecyclerView.Adapter<TileHolder>() {
+        private val size = dp(TvLook.num("tiles", "width", 224)) to dp(TvLook.num("tiles", "height", 126))
+        override fun getItemCount() = tiles.size
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TileHolder {
+            val card = makeCard(Shape.WIDE, withCaption = true, size = size)
+            val logo = ImageView(this@TvHomeActivity).apply { adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_START }
+            card.root.addView(logo, FrameLayout.LayoutParams((size.first * 0.6f).toInt(), (size.second * 0.34f).toInt(), Gravity.START or Gravity.BOTTOM).apply {
+                leftMargin = dp(12); bottomMargin = dp(if (TvLook.flag("tiles", "counts", true)) 30 else 12)
+            })
+            return TileHolder(card, logo)
+        }
+        override fun onBindViewHolder(h: TileHolder, position: Int) {
+            val t = tiles[position]
+            val c = h.card
+            c.name.text = t.optString("name")
+            loadImage(c.image, TvLook.tilePicture(t))
+            c.image.brightness(TvLook.tileBrightness(t))
+            val logo = TvLook.tileLogo(t)
+            if (logo != null) { h.logo.visibility = View.VISIBLE; loadImage(h.logo, logo) } else { h.logo.visibility = View.GONE; h.logo.setImageDrawable(null) }
+            val parts = mutableListOf<String>()
+            if (TvLook.flag("tiles", "names", true) && logo == null) parts += t.optString("name")
+            if (TvLook.flag("tiles", "counts", true)) parts += "${t.optInt("count")} titles" + if (t.optInt("fresh") > 0) " · ${t.optInt("fresh")} new" else ""
+            c.caption?.text = parts.joinToString("\n")
+            c.caption?.maxLines = 2
+            c.caption?.visibility = if (parts.isEmpty()) View.GONE else View.VISIBLE
+            c.bar.visibility = View.GONE; c.barTrack.visibility = View.GONE
+            c.root.contentDescription = t.optString("name")
+            c.root.zoomOnFocus(cardScale()) { has -> if (has) onFocus(t) }
+            c.root.setOnClickListener { TvNav.openLibrary(this@TvHomeActivity, t) }
+        }
+    }
+    private class TileHolder(val card: CardHolder, val logo: ImageView) : RecyclerView.ViewHolder(card.root)
 }

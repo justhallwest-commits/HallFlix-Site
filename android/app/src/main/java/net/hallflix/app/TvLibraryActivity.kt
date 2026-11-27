@@ -52,6 +52,13 @@ class TvLibraryActivity : Activity() {
 
     private fun build(name: String) {
         val root = FrameLayout(this).apply { setBackgroundColor(TvLook.bg) }
+        // The library's own background (Studio → Look and feel → this library), dimmed behind the posters.
+        (TvLook.libraryBackground(libId) ?: TvLook.background)?.let { url ->
+            val bg = android.widget.ImageView(this).apply { scaleType = android.widget.ImageView.ScaleType.CENTER_CROP }
+            loadImage(bg, url)
+            root.addView(bg, FrameLayout.LayoutParams(-1, -1))
+            root.addView(android.view.View(this).apply { setBackgroundColor(TvLook.bg); alpha = TvLook.num("background", "dim", 70) / 100f }, FrameLayout.LayoutParams(-1, -1))
+        }
         val col = column()
         val head = row().apply { setPadding(dp(48), dp(26), dp(48), dp(12)) }
         head.addView(label(28f, bold = true).apply { text = name }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(16) })
@@ -72,9 +79,13 @@ class TvLibraryActivity : Activity() {
         head.addView(showBtn)
         col.addView(head)
 
-        val cardW = cardSize(Shape.POSTER).first + dp(14)
-        val span = ((resources.displayMetrics.widthPixels - dp(96)) / cardW).coerceAtLeast(3)
-        adapter = CardAdapter(this, items, Shape.POSTER, captions = false, onFocus = {}, onPick = { TvNav.openItem(this, it); refreshOnReturn = true }, onNearEnd = { load(reset = false) })
+        // Columns: as many as fit, or a set number (then the posters grow or shrink to fill the width).
+        val fixed = TvLook.num("library", "columns", 0)
+        val usable = resources.displayMetrics.widthPixels - dp(82)
+        val span = if (fixed > 0) fixed else (usable / (cardSize(Shape.POSTER).first + dp(14))).coerceAtLeast(3)
+        val posterW = usable / span - dp(14)
+        val names = TvLook.flag("library", "names", false)
+        adapter = CardAdapter(this, items, Shape.POSTER, captions = names, size = posterW to (posterW * 1.5f).toInt(), onFocus = {}, onPick = { TvNav.openItem(this, it); refreshOnReturn = true }, onNearEnd = { load(reset = false) })
         grid = RecyclerView(this).apply {
             layoutManager = GridLayoutManager(this@TvLibraryActivity, span)
             this.adapter = this@TvLibraryActivity.adapter

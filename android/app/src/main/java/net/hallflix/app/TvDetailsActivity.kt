@@ -55,7 +55,8 @@ class TvDetailsActivity : Activity() {
         val root = FrameLayout(this).apply { setBackgroundColor(TvLook.bg) }
         val w = resources.displayMetrics.widthPixels
         val h = resources.displayMetrics.heightPixels
-        backdrop = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+        backdrop = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; brightness(TvLook.num("details", "brightness", 100)) }
+        if (!TvLook.flag("details", "backdrop", true)) backdrop.visibility = View.GONE
         root.addView(backdrop, FrameLayout.LayoutParams((w * 0.75).toInt(), (h * 0.8).toInt(), Gravity.END or Gravity.TOP))
         root.addView(View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(TvLook.bg, (TvLook.bg and 0x00FFFFFF) or 0xB3000000.toInt(), TvLook.bg and 0x00FFFFFF))
@@ -111,7 +112,8 @@ class TvDetailsActivity : Activity() {
         d.optString("tagline").takeIf { it.isNotEmpty() && it != "null" }?.let { t ->
             body.addView(label(16f, TvLook.text, bold = true, lines = 2).apply { text = t; alpha = 0.9f }, LinearLayout.LayoutParams((w * 0.48).toInt(), -2).apply { marginStart = side; bottomMargin = dp(6) })
         }
-        body.addView(label(16f, TvLook.text, lines = 4).apply { text = d.optString("overview").takeIf { it != "null" }.orEmpty(); setLineSpacing(0f, 1.18f); alpha = 0.92f },
+        val lines = TvLook.num("details", "overview", 4)
+        if (lines > 0) body.addView(label(16f, TvLook.text, lines = lines).apply { text = d.optString("overview").takeIf { it != "null" }.orEmpty(); setLineSpacing(0f, 1.18f); alpha = 0.92f },
             LinearLayout.LayoutParams((w * 0.48).toInt(), -2).apply { marginStart = side; bottomMargin = dp(20) })
 
         // Buttons.
@@ -162,10 +164,12 @@ class TvDetailsActivity : Activity() {
                 setPadding(side, dp(10), side, dp(10)); clipToPadding = false; clipChildren = false; itemAnimator = null
             }
             epRow = rv
+            val asList = TvLook.str("details", "episodes", "stills") == "list"
+            if (asList) rv.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this@TvDetailsActivity, RecyclerView.VERTICAL, false)
             fun showSeason(i: Int) {
                 season = i
                 val eps = seasons[i].optJSONArray("episodes")?.objects().orEmpty()
-                rv.adapter = EpisodeAdapter(eps)
+                rv.adapter = if (asList) EpisodeListAdapter(eps) else EpisodeAdapter(eps)
                 for (c in 0 until chips.childCount) (chips.getChildAt(c) as TextView).isSelected = c == i
             }
             seasons.forEachIndexed { i, s ->
@@ -196,7 +200,7 @@ class TvDetailsActivity : Activity() {
         }
 
         // More like this.
-        val similar = d.optJSONArray("similar")?.objects().orEmpty()
+        val similar = if (TvLook.flag("details", "similar", true)) d.optJSONArray("similar")?.objects().orEmpty() else emptyList()
         if (similar.isNotEmpty()) {
             body.addView(label(18f, bold = true).apply { text = "More like this" }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = side; bottomMargin = dp(4) })
             val rv = RowRecycler(this).apply {
@@ -237,9 +241,41 @@ class TvDetailsActivity : Activity() {
             if (e.optDouble("runtime", 0.0) > 0) bits += runtimeText(e.optDouble("runtime"))
             if (e.optJSONObject("progress")?.optBoolean("watched") == true) bits += "✓ Watched"
             h.meta.text = bits.joinToString("  ·  ")
-            h.card.root.zoomOnFocus {}
+            h.card.root.zoomOnFocus(cardScale()) {}
             h.card.root.setOnClickListener { refreshOnReturn = true; TvNav.play(this@TvDetailsActivity, e.optLong("id"), null) }
         }
     }
+    /** Episodes as a list (Studio → Fire TV app → Title page → Episodes: List): number, name, length, progress. */
+    private inner class EpisodeListAdapter(val eps: List<JSONObject>) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        override fun getItemCount() = eps.size
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            val r = dp(8).toFloat()
+            val line = row().apply {
+                layoutParams = RecyclerView.LayoutParams((resources.displayMetrics.widthPixels * 0.6f).toInt(), -2).apply { bottomMargin = dp(6) }
+                setPadding(dp(16), dp(12), dp(16), dp(12))
+                isFocusable = true; isClickable = true
+                background = StateListDrawable().apply {
+                    addState(intArrayOf(android.R.attr.state_focused), rounded(0x33FFFFFF, r, if (TvLook.showFocus) dp(TvLook.num("cards", "ring", 3)) else 0, TvLook.focus))
+                    addState(intArrayOf(), rounded(0x12FFFFFF, r))
+                }
+            }
+            line.addView(label(16f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
+            line.addView(label(14f, TvLook.muted), LinearLayout.LayoutParams(-2, -2))
+            return object : RecyclerView.ViewHolder(line) {}
+        }
+        override fun onBindViewHolder(h: RecyclerView.ViewHolder, position: Int) {
+            val e = eps[position]
+            val line = h.itemView as LinearLayout
+            val p = progressOf(e)
+            (line.getChildAt(0) as TextView).text = "${e.optInt("number")}.  ${e.optString("title")}"
+            (line.getChildAt(1) as TextView).text = listOfNotNull(
+                if (e.optDouble("runtime", 0.0) > 0) runtimeText(e.optDouble("runtime")) else null,
+                if (p >= 0) "${(p * 100).toInt()}% watched" else null,
+                if (e.optJSONObject("progress")?.optBoolean("watched") == true) "Watched" else null,
+            ).joinToString("  ·  ")
+            line.setOnClickListener { refreshOnReturn = true; TvNav.play(this@TvDetailsActivity, e.optLong("id"), null) }
+        }
+    }
+
     private class EpHolder(root: LinearLayout, val card: CardHolder, val title: TextView, val meta: TextView) : RecyclerView.ViewHolder(root)
 }

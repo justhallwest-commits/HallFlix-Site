@@ -50,7 +50,11 @@ object TvSession {
     }
 }
 
-/** The Studio's look, as far as the native screens use it: colours, the focus ring, the logo, and the libraries. */
+/**
+ * The Studio's look, as the native screens use it: the TV look's colours, logo and background, each library's look
+ * (tile picture, logo, brightness, page background), and the Fire TV app's own settings (theme.tvApp, edited in
+ * Studio → Fire TV app).
+ */
 object TvLook {
     var bg = 0xFF0A0814.toInt()
     var surface = 0xFF16122B.toInt()
@@ -59,10 +63,15 @@ object TvLook {
     var accent = 0xFF35D0D0.toInt()
     var accent2 = 0xFFB344D6.toInt()
     var focus = Color.WHITE
+    var showFocus = true
     var logo: String? = null
+    var background: String? = null
     var libraries = JSONArray()
     var profileName = ""
     var loaded = false
+    /** theme.tvApp, with HallFlix's defaults already filled in by the server. */
+    var app = JSONObject()
+    private var libLooks = JSONObject()
 
     private fun color(o: JSONObject?, key: String, fallback: Int): Int {
         val s = o?.optString(key)?.trim().orEmpty()
@@ -75,20 +84,66 @@ object TvLook {
     }
 
     fun apply(boot: JSONObject) {
+        // /api/boot's look is { theme, libraries, devices: { tv: { theme } } }: the TV's own look when there is one.
         val look = boot.optJSONObject("look") ?: JSONObject()
-        val tv = look.optJSONObject("devices")?.optJSONObject("tv")
-        val base = look.optJSONObject("colors")
-        val over = tv?.optJSONObject("colors")
-        fun pick(key: String, d: Int) = color(over, key, color(base, key, d))
-        bg = pick("bg", bg); surface = pick("surface", surface); text = pick("text", text)
-        muted = pick("muted", muted); accent = pick("accent", accent); accent2 = pick("accent2", accent2)
-        val focusKind = tv?.optJSONObject("tv")?.optString("focus")?.ifEmpty { null } ?: look.optJSONObject("tv")?.optString("focus")
-        focus = if (focusKind == "accent") accent else Color.WHITE
-        logo = look.optJSONObject("logo")?.optString("image")?.ifEmpty { null }
+        val theme = look.optJSONObject("devices")?.optJSONObject("tv")?.optJSONObject("theme") ?: look.optJSONObject("theme") ?: JSONObject()
+        val c = theme.optJSONObject("colors")
+        bg = color(c, "bg", bg); surface = color(c, "surface", surface); text = color(c, "text", text)
+        muted = color(c, "muted", muted); accent = color(c, "accent", accent); accent2 = color(c, "accent2", accent2)
+        app = theme.optJSONObject("tvApp") ?: JSONObject()
+        val ring = str("cards", "focus", "theme")
+        val themeRing = theme.optJSONObject("tv")?.optString("focus") ?: "white"
+        showFocus = ring != "none"
+        focus = when (if (ring == "theme") themeRing else ring) { "accent" -> accent; else -> Color.WHITE }
+        logo = usable(theme.optJSONObject("logo")?.optString("image"))
+        background = if (str("background", "use", "color") == "image") usable(theme.optJSONObject("background")?.optString("image"))?.let { fit(it, 1280) } else null
+        libLooks = look.optJSONObject("libraries") ?: JSONObject()
         libraries = boot.optJSONArray("libraries") ?: JSONArray()
         profileName = boot.optJSONObject("profile")?.optString("name").orEmpty()
         loaded = true
     }
+
+    fun num(section: String, key: String, def: Int): Int = app.optJSONObject(section)?.optInt(key, def) ?: def
+    fun flag(section: String, key: String, def: Boolean): Boolean = app.optJSONObject(section)?.optBoolean(key, def) ?: def
+    fun str(section: String, key: String, def: String): String = app.optJSONObject(section)?.optString(key)?.ifEmpty { null } ?: def
+
+    /** A picture that can be shown: set, not "null", and not a video. */
+    fun usable(u: String?): String? = u?.trim()?.takeIf { it.isNotEmpty() && it != "null" && !Regex("\\.(mp4|webm|m4v|mov)(\\?|$)", RegexOption.IGNORE_CASE).containsMatchIn(it) }
+
+    /** A tile- or screen-sized copy of an uploaded picture (a full-size upload is heavy for a Fire TV stick). */
+    fun fit(url: String, w: Int): String = if (url.startsWith("/img/t/") || url.startsWith("data:")) url else "/api/fit?w=$w&src=" + android.net.Uri.encode(url)
+
+    fun libLook(id: Long): JSONObject = libLooks.optJSONObject(id.toString()) ?: JSONObject()
+
+    /** A library tile's picture, the way the website picks it: the tile's own picture, the library page's background, then new artwork. */
+    fun tilePicture(tile: JSONObject): String? {
+        val lk = libLook(tile.optLong("id"))
+        if (str("tiles", "art", "library") == "library") {
+            usable(lk.optString("tileBackground"))?.let { return fit(it, 800) }
+            if (lk.optString("tileUse") != "artwork") usable(lk.optString("background"))?.let { return fit(it, 800) }
+        }
+        return usable(tile.optString("backdrop"))
+    }
+
+    /** A library's own logo (Studio → Look and feel → that library), shown on its tile instead of its name. */
+    fun tileLogo(tile: JSONObject): String? = usable(libLook(tile.optLong("id")).optString("logo"))
+
+    /** How bright a library's tile is: the library's own setting, else the Fire TV app's. 100 is as it is. */
+    fun tileBrightness(tile: JSONObject): Int {
+        val own = libLook(tile.optLong("id")).optInt("tileBrightness", 0)
+        return if (own in 20..160) own else num("tiles", "brightness", 100)
+    }
+
+    /** The background behind a library's page, if it has one and the Fire TV app shows them. */
+    fun libraryBackground(id: Long): String? = if (flag("library", "background", true)) usable(libLook(id).optString("background"))?.let { fit(it, 1280) } else null
+}
+
+/** Darker (below 100) or brighter (above) artwork, for the brightness settings. */
+fun ImageView.brightness(percent: Int) {
+    if (percent == 100) { clearColorFilter(); return }
+    val f = percent / 100f
+    colorFilter = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(floatArrayOf(
+        f, 0f, 0f, 0f, 0f, 0f, f, 0f, 0f, 0f, 0f, 0f, f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)))
 }
 
 /** Server calls off the main thread; answers come back on it, and never to a closed screen. */
@@ -186,7 +241,8 @@ fun rounded(color: Int, radius: Float, stroke: Int = 0, strokeColor: Int = 0) = 
 
 /** A ring drawn only while the view has focus. */
 fun Context.focusRing(radius: Float): StateListDrawable = StateListDrawable().apply {
-    addState(intArrayOf(android.R.attr.state_focused), rounded(Color.TRANSPARENT, radius, dp(3), TvLook.focus))
+    val w = TvLook.num("cards", "ring", 3)
+    if (TvLook.showFocus && w > 0) addState(intArrayOf(android.R.attr.state_focused), rounded(Color.TRANSPARENT, radius, dp(w), TvLook.focus))
     addState(intArrayOf(), ColorDrawable(Color.TRANSPARENT))
 }
 
@@ -300,15 +356,24 @@ class RowRecycler @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? =
 /** One card: artwork, a fallback title, an optional caption and a progress bar. */
 class CardHolder(val root: FrameLayout, val image: ImageView, val name: TextView, val caption: TextView?, val bar: View, val barTrack: View) : RecyclerView.ViewHolder(root)
 
-fun Activity.cardSize(shape: Shape): Pair<Int, Int> = when (shape) {
-    Shape.POSTER -> dp(122) to dp(183)
-    Shape.WIDE -> dp(224) to dp(126)
-    Shape.SQUARE -> dp(150) to dp(150)
+/** Card sizes from Studio → Fire TV app → Rows (posters 2:3, wide cards 16:9, music squares). */
+fun Activity.cardSize(shape: Shape): Pair<Int, Int> {
+    val pw = TvLook.num("rows", "posterWidth", 122)
+    val ww = TvLook.num("rows", "wideWidth", 224)
+    return when (shape) {
+        Shape.POSTER -> dp(pw) to dp(pw * 1.5f)
+        Shape.WIDE -> dp(ww) to dp(ww * 0.5625f)
+        Shape.SQUARE -> dp(pw * 1.23f) to dp(pw * 1.23f)
+    }
 }
 
-fun Activity.makeCard(shape: Shape, withCaption: Boolean): CardHolder {
-    val (w, h) = cardSize(shape)
-    val r = dp(8).toFloat()
+/** How much a card grows when focused (Studio → Fire TV app → Cards). */
+fun cardScale(): Float = TvLook.num("cards", "scale", 108) / 100f
+fun Context.cardRadius(): Float = dp(TvLook.num("cards", "radius", 8)).toFloat()
+
+fun Activity.makeCard(shape: Shape, withCaption: Boolean, size: Pair<Int, Int>? = null): CardHolder {
+    val (w, h) = size ?: cardSize(shape)
+    val r = cardRadius()
     val frame = FrameLayout(this).apply {
         layoutParams = ViewGroup.MarginLayoutParams(w, h).apply { marginEnd = dp(14) }
         isFocusable = true
@@ -349,11 +414,11 @@ fun Activity.bindCard(h: CardHolder, it: JSONObject, shape: Shape) {
     }.takeIf { s -> s.isNotEmpty() && s != "null" }
     loadImage(h.image, art)
     h.caption?.text = if (it.optJSONObject("show") != null) "$title · ${metaLine(it).substringBefore("  ·  ")}" else title
-    val p = progressOf(it)
+    val p = if (TvLook.flag("rows", "progress", true)) progressOf(it) else -1f
     h.barTrack.visibility = if (p >= 0) View.VISIBLE else View.GONE
     h.bar.visibility = if (p >= 0) View.VISIBLE else View.GONE
     if (p >= 0) {
-        val w = cardSize(shape).first
+        val w = h.root.layoutParams?.width?.takeIf { x -> x > 0 } ?: cardSize(shape).first
         h.bar.layoutParams = (h.bar.layoutParams as FrameLayout.LayoutParams).apply { width = (w * p).toInt() }
     }
     h.root.contentDescription = title
@@ -368,13 +433,14 @@ class CardAdapter(
     private val onFocus: (JSONObject) -> Unit,
     private val onPick: (JSONObject) -> Unit,
     private val onNearEnd: (() -> Unit)? = null,
+    private val size: Pair<Int, Int>? = null,
 ) : RecyclerView.Adapter<CardHolder>() {
     override fun getItemCount() = items.size
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = act.makeCard(shape, captions)
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = act.makeCard(shape, captions, size)
     override fun onBindViewHolder(h: CardHolder, position: Int) {
         val item = items[position]
         act.bindCard(h, item, shape)
-        h.root.zoomOnFocus { has -> if (has) onFocus(item) }
+        h.root.zoomOnFocus(cardScale()) { has -> if (has) onFocus(item) }
         h.root.setOnClickListener { onPick(item) }
         if (onNearEnd != null && position >= items.size - 12) onNearEnd.invoke()
     }
