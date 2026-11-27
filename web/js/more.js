@@ -155,7 +155,11 @@ export async function pairScreen(box, back) {
     if (stop || !box.isConnected) return;
     try {
       const r = await api('GET', `/api/pair/${p.code}?secret=${encodeURIComponent(p.secret)}`);
-      if (r.status === 'approved') { location.hash = '#/'; location.reload(); return; }
+      if (r.status === 'approved') {
+        // Signed in by phone counts as signing in: the welcome ident plays, just as after a password.
+        try { sessionStorage.setItem('hf_welcome', 'signin'); } catch { /* private mode */ }
+        location.hash = '#/'; location.reload(); return;
+      }
     } catch { break; }
   }
   if (!stop && box.isConnected) pairScreen(box, back); // the code ran out: show a fresh one
