@@ -65,8 +65,9 @@ export const DEFAULT_THEME = {
   // how bright the picture behind them is (%; a library can set its own). And the film's logo on the Home banner (% of usual).
   // Library tiles on Home. width: before another fits in a row; height: % of the width (the tile's shape); columns: tiles
   // side by side (0 = as many as fit at `width`); fit: 'fill' crops the picture to the tile, 'whole' shows all of it over a
-  // blurred copy; shade: the darkening behind the name (%); gap: space between tiles in px (0 = automatic).
-  homeTiles: { width: 320, height: 44, brightness: 100, columns: 0, fit: 'fill', shade: 100, gap: 0 },
+  // blurred copy; shade: the darkening behind the name (%); gap: space between tiles in px (0 = automatic); layout: 'grid'
+  // wraps onto as many rows as needed, 'row' is one row you scroll sideways (columns is then how many show at once).
+  homeTiles: { width: 320, height: 44, brightness: 100, columns: 0, fit: 'fill', shade: 100, gap: 0, layout: 'grid' },
   bannerLogo: 100,
   // The logo (or name) on each library's Home tile: where it sits, how big (% of the usual size), a nudge from there,
   // and whether the title count shows under it. A library can override any of it.

@@ -1740,7 +1740,7 @@ body.tv .cap-panel { -webkit-mask-image: none; mask-image: none; }
 /* ---------- Home: tile size and picture brightness, and the banner's film logo ---------- */
 .libs { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--libs-min, 320px)), 1fr)); }
 .libs[data-count="1"] { grid-template-columns: minmax(0, max(720px, var(--libs-min, 320px))); }
-.libs .lib-tile { aspect-ratio: 1 / var(--libs-ratio, 0.4375); min-height: 90px; container-type: inline-size; }
+.libs .lib-tile { aspect-ratio: 1 / var(--libs-ratio, 0.4375); min-height: 56px; container-type: inline-size; }
 /* The logo, name and count scale with the tile, so small tiles stay tidy and big ones get a bigger logo. */
 .libs .lib-tile .tile-text.placed .tile-logo { max-height: calc(clamp(28px, 21cqw, 120px) * var(--tl-k, 1) * min(1, var(--libs-ratio, 0.4375) / 0.4375 + 0.25)); }
 .libs .lib-tile .tile-text.placed .tile-name { font-size: calc(clamp(16px, 9.5cqw, 56px) * var(--tl-k, 1) * min(1, var(--libs-ratio, 0.4375) / 0.4375 + 0.25)); }
@@ -1748,8 +1748,23 @@ body.tv .cap-panel { -webkit-mask-image: none; mask-image: none; }
 .lib-tile .tile-art { filter: brightness(var(--tile-bright, 1)); }
 /* Space between tiles (Studio: "Space between tiles"; automatic when 0). 3D tiles draw their thickness below and beside
    the tile, so the gap grows by that much and neighbouring tiles never overlap, even two across a phone. */
-.libs { gap: var(--libs-gap, clamp(10px, 1.4vw, 20px)); }
-body.tiles-layered .libs { gap: calc(var(--libs-gap, clamp(10px, 1.4vw, 20px)) + var(--tile-thick, 6px) * 1.7); }
+.libs { --libs-gap-eff: var(--libs-gap, clamp(10px, 1.4vw, 20px)); gap: var(--libs-gap-eff); }
+body.tiles-layered .libs { --libs-gap-eff: calc(var(--libs-gap, clamp(10px, 1.4vw, 20px)) + var(--tile-thick, 6px) * 1.7); }
+/* "One row you scroll sideways": the tiles sit in a single row that swipes (phones), scrolls with arrows (computers) or
+   follows the remote (TVs), snapping to each tile. With "tiles at once" set, that many show and the next one peeks in. */
+.libs-wrap { position: relative; }
+.libs-wrap.as-row { margin-bottom: clamp(26px, 4vw, 48px); }
+.libs-wrap.as-row .libs { display: flex; grid-template-columns: none; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-padding: 0 var(--pad);
+  scrollbar-width: none; overscroll-behavior-x: contain; margin: -12px 0 0; padding: 12px var(--pad) calc(10px + var(--tile-thick, 6px) * 2); }
+.libs-wrap.as-row .libs::-webkit-scrollbar { display: none; }
+.libs-wrap.as-row .libs > .tile-slab { flex: 0 0 min(var(--libs-min, 320px), 82%); scroll-snap-align: start; }
+:root[data-libs-cols] .libs-wrap.as-row .libs > .tile-slab { flex-basis: calc((100% - var(--libs-gap-eff) * var(--libs-cols)) / (var(--libs-cols) + 0.35)); }
+.libs-wrap .arrow { position: absolute; top: 0; bottom: 0; width: var(--pad); min-width: 36px; z-index: 5; border: 0; cursor: pointer; opacity: 0; transition: opacity 0.2s; color: var(--text); font-size: 34px; }
+.libs-wrap .arrow.l { left: 0; background: linear-gradient(to right, rgba(var(--bg-rgb), 0.85), transparent); }
+.libs-wrap .arrow.r { right: 0; background: linear-gradient(to left, rgba(var(--bg-rgb), 0.85), transparent); }
+.libs-wrap:hover .arrow:not([hidden]) { opacity: 1; }
+@media (hover: none) { .libs-wrap .arrow { display: none; } }
+body.tv .libs-wrap .arrow { display: none !important; }
 /* The shading behind the name (Studio: "Shading behind the name"). */
 .lib-tile .tile-art::after { opacity: var(--tile-shade, 1); }
 /* "Show the whole picture": the picture is fitted inside the tile and a blurred copy fills the rest. */

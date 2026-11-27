@@ -862,6 +862,14 @@
               "minimum": 0,
               "maximum": 60,
               "default": 0
+            },
+            "layout": {
+              "enum": [
+                "grid",
+                "row",
+                ""
+              ],
+              "default": "grid"
             }
           }
         },
