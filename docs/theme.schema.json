@@ -1101,6 +1101,294 @@
               "default": 0
             }
           }
+        },
+        "tvApp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hero": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "show": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 30,
+                  "maximum": 80,
+                  "default": 56
+                },
+                "width": {
+                  "type": "number",
+                  "minimum": 40,
+                  "maximum": 100,
+                  "default": 72
+                },
+                "follow": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "rotate": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 60,
+                  "default": 12
+                },
+                "logos": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "overview": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "brightness": {
+                  "type": "number",
+                  "minimum": 30,
+                  "maximum": 130,
+                  "default": 100
+                }
+              }
+            },
+            "nav": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "show": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "libraries": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "search": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "myList": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "align": {
+                  "enum": [
+                    "left",
+                    "center",
+                    ""
+                  ],
+                  "default": "left"
+                },
+                "logoHeight": {
+                  "type": "number",
+                  "minimum": 16,
+                  "maximum": 60,
+                  "default": 30
+                }
+              }
+            },
+            "tiles": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "show": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 40,
+                  "default": "Libraries"
+                },
+                "width": {
+                  "type": "number",
+                  "minimum": 120,
+                  "maximum": 400,
+                  "default": 224
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 60,
+                  "maximum": 240,
+                  "default": 126
+                },
+                "art": {
+                  "enum": [
+                    "library",
+                    "newest",
+                    ""
+                  ],
+                  "default": "library"
+                },
+                "names": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "counts": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "brightness": {
+                  "type": "number",
+                  "minimum": 30,
+                  "maximum": 130,
+                  "default": 100
+                }
+              }
+            },
+            "rows": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "titleSize": {
+                  "type": "number",
+                  "minimum": 12,
+                  "maximum": 28,
+                  "default": 17
+                },
+                "gap": {
+                  "type": "number",
+                  "minimum": 4,
+                  "maximum": 48,
+                  "default": 18
+                },
+                "posterWidth": {
+                  "type": "number",
+                  "minimum": 80,
+                  "maximum": 200,
+                  "default": 122
+                },
+                "wideWidth": {
+                  "type": "number",
+                  "minimum": 140,
+                  "maximum": 360,
+                  "default": 224
+                },
+                "captions": {
+                  "enum": [
+                    "auto",
+                    "always",
+                    "never",
+                    ""
+                  ],
+                  "default": "auto"
+                },
+                "progress": {
+                  "type": "boolean",
+                  "default": true
+                }
+              }
+            },
+            "cards": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "radius": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 24,
+                  "default": 8
+                },
+                "focus": {
+                  "enum": [
+                    "theme",
+                    "white",
+                    "accent",
+                    "none",
+                    ""
+                  ],
+                  "default": "theme"
+                },
+                "scale": {
+                  "type": "number",
+                  "minimum": 100,
+                  "maximum": 125,
+                  "default": 108
+                },
+                "ring": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 8,
+                  "default": 3
+                }
+              }
+            },
+            "background": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "use": {
+                  "enum": [
+                    "color",
+                    "image",
+                    ""
+                  ],
+                  "default": "color"
+                },
+                "dim": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 95,
+                  "default": 70
+                }
+              }
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "backdrop": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "brightness": {
+                  "type": "number",
+                  "minimum": 30,
+                  "maximum": 130,
+                  "default": 100
+                },
+                "overview": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 8,
+                  "default": 4
+                },
+                "similar": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "episodes": {
+                  "enum": [
+                    "stills",
+                    "list",
+                    ""
+                  ],
+                  "default": "stills"
+                }
+              }
+            },
+            "library": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "columns": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10,
+                  "default": 0
+                },
+                "background": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "names": {
+                  "type": "boolean",
+                  "default": false
+                }
+              }
+            }
+          }
         }
       }
     }
