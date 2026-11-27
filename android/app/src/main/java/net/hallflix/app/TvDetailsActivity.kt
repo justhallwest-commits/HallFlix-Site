@@ -122,14 +122,14 @@ class TvDetailsActivity : Activity() {
         val started = prog != null && !prog.optBoolean("watched") && prog.optDouble("position", 0.0) > 30
         val epLabel = d.optString("playLabel").takeIf { isShow && it.isNotEmpty() }
         val playText = when {
-            started && epLabel != null -> "▶  Resume $epLabel"
-            started -> "▶  Resume"
-            epLabel != null -> "▶  Play $epLabel"
-            else -> "▶  Play"
+            started && epLabel != null -> "Resume $epLabel"
+            started -> "Resume"
+            epLabel != null -> "Play $epLabel"
+            else -> "Play"
         }
         val play = tvButton(playText, primary = true) { refreshOnReturn = true; TvNav.play(this, playId, null) }
         if (playId > 0) buttons.addView(play, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(12) })
-        if (started) buttons.addView(tvButton("↺  From the beginning") { refreshOnReturn = true; TvNav.play(this, playId, 0.0) }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(12) })
+        if (started) buttons.addView(tvButton("From the beginning") { refreshOnReturn = true; TvNav.play(this, playId, 0.0) }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(12) })
         var inList = d.optBoolean("inList")
         lateinit var listBtn: TextView
         listBtn = tvButton(if (inList) "✓  My List" else "+  My List") {

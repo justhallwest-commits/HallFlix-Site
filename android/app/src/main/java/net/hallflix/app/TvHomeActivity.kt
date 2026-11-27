@@ -112,7 +112,7 @@ class TvHomeActivity : Activity() {
         heroText = label(15f, TvLook.text, lines = 3).apply { setLineSpacing(0f, 1.15f); alpha = 0.92f }
         info.addView(heroText, LinearLayout.LayoutParams((w * 0.42).toInt(), -2).apply { bottomMargin = dp(16) })
         heroButtons = row()
-        playBtn = tvButton("▶  Play", primary = true) { shown?.let { playItem(it) } }
+        playBtn = tvButton("Play", primary = true) { shown?.let { playItem(it) } }
         heroButtons.addView(playBtn, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(12) })
         heroButtons.addView(tvButton("More info") { shown?.let { TvNav.openItem(this, it) } })
         info.addView(heroButtons)
@@ -200,7 +200,7 @@ class TvHomeActivity : Activity() {
             "${it.optInt("count")} titles" + (if (it.optInt("fresh") > 0) "  ·  ${it.optInt("fresh")} new" else "")
         else metaLine(it)
         heroText.text = it.optString("overview").takeIf { s -> s != "null" }.orEmpty()
-        playBtn.text = if (progressOf(it) >= 0) "▶  Resume" else "▶  Play"
+        playBtn.text = if (progressOf(it) >= 0) "Resume" else "Play"
         if (!wide) heroButtons.alpha = 0f
     }
 
