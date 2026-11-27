@@ -124,7 +124,9 @@ function welcome() {
       resolve();
     };
     const key = (e) => { e.preventDefault(); e.stopPropagation(); end(); };
-    v.addEventListener('playing', () => box.classList.add('on'), { once: true });
+    const showing = () => box.classList.add('on');
+    v.addEventListener('playing', showing, { once: true });
+    v.addEventListener('timeupdate', showing, { once: true }); // older WebViews don't always send "playing"
     // TVs and the Android app play the server's 1080p H.264 copy (Fire TV sticks can't play every video); if that
     // fails, or there is no copy yet, the original.
     const copy = (isTV() || window.HallFlixNative) && state.boot?.tvIdents?.[S.video];
