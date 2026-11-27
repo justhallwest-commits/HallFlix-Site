@@ -209,6 +209,24 @@ export function dayOf(token, year) {
 }
 export const validDate = (token) => dayOf(token, 2026) != null;
 
+/**
+ * "Fast on TVs" (Studio → Look and feel → 📺 TVs): the TV look settings that cost a Fire TV Stick the most, turned off.
+ * Laid over the TV look with one click; each one can be put back on its own. Moving effects, textures, the full glow,
+ * the colour wash and tile videos are already off on TVs unless switched on (tv.*), and stay off.
+ */
+export const FAST_TV = {
+  glass: false, // translucent panels make the TV re-blur what's behind them every frame
+  glow: 0, focusRing: 'line', atmosphere: 'none',
+  tiles3d: { style: 'flat', sway: false, shine: false, video: false },
+  heroMotion: 'none', heroClips: { tv: false },
+  previews: false, // the larger preview that opens on a title held in focus
+  artColor: false, // reading each picture's colours as focus moves
+  background: { blur: 0 },
+  login: { blur: 0, panelBlur: 0, focusBlur: 0, sideBlur: 0, tileMotion: false },
+  splash: { motion: 'still' },
+  tv: { effects: false, textures: false, glow: false, wash: false, tileVideos: false, stills: true },
+};
+
 export const OPTIONS = {
   fonts: ['Outfit', 'Inter', 'Bebas Neue', 'Audiowide', 'Georgia', 'System'],
   textures: ['none', 'grain', 'scanlines', 'grid', 'vignette'],

@@ -361,3 +361,14 @@ test('device looks: checked like any theme, and a device look cannot nest anothe
   assert.deepEqual(theme, { devices: { phone: { radius: 28, colors: { accent: '#00ff00' } }, phoneBrowsers: true } });
   for (const want of ['devices.phone.devices', 'devices.phone.radius', 'devices.phone.colors.bg', 'devices.laptop']) assert.ok(problems.some((p) => p.startsWith(want + ':')), want);
 });
+
+test('"Fast on TVs": every setting is allowed by the theme contract, and it reaches TVs only', async () => {
+  const { checkTheme } = await import('../src/themespec.js');
+  assert.deepEqual(checkTheme(look.FAST_TV).problems, []);
+  assert.deepEqual(checkTheme({ devices: { tv: look.FAST_TV } }).problems, []);
+  const r = look.resolve({ theme: { glass: true, glow: 0.8, tiles3d: { style: 'layered' }, devices: { tv: look.FAST_TV } }, libraries: [], seasons: [] });
+  const tv = r.devices.tv.theme;
+  assert.deepEqual([tv.glass, tv.glow, tv.tiles3d.style, tv.tiles3d.sway, tv.heroMotion, tv.previews, tv.tv.stills], [false, 0, 'flat', false, 'none', false, true]);
+  assert.equal(tv.tiles3d.depth, look.DEFAULT_THEME.tiles3d.depth, 'settings it does not mention are untouched');
+  assert.deepEqual([r.theme.glass, r.theme.glow, r.theme.tiles3d.style], [true, 0.8, 'layered'], 'computers and phones keep the everyday look');
+});
