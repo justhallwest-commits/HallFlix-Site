@@ -40,9 +40,9 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var panel: ScrollView
     private lateinit var splash: ImageView
-    /** The address the page is using right now: the home address when it answers, otherwise the saved one. */
+    /** The address the page is using right now: the home address when it answers, otherwise the away one. */
     private var server = ""
-    /** The address typed in (or new.hallflix.net); kept even while the home address is in use. */
+    /** The address typed in, if any; kept even while the home address is in use. Empty: the built-in addresses. */
     private var saved = ""
     /** True while using the home (Tailscale) address. */
     private var home = false
@@ -54,7 +54,7 @@ class MainActivity : Activity() {
     private val slow = Runnable {
         if (web.visibility == View.VISIBLE) return@Runnable
         web.stopLoading()
-        if (home && saved.isNotEmpty()) { fallBack(); return@Runnable }
+        if (home) { fallBack(); return@Runnable }
         loadFailed = true
         showPanel("HallFlix is taking too long", "Couldn't reach $server. ${AWAY_HINT}", retry = true)
     }
@@ -128,8 +128,8 @@ class MainActivity : Activity() {
             }
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                 if (!request.isForMainFrame) return
-                // The home address stopped answering (Tailscale turned off, left home): carry on with the saved one.
-                if (home && saved.isNotEmpty()) { fallBack(); return }
+                // The home address stopped answering (Tailscale turned off, left home): carry on with the away address.
+                if (home) { fallBack(); return }
                 loadFailed = true
                 showPanel("Can't reach HallFlix", "Check that HallFlix is running, or change the server address. $AWAY_HINT", retry = true)
             }
@@ -141,10 +141,10 @@ class MainActivity : Activity() {
         DownloadStore.changed = { if (!isDestroyed) web.evaluateJavascript("window.dispatchEvent(new Event('hallflix-downloads'))", null) }
         findViewById<EditText>(R.id.server).setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_GO) { connect(); true } else false }
 
+        // A new install needs no address typed in: it tries the home (Tailscale) address, then https://new.hallflix.net.
         saved = Server.url(this)
         server = saved
-        if (saved.isEmpty() && Server.direct(this).isEmpty()) showPanel("Welcome to HallFlix", "Enter the address of your HallFlix server. It is shown in the Studio and in the install guide.", retry = false)
-        else load()
+        load()
     }
 
     private fun isTv(): Boolean {
@@ -164,7 +164,7 @@ class MainActivity : Activity() {
 
     /**
      * Try the home address first (a second and a half at most). If HallFlix answers there, use it: video comes straight
-     * from the server instead of round the internet. If not, use the saved address (usually https://new.hallflix.net).
+     * from the server instead of round the internet. If not, use the away address (see away()).
      */
     private fun load() {
         panel.visibility = View.GONE
@@ -172,16 +172,12 @@ class MainActivity : Activity() {
         ui.removeCallbacks(slow)
         val direct = Server.direct(this)
         val ticket = ++probe
-        if (direct.isEmpty() || direct == saved) { open(saved, false); return }
+        if (direct.isEmpty()) { open(away(), false); return }
         Thread {
             val answers = Server.hello(direct)
             runOnUiThread {
                 if (ticket != probe || isDestroyed) return@runOnUiThread
-                when {
-                    answers -> open(direct, true)
-                    saved.isNotEmpty() -> open(saved, false)
-                    else -> showPanel("Welcome to HallFlix", "Enter the address of your HallFlix server. It is shown in the Studio and in the install guide.", retry = false)
-                }
+                if (answers) open(direct, true) else open(away(), false)
             }
         }.start()
     }
@@ -195,16 +191,22 @@ class MainActivity : Activity() {
         web.loadUrl("$server/")
     }
 
-    /** The home address stopped answering part-way: switch to the saved address without showing an error. */
+    /** The home address stopped answering part-way: switch to the away address without showing an error. */
     private fun fallBack() {
         loadFailed = false
         web.visibility = View.INVISIBLE
         panel.visibility = View.GONE
         splash.visibility = View.VISIBLE
-        open(saved, false)
+        open(away(), false)
     }
 
-    private fun otherAddress(): String = if (home) saved else Server.direct(this)
+    /**
+     * Where to go when the home address doesn't answer: the address typed in, unless that is the home address itself
+     * (or nothing was typed), then https://new.hallflix.net.
+     */
+    private fun away(): String = if (saved.isEmpty() || saved == Server.direct(this)) DEFAULT_SERVER else saved
+
+    private fun otherAddress(): String = if (home) away() else Server.direct(this)
 
     private fun reveal() {
         ui.removeCallbacks(slow)
@@ -240,7 +242,7 @@ class MainActivity : Activity() {
         findViewById<TextView>(R.id.panel_title).text = title
         findViewById<TextView>(R.id.panel_text).text = text
         val field = findViewById<EditText>(R.id.server)
-        if (field.text.isEmpty()) field.setText(saved.ifEmpty { DEFAULT_SERVER })
+        if (field.text.isEmpty()) field.setText(saved.ifEmpty { Server.direct(this).ifEmpty { DEFAULT_SERVER } })
         val retryButton = findViewById<Button>(R.id.retry)
         retryButton.visibility = if (retry) View.VISIBLE else View.GONE
         findViewById<Button>(R.id.offline).visibility = if (retry && hasDownloads()) View.VISIBLE else View.GONE
@@ -420,7 +422,7 @@ private const val VOICE = 41
 private const val LOAD_TIMEOUT_MS = 20_000L
 /** Works at home and away. A home-network address (192.168.…) only works on the home Wi-Fi. */
 private const val DEFAULT_SERVER = "https://new.hallflix.net"
-private const val AWAY_HINT = "Away from home? An address like 192.168.… only works on your home Wi-Fi, so use https://new.hallflix.net instead."
+private const val AWAY_HINT = "The home address (http://100.…) only works with the Tailscale app connected; without it, use https://new.hallflix.net."
 
 object BuildConfigVersion {
     fun name(ctx: Context): String = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1" } catch (e: Exception) { "1" }
