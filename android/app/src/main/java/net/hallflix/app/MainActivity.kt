@@ -19,6 +19,7 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -93,6 +94,12 @@ class MainActivity : Activity() {
         web.addJavascriptInterface(Bridge(), "HallFlixNative")
         // The music notification's buttons run in the web app's music player.
         MusicService.commands = { js -> runOnUiThread { if (!isDestroyed) web.evaluateJavascript("window.HallFlix && HallFlix.music && HallFlix.music.$js", null) } }
+        // Video in the page (the welcome ident, banner clips) needs a WebChromeClient: without one, many Fire TVs and
+        // older Android WebViews play the sound with a blank picture. The default poster is a clear pixel, so no grey
+        // play button shows before the first frame.
+        web.webChromeClient = object : WebChromeClient() {
+            override fun getDefaultVideoPoster(): Bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        }
         web.webViewClient = object : WebViewClient() {
             // The Downloads page and downloaded files, served from inside the app (works offline).
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? = LocalFiles.intercept(this@MainActivity, request)
