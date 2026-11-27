@@ -2065,3 +2065,10 @@ body.tv .sheet .cast { padding: 10px 6px 14px !important; }
 .ep-dl.busy, .btn.dl.busy { color: var(--accent); animation: dlpulse 1.6s ease-in-out infinite; }
 @keyframes dlpulse { 50% { opacity: 0.55; } }
 .season-bar [data-dlseason] { display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; }
+
+/* Sign-in screen: which server the Android app connects to. */
+.server-opts { display: grid; gap: 10px; margin: 14px 0 6px; }
+.server-opt { display: grid; gap: 3px; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); color: inherit; font: inherit; cursor: pointer; }
+.server-opt small { opacity: .7; font-size: .82em; }
+.server-opt.on { border-color: var(--accent, #b14cff); background: rgba(177,76,255,.14); }
+.server-opt:hover, .server-opt:focus-visible { border-color: var(--accent, #b14cff); outline: none; }

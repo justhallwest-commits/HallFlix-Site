@@ -55,7 +55,7 @@ class MainActivity : Activity() {
     private val slow = Runnable {
         if (web.visibility == View.VISIBLE) return@Runnable
         web.stopLoading()
-        if (home) { fallBack(); return@Runnable }
+        if (home && mode() == "auto") { fallBack(); return@Runnable }
         loadFailed = true
         showPanel("HallFlix is taking too long", "Couldn't reach $server. ${AWAY_HINT}", retry = true)
     }
@@ -136,7 +136,7 @@ class MainActivity : Activity() {
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                 if (!request.isForMainFrame) return
                 // The home address stopped answering (Tailscale turned off, left home): carry on with the away address.
-                if (home) { fallBack(); return }
+                if (home && mode() == "auto") { fallBack(); return }
                 loadFailed = true
                 showPanel("Can't reach HallFlix", "Check that HallFlix is running, or change the server address. $AWAY_HINT", retry = true)
             }
@@ -166,6 +166,8 @@ class MainActivity : Activity() {
         if (url.isEmpty()) return
         saved = url
         Server.save(this, url)
+        // Typed in by hand: use exactly that address from now on (the sign-in screen can go back to Automatic).
+        setMode(if (url == Server.direct(this)) "home" else "away")
         load()
     }
 
@@ -179,6 +181,11 @@ class MainActivity : Activity() {
         ui.removeCallbacks(slow)
         val direct = Server.direct(this)
         val ticket = ++probe
+        // Chosen on the sign-in screen: always home, always away, or (normally) whichever answers.
+        when (mode()) {
+            "home" -> if (direct.isNotEmpty()) { open(direct, true); return }
+            "away" -> { open(away(), false); return }
+        }
         if (direct.isEmpty()) { open(away(), false); return }
         Thread {
             val answers = Server.hello(direct)
@@ -212,6 +219,10 @@ class MainActivity : Activity() {
      * (or nothing was typed), then https://new.hallflix.net.
      */
     private fun away(): String = if (saved.isEmpty() || saved == Server.direct(this)) DEFAULT_SERVER else saved
+
+    /** "auto" (home address when it answers, else away), "home" or "away"; chosen on the sign-in screen. */
+    private fun mode(): String = getSharedPreferences("hallflix", MODE_PRIVATE).getString("mode", "auto") ?: "auto"
+    private fun setMode(m: String) { getSharedPreferences("hallflix", MODE_PRIVATE).edit().putString("mode", m).apply() }
 
     private fun otherAddress(): String = if (home) away() else Server.direct(this)
 
@@ -353,6 +364,23 @@ class MainActivity : Activity() {
         /** The home address from Studio → Settings → Apps ("" turns it off). Used from the next start. */
         @JavascriptInterface
         fun setDirect(url: String) { Server.saveDirect(this@MainActivity, Server.normalise(url)) }
+
+        /** For the sign-in screen's Server choice: what's chosen, what's in use, and the two addresses. */
+        @JavascriptInterface
+        fun serverInfo(): String = JSONObject()
+            .put("mode", mode()).put("current", server).put("home", home)
+            .put("direct", Server.direct(this@MainActivity)).put("away", away()).toString()
+
+        /** "auto", "home" or "away": switch now and keep it. */
+        @JavascriptInterface
+        fun useServer(m: String) {
+            if (m !in listOf("auto", "home", "away")) return
+            runOnUiThread {
+                setMode(m)
+                Server.shareSignIn(server, otherAddress())
+                load()
+            }
+        }
 
         @JavascriptInterface
         fun changeServer() {
