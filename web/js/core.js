@@ -189,6 +189,7 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   root.setProperty('--libs-ratio', String(Math.max(20, Math.min(100, +H.height || 44)) / 100));
   // Whole picture (fitted over a blurred copy) or filling the tile; how dark the shading behind the name is; spacing.
   document.documentElement.dataset.tileFit = H.fit === 'whole' ? 'whole' : 'fill';
+  document.documentElement.dataset.libsLayout = H.layout === 'row' ? 'row' : 'grid'; // one row you scroll sideways, or a grid
   root.setProperty('--tile-shade', String(Math.max(0, Math.min(100, H.shade ?? 100)) / 100));
   if (+H.gap > 0) root.setProperty('--libs-gap', `${Math.min(60, +H.gap)}px`); else root.removeProperty('--libs-gap');
   root.setProperty('--tile-bright', String(Math.max(20, Math.min(160, +H.brightness || 100)) / 100));

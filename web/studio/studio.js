@@ -154,27 +154,36 @@ function sizerVars(theme, scr) {
   const layered = (theme.tiles3d?.style || 'layered') === 'layered';
   const gap = (+H.gap > 0 ? +H.gap : scr.gap) + (layered ? Math.max(0, Math.min(16, theme.tiles3d?.thickness ?? 6)) * 1.7 : 0);
   const width = Math.max(120, Math.min(900, +H.width || 320)), height = Math.max(20, Math.min(100, +H.height || 44));
-  const inner = scr.w - scr.pad * 2;
-  const across = cols || Math.max(1, Math.floor((inner + gap) / (Math.min(width, inner) + gap)));
-  const tileW = (inner - gap * (across - 1)) / across;
-  return { cols, gap, width, height, across, tileW, inner,
-    css: `--sz-w:${scr.w}px;--sz-pad:${scr.pad}px;--sz-gap:${gap}px;--sz-cols:${across};--sz-ar:${(100 / height).toFixed(4)};--sz-shade:${Math.max(0, Math.min(100, H.shade ?? 100)) / 100}` };
+  const inner = scr.w - scr.pad * 2, row = H.layout === 'row';
+  let across, tileW;
+  if (row) { // one sideways row: a set number on screen with the next peeking in, or tiles at the set width
+    tileW = cols ? (inner - gap * cols) / (cols + 0.35) : Math.min(width, inner * 0.82);
+    across = (inner + gap) / (tileW + gap);
+  } else {
+    across = cols || Math.max(1, Math.floor((inner + gap) / (Math.min(width, inner) + gap)));
+    tileW = (inner - gap * (across - 1)) / across;
+  }
+  return { cols, gap, width, height, across, tileW, inner, row,
+    css: `--sz-w:${scr.w}px;--sz-pad:${scr.pad}px;--sz-gap:${gap}px;--sz-cols:${Math.round(across)};--sz-tw:${tileW.toFixed(1)}px;--sz-ar:${(100 / height).toFixed(4)};--sz-shade:${Math.max(0, Math.min(100, H.shade ?? 100)) / 100}` };
 }
 const tilePic = (l, own = {}) => {
   const vid = (u) => /\.(mp4|webm|m4v|mov)(\?|$)/i.test(u || '');
   return own.tileBackground && !vid(own.tileBackground) ? own.tileBackground : own.tileUse !== 'artwork' && own.background && !vid(own.background) ? own.background : l.art;
 };
 function sizerReadout(v, scr) {
-  return `${shapeName(v.height)} · ${v.across} across on ${scr.name} · each tile about ${Math.round(v.tileW)} × ${Math.round(v.tileW * v.height / 100)} px`;
+  const fit = v.row ? `${Math.floor(v.across + 0.05)}${v.across % 1 > 0.15 ? '½' : ''} on screen at once on ${scr.name}, swipe for more` : `${v.across} across on ${scr.name}`;
+  return `${shapeName(v.height)} · ${fit} · each tile about ${Math.round(v.tileW)} × ${Math.round(v.tileW * v.height / 100)} px`;
 }
 const homeCard = (theme, libraries = [], libs = {}, dev = '') => {
   const H = theme.homeTiles || {}, scr = sizerScreen(dev, theme), v = sizerVars(theme, scr);
-  const shown = libraries.slice(0, Math.max(v.across * 2, 3)).slice(0, 8);
+  const shown = libraries.slice(0, v.row ? 8 : Math.max(Math.round(v.across) * 2, 3)).slice(0, 8);
   return html`<div class="card"><h2>Home page</h2>
-  ${choose(theme, 'homeTiles.columns', 'Library tiles in a row', [['0', 'Automatic (as many as fit at the tile width)'], ['1', '1 (full width)'], ['2', '2 side by side'], ['3', '3 side by side'], ['4', '4 side by side']])}
+  ${choose(theme, 'homeTiles.layout', 'Library tiles', [['grid', 'Grid (as many rows as needed)'], ['row', 'One row you scroll sideways']])}
+  ${v.row ? choose(theme, 'homeTiles.columns', 'Tiles on screen at once (the next one peeks in)', [['0', 'Automatic (by the tile width)'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']])
+    : choose(theme, 'homeTiles.columns', 'Library tiles in a row', [['0', 'Automatic (as many as fit at the tile width)'], ['1', '1 (full width)'], ['2', '2 side by side'], ['3', '3 side by side'], ['4', '4 side by side']])}
   <div class="f block"><span>Tile size and shape</span>
     <p class="muted small">Drag the corner of the first tile: right or left changes the size${v.cols ? ' (and how many sit in a row)' : ''}, up or down changes the shape. This is how the tiles fit on ${scr.name}${dev ? '' : '; use 📱 Phones above to size them for phones'}.</p>
-    <div class="sizer ${H.fit === 'whole' ? 'whole' : ''}" data-sizer><div class="sz-frame" style="${v.css}"><div class="sz-grid">
+    <div class="sizer ${H.fit === 'whole' ? 'whole' : ''} ${v.row ? 'row' : ''}" data-sizer><div class="sz-frame" style="${v.css}"><div class="sz-grid">
       ${shown.map((l, i) => { const pic = tilePic(l, libs[l.id]); return html`<div class="sz-tile" style="${pic ? `--pic:url('${encodeURI(pic)}')` : ''}"><i class="sz-fill"></i><i class="sz-art"></i><b>${l.name}</b>${i === 0 ? html`<span class="sz-handle" role="slider" tabindex="0" aria-label="Drag to resize the library tiles" title="Drag to resize"></span>` : ''}</div>`; })}
     </div></div></div>
     <div class="sz-bar"><span class="muted small" data-sz-read>${sizerReadout(v, scr)}</span><label class="check sm"><input type="checkbox" data-sz-lock> Keep the shape while resizing</label></div>
@@ -906,7 +915,7 @@ pages.look = async (main) => {
     const move = (ev) => {
       const w = Math.max(60, w0 + (ev.clientX - e.clientX) / scale), hh = Math.max(30, h0 + (ev.clientY - e.clientY) / scale);
       const next = {};
-      if (start.cols) next.columns = Math.max(1, Math.min(4, Math.round((start.inner + start.gap) / (w + start.gap))));
+      if (start.cols) next.columns = Math.max(1, Math.min(4, Math.round(start.row ? (start.inner - 0.35 * w) / (w + start.gap) : (start.inner + start.gap) / (w + start.gap))));
       else next.width = Math.max(120, Math.min(900, Math.round(w / 10) * 10));
       if (!lock) next.height = Math.max(20, Math.min(100, Math.round((hh / w) * 100)));
       setTiles(next); sizerLive(sizer);
@@ -943,7 +952,7 @@ pages.look = async (main) => {
   // On the Sign-in page tab, some choices show or hide others (panel strength, how dark, where to blur).
   box.addEventListener('change', (e) => { if (tab === 'signin' && e.target.matches('select[data-path^="login."], [data-path="login.focusBlur"]')) draw(); });
   // Choices that show or hide others on the Whole app tab.
-  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"], [data-path="ranked.style"], [data-path="heroMotion"], [data-path="homeTiles.columns"], [data-path="homeTiles.fit"], [data-path="homeTiles.width"], [data-path="homeTiles.height"], [data-path="homeTiles.gap"]')) draw(); });
+  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"], [data-path="ranked.style"], [data-path="heroMotion"], [data-path="homeTiles.columns"], [data-path="homeTiles.layout"], [data-path="homeTiles.fit"], [data-path="homeTiles.width"], [data-path="homeTiles.height"], [data-path="homeTiles.gap"]')) draw(); });
   // Sounds and sign-in music: test, upload, reorder and remove.
   const touched = (redraw = true) => { dirty = true; if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false; send(); };
   const music = () => { const o = editing(); o.login ||= {}; o.login.music ||= {}; if (!Array.isArray(o.login.music.tracks)) o.login.music.tracks = clone(view().login?.music?.tracks || []); return o.login.music; };

@@ -106,11 +106,13 @@ function coversHtml(posters, lk) {
 }
 let lastTiles = null;
 // A new look (from the Studio's live preview, or a season starting) redraws the library tiles on Home.
-on('look', () => { const el = $('.libs'); if (el && lastTiles) el.outerHTML = String(tilesHtml(lastTiles)); });
+on('look', () => { const el = $('.libs-wrap'); if (el && lastTiles) { el.outerHTML = String(tilesHtml(lastTiles)); syncArrows(...$$('.libs-wrap')); } });
 function tilesHtml(list) {
   if (!list?.length) return '';
   lastTiles = list;
-  return html`<section class="libs" data-count="${list.length}">${list.map((l) => {
+  // "One row you scroll sideways" (Studio → Home page): the tiles become a row like the others, with arrows on computers.
+  const row = themeNow()?.homeTiles?.layout === 'row';
+  return html`<div class="libs-wrap${row ? ' as-row' : ''}">${row ? html`<button class="arrow l" hidden aria-label="Scroll left" tabindex="-1">‹</button>` : ''}<section class="libs${row ? ' scroller' : ''}" data-count="${list.length}">${list.map((l) => {
     const lk = libraryLook(l.id);
     // The tile's picture is its own: the tile background if one is set, else (unless the tile is told to use the library's
     // artwork) the library page's background, else the newest artwork in the library.
@@ -128,7 +130,7 @@ function tilesHtml(list) {
       ${(() => { const ls = logoStyle(lk); return html`<span class="tile-text placed ${lk.logo ? 'has-logo' : ''}" data-align="${ls.align}" style="${ls.style}">${lk.logo ? html`<img class="tile-logo" src="${lk.logo}" alt="">` : html`<b class="tile-name">${l.name}</b>`}
         ${ls.count ? html`<span class="tile-count">${l.count} ${noun}${l.fresh ? html`<em>${l.fresh} new</em>` : ''}</span>` : ''}</span>`; })()}
       <span class="tile-sweep"></span><span class="tile-shine"></span><span class="tile-ring"></span></a></div>`;
-  })}</section>`;
+  })}</section>${row ? html`<button class="arrow r" aria-label="Scroll right" tabindex="-1">›</button>` : ''}</div>`;
 }
 
 function heroHtml(list) {
@@ -210,7 +212,7 @@ export function shell() {
   // Rows scrolled sideways update their arrows at most once a frame.
   const moved = new Set(); let frame = 0;
   app().addEventListener('scroll', (e) => {
-    const row = e.target.closest?.('.row');
+    const row = e.target.closest?.('.row, .libs-wrap');
     if (!row) return;
     moved.add(row);
     frame ||= requestAnimationFrame(() => { frame = 0; syncArrows(...moved); moved.clear(); });
@@ -365,7 +367,7 @@ async function drawRows() {
   }
   if (!$('#homerows')) return;
   box.innerHTML = String(html`${out}`);
-  syncArrows(...$$('.row'));
+  syncArrows(...$$('.row, .libs-wrap'));
 }
 
 async function library(id) {

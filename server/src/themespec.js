@@ -73,6 +73,7 @@ const RULES = {
   'homeTiles.width': { min: 120, max: 900 },
   'homeTiles.height': { min: 20, max: 100 },
   'homeTiles.fit': { enum: ['fill', 'whole'] },
+  'homeTiles.layout': { enum: ['grid', 'row'] },
   'homeTiles.shade': { min: 0, max: 100 },
   'homeTiles.gap': { min: 0, max: 60 },
   'homeTiles.brightness': { min: 20, max: 160 },
