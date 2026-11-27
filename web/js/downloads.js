@@ -28,6 +28,11 @@ export async function download(ids, { title } = {}) {
   try { info = await api('GET', `/api/downloads/${ids[0]}`); } catch (e) { toast(e.message); return; }
   let quality = 'original';
   if (info.options.length > 1) { quality = await chooseSize(info, ids.length, title || info.title); if (!quality) return; }
+  else if (ids.length > 10) {
+    // A whole series or a big album: say how many first.
+    const ok = await chooseSize({ options: [{ quality: 'original', label: `Download all ${ids.length}`, detail: 'They download one after another; you can delete any of them later in Downloads.' }] }, ids.length, title || info.title);
+    if (!ok) return;
+  }
   const have = saved();
   const todo = ids.filter((id) => !have.has(+id) || have.get(+id).state === 'failed');
   for (const id of todo) N().download(JSON.stringify({ itemId: +id, quality: String(quality) }));
@@ -44,7 +49,7 @@ function chooseSize(info, count, title) {
     const each = count > 1 ? ` each` : '';
     box.innerHTML = String(html`<div class="panel" role="dialog" aria-modal="true" aria-labelledby="dl-h">
       <h2 id="dl-h">Download ${title}${count > 1 ? ` (${count})` : ''}</h2>
-      <p>Smaller copies use less space on your phone. Your server makes them first, which can take a few minutes${count > 1 ? ' each' : ''}.</p>
+      ${info.options.some((o) => o.estimate) ? html`<p>Smaller copies use less space on your phone. Your server makes them first, which can take a few minutes${count > 1 ? ' each' : ''}.</p>` : html`<p>Saved on this phone, to enjoy without a connection.</p>`}
       <div class="choices">${info.options.map((o) => html`<button class="choice" data-q="${o.quality}"><b>${o.label}${o.size ? html` · ${o.estimate ? 'about ' : ''}${size(o.size)}${each}` : ''}</b><span>${o.detail || ''}</span></button>`)}</div>
       <div class="actions"><button class="btn" data-x>Cancel</button></div></div>`);
     const close = (q) => { box.remove(); back?.focus?.(); done(q); };

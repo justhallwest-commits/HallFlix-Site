@@ -31,6 +31,7 @@ object LocalFiles {
                     WebResourceResponse(mime(name), "utf-8", ctx.assets.open(name)).apply { responseHeaders = mapOf("Cache-Control" to "no-store") }
                 }
                 path.startsWith("/files/") -> file(File(DownloadStore.dir(ctx), path.removePrefix("/files/")), req.requestHeaders?.entries?.firstOrNull { it.key.equals("Range", true) }?.value)
+                path.startsWith("/epub/") -> epub(ctx, path.removePrefix("/epub/"))
                 else -> notFound()
             }
         } catch (e: Exception) { notFound() }
@@ -51,6 +52,19 @@ object LocalFiles {
             Limited(input, end - start + 1))
     }
 
+    /** A file inside a downloaded EPUB (/epub/<id>/<path in the book>). Scripts in books never run. */
+    private fun epub(ctx: Context, rest: String): WebResourceResponse {
+        val id = rest.substringBefore('/').toLongOrNull() ?: return notFound()
+        val name = java.net.URLDecoder.decode(rest.substringAfter('/'), "UTF-8")
+        val book = DownloadStore.dir(ctx).listFiles()?.firstOrNull { it.name.startsWith("$id-") && it.name.endsWith(".epub") } ?: return notFound()
+        val zip = java.util.zip.ZipFile(book)
+        val entry = zip.getEntry(name) ?: run { zip.close(); return notFound() }
+        val bytes = zip.getInputStream(entry).use { it.readBytes() }
+        zip.close()
+        return WebResourceResponse(mime(name), null, 200, "OK",
+            mapOf("Content-Security-Policy" to "script-src 'none'; object-src 'none'", "X-Content-Type-Options" to "nosniff"), bytes.inputStream())
+    }
+
     private fun skipFully(s: InputStream, n: Long) { var left = n; while (left > 0) { val k = s.skip(left); if (k <= 0) break; left -= k } }
 
     private fun mime(name: String): String {
@@ -59,6 +73,7 @@ object LocalFiles {
             "html" -> "text/html"; "js" -> "text/javascript"; "css" -> "text/css"; "vtt" -> "text/vtt"; "json" -> "application/json"
             "m4a" -> "audio/mp4"; "flac" -> "audio/flac"; "opus", "ogg" -> "audio/ogg"; "mp3" -> "audio/mpeg"
             "epub" -> "application/epub+zip"; "cbz" -> "application/zip"; "pdf" -> "application/pdf"
+            "xhtml", "xht" -> "application/xhtml+xml"; "htm" -> "text/html"; "svg" -> "image/svg+xml"; "otf" -> "font/otf"; "ttf" -> "font/ttf"; "woff" -> "font/woff"; "woff2" -> "font/woff2"
             else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"
         }
     }

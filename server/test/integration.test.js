@@ -203,6 +203,13 @@ test('downloads: sizes to choose from, a smaller copy made by the transcoder, an
     assert.deepEqual([song.kind, song.album, song.options.map((o) => o.quality)], ['track', 'Night Drive', ['original']]);
   }
   assert.equal((await hf.api('GET', `/api/downloads/${album?.id || 999999}`)).$status, 404, 'an album itself is saved song by song');
+  // Books and comics: saved as they are (the app saves comics page by page through /api/read).
+  for (const kind of ['book', 'comic']) {
+    const it = (await hf.api('GET', '/api/search?q=a')).items.find((x) => x.kind === kind) || (await hf.api('GET', '/api/search?q=e')).items.find((x) => x.kind === kind);
+    if (!it) continue;
+    const bi = await hf.api('GET', `/api/downloads/${it.id}`);
+    assert.deepEqual([bi.kind, bi.options.map((o) => o.quality)], [kind, ['original']]);
+  }
   // Studio → Menu access → Downloads, off for one profile.
   const kid = await hf.api('POST', '/api/studio/profiles', { name: 'No Downloads', password: '2468' });
   assert.ok((await hf.api('GET', '/api/studio/access')).features.some((f) => f.key === 'download'));

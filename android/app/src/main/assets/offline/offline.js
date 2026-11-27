@@ -5,7 +5,7 @@
 (() => {
   const N = window.HallFlixNative || {
     downloads: () => JSON.stringify({ items: [], used: 0, free: 0, wifiOnly: true }), deleteDownload() {}, setDownloadWifiOnly() {},
-    playOffline() {}, goOnline() {}, music() {}, download() {},
+    playOffline() {}, goOnline() {}, music() {}, download() {}, saveReading() {},
   };
   const $ = (s, r = document) => r.querySelector(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -44,17 +44,19 @@
     const m = it.meta || {};
     if (it.kind === 'episode' && m.show) return `S${m.show.season} E${m.show.episode} · ${it.title}`;
     if (it.kind === 'track') return [m.artist, m.album].filter(Boolean).join(' · ');
+    if (it.kind === 'comic') return [it.read?.series?.title, it.read?.pages ? `${it.read.pages} pages` : ''].filter(Boolean).join(' · ');
+    if (it.kind === 'book') return [m.author, it.read?.mode === 'pages' ? `${it.read.pages} pages` : 'Book'].filter(Boolean).join(' · ');
     return [m.year, m.runtime ? `${Math.round(m.runtime / 60)} min` : ''].filter(Boolean).join(' · ');
   }
 
   function itemHtml(it, { compact } = {}) {
     const st = status(it);
     const done = it.state === 'done';
-    const playable = done && (VIDEO.has(it.kind) || it.kind === 'track');
-    const watched = done && VIDEO.has(it.kind) && it.duration > 0 ? (it.watched && !it.position ? 1 : (it.position || 0) / it.duration) : 0;
+    const playable = done && (VIDEO.has(it.kind) || it.kind === 'track' || it.kind === 'book' || it.kind === 'comic');
+    const watched = done && it.kind !== 'track' && it.duration > 0 ? (it.watched && !it.position ? 1 : (it.position || 0) / it.duration) : 0;
     const name = it.kind === 'episode' && compact ? `E${it.meta?.show?.episode ?? ''} · ${it.title}` : it.title || 'Getting ready…';
     return `<div class="item ${it.kind === 'track' ? 'song' : ''}" data-id="${it.id}" ${playable ? 'data-play' : ''}>
-      <div class="art" style="${it.posterUrl ? `background-image:url('${esc(it.posterUrl)}')` : ''}">${playable ? '<span class="play">▶</span>' : ''}</div>
+      <div class="art" style="${it.posterUrl ? `background-image:url('${esc(it.posterUrl)}')` : ''}">${playable ? `<span class="play">${it.kind === 'book' || it.kind === 'comic' ? '📖' : '▶'}</span>` : ''}</div>
       <div class="t"><b>${esc(name)}</b>
         ${compact ? '' : `<span>${esc(subtitle(it))}</span>`}
         ${st ? `<span class="${st.err ? 'err' : ''}">${esc(st.text)}</span>${st.p != null ? `<div class="prog"><i style="width:${Math.round(st.p * 100)}%"></i></div>` : ''}`
@@ -119,6 +121,7 @@
     }
     if (row && 'play' in row.dataset && it) {
       if (VIDEO.has(it.kind)) N.playOffline(it.id);
+      else if (it.kind === 'book' || it.kind === 'comic') openReader(it);
       else if (it.kind === 'track') {
         const list = albumOrder(data.items.filter((x) => x.kind === 'track' && x.state === 'done' && (x.meta?.albumId || x.meta?.album) === (it.meta?.albumId || it.meta?.album)));
         playSongs(list, Math.max(0, list.findIndex((x) => x.id === it.id)));
@@ -184,8 +187,109 @@
     next, prev, stop: stopMusic,
     seek: (t) => { audio.currentTime = Math.max(0, +t || 0); },
   } };
-  // Back closes the delete question first; otherwise the app goes back (to HallFlix, or closes).
-  window.hallflixBack = () => { if (!$('#confirm').hidden) { $('#confirm').hidden = true; return true; } return null; };
+  // ---------- reading, offline ----------
+  // Comics and PDFs: their pages as pictures (tap the sides or swipe; manga reads right to left).
+  // EPUBs: chapter by chapter, from the book on the phone. Where you are is kept and synced like on the website:
+  // page number for pages, chapter + fraction through it for EPUBs.
+  let reader = null;
+  function openReader(it) {
+    const r = it.read || {};
+    const box = document.createElement('div');
+    box.className = 'reader';
+    box.innerHTML = `<header class="rd-top"><button data-rd="close" aria-label="Back">‹</button><div class="rd-t"><b>${esc(it.title)}</b><span data-rd-where></span></div>
+      ${r.mode === 'epub' ? '<button data-rd="smaller" aria-label="Smaller text">A−</button><button data-rd="bigger" aria-label="Bigger text">A+</button>' : ''}</header>
+      <div class="rd-stage">${r.mode === 'epub' ? '<iframe sandbox="allow-same-origin" title="Book"></iframe>' : '<img alt="" draggable="false">'}</div>
+      <footer class="rd-bottom">${r.mode === 'epub' ? '<button data-rd="prev">‹ Chapter</button><button data-rd="next">Chapter ›</button>'
+        : `<input type="range" min="1" max="${r.pages || 1}" value="1" aria-label="Page" data-rd-range>`}</footer>`;
+    document.body.append(box);
+    document.body.classList.add('reading');
+    reader = { it, box, r, page: 1, chapter: 0, frac: 0, size: +(localStorage.getItem('hf_offline_text') || 100) };
+    const start = it.watched && !it.position ? 0 : +it.position || 0;
+    if (r.mode === 'epub') { reader.chapter = Math.min(Math.floor(start), Math.max(0, (r.spine || []).length - 1)); reader.frac = start % 1; showChapter(); }
+    else { reader.page = Math.max(1, Math.min(r.pages || 1, Math.round(start) || 1)); showPage(); }
+  }
+  function closeReader() { if (!reader) return; saveReading(true); reader.box.remove(); reader = null; document.body.classList.remove('reading'); load(); }
+  let saveTimer = 0;
+  function saveReading(now) {
+    clearTimeout(saveTimer);
+    const go = () => {
+      if (!reader) return;
+      const { r } = reader;
+      const total = r.mode === 'epub' ? (r.spine || []).length : r.pages || 0;
+      const pos = r.mode === 'epub' ? reader.chapter + Math.min(0.999, reader.frac) : reader.page;
+      const finished = r.mode === 'epub' ? reader.chapter >= total - 1 && reader.frac > 0.97 : reader.page >= total;
+      try { N.saveReading(reader.it.id, pos, total, finished); } catch { /* older app */ }
+    };
+    if (now) go(); else saveTimer = setTimeout(go, 800);
+  }
+  function showPage() {
+    const { box, it, r } = reader;
+    $('.rd-stage img', box).src = `${it.pagesBase}${reader.page}.jpg`;
+    $('[data-rd-where]', box).textContent = `Page ${reader.page} of ${r.pages}`;
+    $('[data-rd-range]', box).value = String(reader.page);
+    // The next page is fetched ahead so turning is instant.
+    if (reader.page < r.pages) new Image().src = `${it.pagesBase}${reader.page + 1}.jpg`;
+    saveReading();
+  }
+  function turn(dir) {
+    const { r } = reader;
+    const step = r.rtl ? -dir : dir;
+    const next = Math.max(1, Math.min(r.pages, reader.page + step));
+    if (next !== reader.page) { reader.page = next; showPage(); }
+  }
+  function showChapter() {
+    const { box, it, r } = reader;
+    const spine = r.spine || [];
+    const frame = $('iframe', box);
+    const href = spine[reader.chapter] || '';
+    frame.onload = () => {
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      const st = doc.createElement('style');
+      st.textContent = `html { background: #0a0814; color: #ece9ff; } body { font-size: ${reader.size}%; line-height: 1.6; max-width: 40em; margin: 0 auto; padding: 18px 18px 60px; font-family: Georgia, serif; }
+        img, svg { max-width: 100%; height: auto; } a { color: #35d0d0; }`;
+      (doc.head || doc.documentElement).append(st);
+      const sc = doc.scrollingElement || doc.documentElement;
+      if (reader.frac > 0) sc.scrollTop = reader.frac * (sc.scrollHeight - sc.clientHeight);
+      frame.contentWindow.addEventListener('scroll', () => { reader && (reader.frac = (sc.scrollTop / Math.max(1, sc.scrollHeight - sc.clientHeight))); saveReading(); }, { passive: true });
+    };
+    frame.src = it.epubBase + href.split('/').map(encodeURIComponent).join('/');
+    const title = (r.toc || []).find((t) => t.href && href && t.href.split('#')[0] === href)?.title;
+    $('[data-rd-where]', box).textContent = title || `Part ${reader.chapter + 1} of ${spine.length}`;
+    saveReading();
+  }
+  function chapter(dir) {
+    const n = reader.chapter + dir;
+    if (n < 0 || n >= (reader.r.spine || []).length) return;
+    reader.chapter = n; reader.frac = 0; showChapter();
+  }
+  document.addEventListener('click', (e) => {
+    if (!reader) return;
+    const b = e.target.closest('[data-rd]');
+    if (b) {
+      const a = b.dataset.rd;
+      if (a === 'close') closeReader();
+      else if (a === 'prev') chapter(-1);
+      else if (a === 'next') chapter(1);
+      else if (a === 'smaller' || a === 'bigger') { reader.size = Math.max(70, Math.min(200, reader.size + (a === 'bigger' ? 10 : -10))); localStorage.setItem('hf_offline_text', String(reader.size)); const f = reader.frac; reader.frac = f; showChapter(); }
+      return;
+    }
+    if (reader.r.mode !== 'epub' && e.target.closest('.rd-stage')) {
+      const x = e.clientX / innerWidth;
+      if (x < 0.33) turn(-1); else if (x > 0.67) turn(1); else reader.box.classList.toggle('bare'); // the middle shows or hides the bars
+    }
+  }, true);
+  document.addEventListener('input', (e) => { if (reader && e.target.matches('[data-rd-range]')) { reader.page = +e.target.value; showPage(); } });
+  let sx = null;
+  document.addEventListener('touchstart', (e) => { if (reader && reader.r.mode !== 'epub' && e.target.closest('.rd-stage')) sx = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', (e) => { if (sx == null || !reader) return; const dx = e.changedTouches[0].clientX - sx; sx = null; if (Math.abs(dx) > 50) turn(dx < 0 ? 1 : -1); }, { passive: true });
+
+  // Back closes the reader or the delete question first; otherwise the app goes back (to HallFlix, or closes).
+  window.hallflixBack = () => {
+    if (reader) { closeReader(); return true; }
+    if (!$('#confirm').hidden) { $('#confirm').hidden = true; return true; }
+    return null;
+  };
 
   load();
 })();

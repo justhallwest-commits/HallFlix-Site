@@ -1,6 +1,7 @@
 // The comics section: a library front page in the style of the big comic apps (a spotlight on what you're reading,
 // Up next, new issues, a row per publisher, then every series with read-status filters), and the series page
 // (how far you've got, issues in either order as a grid or a list, hide what you've read, mark read up to here).
+import { canDownload, DL_ICON, download } from './downloads.js';
 import * as backdrop from './backdrop.js';
 import { $, $$, api, html, raw, icons, toast, libTitle } from './core.js';
 
@@ -141,6 +142,7 @@ export function seriesBody(d, close, listBtn, facts) {
         ${read ? html`<div class="cx-progress"><div class="bar"><i style="width:${(read / issues.length) * 100}%"></i></div><span>${read === issues.length ? 'You have read every issue' : `${read} of ${issues.length} read`}</span></div>` : ''}
         <div class="actions">${next ? html`<a class="btn primary" href="#/read/${next.id}">${icons.book} ${d.resuming ? 'Continue' : read ? 'Read next' : 'Start reading'} ${num(next) || next.title}</a>` : ''}
           ${(d.resuming || read) && issues[0] && next?.id !== issues[0].id ? html`<a class="btn" href="#/read/${issues[0].id}">From ${num(issues[0]) || 'the start'}</a>` : ''}${listBtn}
+          ${canDownload() && issues.length ? html`<button class="btn" data-dlseries title="Download every issue to read offline">${raw(DL_ICON)} Download</button>` : ''}
           <button class="btn round" data-seen aria-label="${read === issues.length ? 'Mark all as unread' : 'Mark all as read'}" title="${read === issues.length ? 'Mark all as unread' : 'Mark all as read'}">${icons.eye}</button></div></div></div>
     <div class="body">${d.overview ? html`<p class="overview">${d.overview}</p>` : ''}${facts([['Writer', d.author], ['Publisher', d.publisher]])}
       <div class="cx-itools"><h3>Issues</h3>
@@ -160,6 +162,14 @@ export async function seriesClick(e, d, redraw) {
   if (lay) { setPref('layout', lay.dataset.ilayout); redraw(); return true; }
   const m = t.closest('[data-imenu]');
   if (m) { e.preventDefault(); e.stopPropagation(); menu(m, d, redraw); return true; }
+  const dl = t.closest('[data-idl]');
+  if (dl) {
+    e.preventDefault();
+    const id = +dl.dataset.id, i = d.issues.findIndex((x) => x.id === id);
+    $('.cx-menu')?.remove();
+    download(dl.dataset.idl === 'from' ? d.issues.slice(i).map((x) => x.id) : [id], { title: dl.dataset.idl === 'from' ? `${d.title} from ${num(d.issues[i]) || 'here'}` : num(d.issues[i]) || d.issues[i].title });
+    return true;
+  }
   const act = t.closest('[data-iact]');
   if (act) {
     e.preventDefault();
@@ -188,7 +198,8 @@ function menu(btn, d, redraw) {
   box.innerHTML = String(html`<div class="who">${num(x) || x.title}</div><a href="#/read/${x.id}">${icons.book} ${x.progress && !x.progress.watched && x.progress.position > 0 ? 'Continue' : 'Read'}</a>
     ${x.progress?.watched ? html`<button data-iact="unread" data-id="${id}">Mark as unread</button>` : html`<button data-iact="read" data-id="${id}">Mark as read</button>`}
     ${i > 0 ? html`<button data-iact="upto" data-id="${id}">Mark read up to here</button>` : ''}
-    ${i < d.issues.length - 1 ? html`<button data-iact="from" data-id="${id}">Mark unread from here on</button>` : ''}`);
+    ${i < d.issues.length - 1 ? html`<button data-iact="from" data-id="${id}">Mark unread from here on</button>` : ''}
+    ${canDownload() ? html`<button data-idl="one" data-id="${id}">${raw(DL_ICON)} Download</button>${i < d.issues.length - 1 ? html`<button data-idl="from" data-id="${id}">${raw(DL_ICON)} Download from here on</button>` : ''}` : ''}`);
   btn.closest('.m-sheet').append(box);
   const r = btn.getBoundingClientRect(), host = btn.closest('.m-sheet').getBoundingClientRect();
   const above = host.bottom - r.bottom < 230;

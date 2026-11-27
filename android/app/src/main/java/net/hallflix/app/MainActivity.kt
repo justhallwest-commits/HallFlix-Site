@@ -341,6 +341,10 @@ class MainActivity : Activity() {
             }
         }
 
+        /** Where a downloaded book or comic was left (page, or chapter.fraction for EPUBs); sent to the server once online. */
+        @JavascriptInterface
+        fun saveReading(id: Long, position: Double, duration: Double, finished: Boolean) { DownloadStore.savePosition(this@MainActivity, id, position, duration, finished) }
+
         /** The music player's state, for the notification and lock-screen controls (see MusicService). */
         @JavascriptInterface
         fun music(json: String) {
