@@ -12,8 +12,8 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
-    <!-- Fire TV shows a sideloaded app's icon, not its banner, on the home screen. So on TVs the icon is the wide
-         logo too (res/mipmap-television-*); phones keep the square one. -->
+    <!-- Fire TV puts a sideloaded app's icon (not its banner) in the home-screen tile, squeezed into a square.
+         So on TVs the icon is a square made for that (res/mipmap-television-*); phones keep their own icon. -->
     <application
         android:allowBackup="true"
         android:banner="@drawable/banner"
