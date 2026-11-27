@@ -372,10 +372,10 @@ class CardAdapter(
     override fun getItemCount() = items.size
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = act.makeCard(shape, captions)
     override fun onBindViewHolder(h: CardHolder, position: Int) {
-        val it = items[position]
-        act.bindCard(h, it, shape)
-        h.root.zoomOnFocus { has -> if (has) onFocus(it) }
-        h.root.setOnClickListener { onPick(it) }
+        val item = items[position]
+        act.bindCard(h, item, shape)
+        h.root.zoomOnFocus { has -> if (has) onFocus(item) }
+        h.root.setOnClickListener { onPick(item) }
         if (onNearEnd != null && position >= items.size - 12) onNearEnd.invoke()
     }
 }
