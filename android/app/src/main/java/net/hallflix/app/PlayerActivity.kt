@@ -1,8 +1,21 @@
 package net.hallflix.app
 
 import android.app.Activity
+import android.app.PendingIntent
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.app.UiModeManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.drawable.Icon
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
@@ -17,6 +30,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -25,6 +39,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import org.json.JSONArray
 import org.json.JSONObject
+import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
 
 /**
@@ -60,12 +75,22 @@ class PlayerActivity : Activity() {
     private val remoteIo = Executors.newSingleThreadExecutor()
     private val deviceId = java.util.UUID.randomUUID().toString().take(12)
     private val deviceName = if (android.os.Build.MODEL.startsWith("AFT")) "Fire TV" else android.os.Build.MODEL
+    private var gestures: PlayerGestures? = null
+    private var inPip = false
+    /** Phones and tablets: touch gestures and picture-in-picture. Never on Fire TV or Android TV. */
+    private val tv by lazy {
+        (getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
+            packageManager.hasSystemFeature("android.software.leanback") || packageManager.hasSystemFeature("amazon.hardware.fire_tv")
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
         server = intent.getStringExtra("server") ?: return finish()
         token = intent.getStringExtra("token")
+        // Starting something new while an earlier film plays in the small window: that one stops.
+        open?.get()?.takeIf { it !== this && !it.isFinishing }?.finish()
+        open = WeakReference(this)
         caps = Server.caps(this)
 
         val http = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true).setUserAgent("HallFlixApp")
@@ -77,7 +102,15 @@ class PlayerActivity : Activity() {
             .build()
         view = findViewById(R.id.player)
         view.player = Seeker(exo)
-        view.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v -> findViewById<View>(R.id.title).visibility = v })
+        view.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v -> findViewById<View>(R.id.title).visibility = if (inPip) View.GONE else v })
+        if (!tv && packageManager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)) {
+            gestures = PlayerGestures(this, view, findViewById(R.id.hud),
+                enabled = { !inPip && current()?.interlude != true && findViewById<View>(R.id.message).visibility != View.VISIBLE },
+                skip = { ms -> view.player?.let { p -> p.seekTo((p.currentPosition + ms).coerceAtLeast(0)) } },
+                toggle = { if (exo.isPlaying) exo.pause() else exo.play() }).also { it.attach() }
+        }
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(pipReceiver, IntentFilter(PIP_ACTION), Context.RECEIVER_NOT_EXPORTED)
+        else registerReceiver(pipReceiver, IntentFilter(PIP_ACTION))
 
         exo.addListener(object : Player.Listener {
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) { onEntryChanged() }
@@ -86,6 +119,8 @@ class PlayerActivity : Activity() {
                 if (state == Player.STATE_ENDED) onQueueEnded()
             }
             override fun onPlayerError(error: PlaybackException) { recover(error) }
+            override fun onIsPlayingChanged(isPlaying: Boolean) { updatePip() }
+            override fun onVideoSizeChanged(videoSize: VideoSize) { updatePip() }
         })
         start(intent.getLongExtra("itemId", 0), intent.getDoubleExtra("start", -1.0).takeIf { it >= 0 }, prerolls = true)
         ui.postDelayed(tick, 10_000)
@@ -154,7 +189,7 @@ class PlayerActivity : Activity() {
      * fast-forward skip it; Back leaves as usual. Everything else plays with the normal controls.
      */
     private fun interludeMode(on: Boolean) {
-        view.useController = !on
+        view.useController = !on && !inPip
         view.controllerAutoShow = !on
         if (on) view.hideController()
         view.setShowBuffering(if (on) PlayerView.SHOW_BUFFERING_NEVER else PlayerView.SHOW_BUFFERING_ALWAYS)
@@ -163,6 +198,7 @@ class PlayerActivity : Activity() {
 
     private fun onEntryChanged() {
         val e = current() ?: return
+        updatePip()
         interludeMode(e.interlude)
         exo.volume = e.gain
         val title = findViewById<TextView>(R.id.title)
@@ -325,6 +361,64 @@ class PlayerActivity : Activity() {
         }
     }
 
+    // ---------- Picture-in-picture (phones and tablets, Android 8 and up) ----------
+
+    private fun pipAllowed() = Build.VERSION.SDK_INT >= 26 && !tv && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+    /** Leaving the app while a film plays (Home, or switching apps) shrinks it to a small window that keeps playing. */
+    private fun pipWanted() = pipAllowed() && ::exo.isInitialized && exo.isPlaying && current()?.main == true && !finished
+
+    private fun pipParams(): PictureInPictureParams? {
+        if (Build.VERSION.SDK_INT < 26) return null
+        val vs = exo.videoSize
+        val ratio = if (vs.width > 0 && vs.height > 0) Rational((vs.width * vs.pixelWidthHeightRatio).toInt().coerceAtLeast(1), vs.height) else Rational(16, 9)
+        val clamped = when { ratio.toFloat() > 2.39f -> Rational(239, 100); ratio.toFloat() < 0.42f -> Rational(100, 239); else -> ratio }
+        val playing = exo.isPlaying
+        fun action(cmd: String, icon: Int, label: String, code: Int) = RemoteAction(Icon.createWithResource(this, icon), label, label,
+            PendingIntent.getBroadcast(this, code, Intent(PIP_ACTION).setPackage(packageName).putExtra("cmd", cmd), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+        val b = PictureInPictureParams.Builder().setAspectRatio(clamped).setActions(listOf(
+            action("back", android.R.drawable.ic_media_rew, "Back 10 seconds", 1),
+            if (playing) action("toggle", android.R.drawable.ic_media_pause, "Pause", 2) else action("toggle", android.R.drawable.ic_media_play, "Play", 2),
+            action("forward", android.R.drawable.ic_media_ff, "Forward 10 seconds", 3)))
+        // Android 12+: swiping Home shrinks the film smoothly, without waiting for the app to ask.
+        if (Build.VERSION.SDK_INT >= 31) b.setAutoEnterEnabled(pipWanted()).setSeamlessResizeEnabled(true)
+        return b.build()
+    }
+
+    private fun updatePip() {
+        if (Build.VERSION.SDK_INT < 26 || !pipAllowed() || !::exo.isInitialized) return
+        try { pipParams()?.let { setPictureInPictureParams(it) } } catch (_: Exception) { }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT in 26..30 && pipWanted()) try { pipParams()?.let { enterPictureInPictureMode(it) } } catch (_: Exception) { }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        inPip = isInPictureInPictureMode
+        val interlude = current()?.interlude == true
+        view.useController = !inPip && !interlude
+        if (inPip) {
+            view.hideController()
+            gestures?.hide()
+            findViewById<View>(R.id.title).visibility = View.GONE
+            findViewById<View>(R.id.badge).visibility = View.GONE
+        } else onEntryChanged()
+    }
+
+    /** The small window's buttons. */
+    private val pipReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val p = view.player ?: return
+            when (intent.getStringExtra("cmd")) {
+                "toggle" -> if (exo.isPlaying) exo.pause() else exo.play()
+                "back" -> p.seekTo((p.currentPosition - 10_000).coerceAtLeast(0))
+                "forward" -> p.seekTo(p.currentPosition + 10_000)
+            }
+        }
+    }
+
     private fun stopSessions() {
         for (sid in entries.mapNotNull { it.sid }) io.execute { try { Server.call(server, token, "DELETE", "/api/play/session/$sid") } catch (_: Exception) { } }
     }
@@ -357,6 +451,8 @@ class PlayerActivity : Activity() {
 
     override fun onStop() {
         super.onStop()
+        // The small window was closed: stop, as if Back had been pressed.
+        if (inPip) { finish(); return }
         if (!isFinishing) { report(); exo.pause() }
     }
 
@@ -372,6 +468,8 @@ class PlayerActivity : Activity() {
     }
 
     override fun onDestroy() {
+        try { unregisterReceiver(pipReceiver) } catch (_: Exception) { }
+        if (open?.get() === this) open = null
         ui.removeCallbacksAndMessages(null)
         if (::exo.isInitialized) exo.release()
         io.shutdown()
@@ -379,3 +477,7 @@ class PlayerActivity : Activity() {
         super.onDestroy()
     }
 }
+
+private const val PIP_ACTION = "net.hallflix.app.PIP"
+/** The player on screen (or in the small window), so starting another film can close it. */
+private var open: WeakReference<PlayerActivity>? = null

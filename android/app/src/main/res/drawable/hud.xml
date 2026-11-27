@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Behind the player's gesture label (brightness, volume, skip). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#B30A0814" />
+    <corners android:radius="24dp" />
+</shape>

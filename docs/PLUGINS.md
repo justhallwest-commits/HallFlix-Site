@@ -193,7 +193,7 @@ Files come back in whatever encoding they were made in (UTF-8, UTF-16, Windows-1
 
 `HallFlix.music` has `play(tracks, index, { source })`, `playNext(tracks)`, `addToQueue(tracks)`,
 `startRadio('track:ID' | 'artist:ID' | 'album:ID' | 'genre:Name' | 'liked' | 'top' | 'all')`, `toggle()`, `next()`,
-`prev()`, and `track`, `queue` and `playing` to read what is happening.
+`prev()`, `resume()`, `pause()`, `seek(seconds)`, `stop()`, and `track`, `queue` and `playing` to read what is happening.
 
 ## Safety
 

@@ -1,6 +1,8 @@
 package net.hallflix.app
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.media.MediaCodecInfo
 import android.net.Uri
 import android.media.MediaCodecList
@@ -111,5 +113,16 @@ object Server {
             .put("hlsHevc", has("video/hevc"))
             .put("audioSwitch", true)
             .put("maxHeight", 0)
+            .apply { if (onMobileData(ctx)) put("network", "cellular") }
     }
+
+    /** On mobile data (not Wi-Fi or Ethernet): the server then holds films to the Studio's "Quality on mobile data". */
+    @Suppress("DEPRECATION")
+    fun onMobileData(ctx: Context): Boolean = try {
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        if (android.os.Build.VERSION.SDK_INT >= 23) {
+            val nc = cm.getNetworkCapabilities(cm.activeNetwork)
+            nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) && !nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) && !nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        } else cm.activeNetworkInfo?.type == ConnectivityManager.TYPE_MOBILE
+    } catch (e: Exception) { false }
 }

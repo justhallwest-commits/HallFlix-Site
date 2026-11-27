@@ -83,6 +83,8 @@ class MainActivity : Activity() {
         web.isFocusableInTouchMode = true
         web.setBackgroundColor(0xFF0A0814.toInt())
         web.addJavascriptInterface(Bridge(), "HallFlixNative")
+        // The music notification's buttons run in the web app's music player.
+        MusicService.commands = { js -> runOnUiThread { if (!isDestroyed) web.evaluateJavascript("window.HallFlix && HallFlix.music && HallFlix.music.$js", null) } }
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 // Anything on the HallFlix server stays in the app, even after an http → https redirect.
@@ -169,6 +171,8 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         ui.removeCallbacks(slow)
+        // The music lives in this page, so it ends with it.
+        if (isFinishing) { MusicService.stopAll(); MusicService.commands = null }
         super.onDestroy()
     }
 
@@ -207,7 +211,8 @@ class MainActivity : Activity() {
     }
     private fun confirmExit() {
         val now = SystemClock.uptimeMillis()
-        if (now - backAt < 2500) { finish(); return }
+        // With music playing, HallFlix goes to the background (the music carries on) instead of closing.
+        if (now - backAt < 2500) { if (MusicService.isPlaying) moveTaskToBack(true) else finish(); return }
         backAt = now
         Toast.makeText(this, "Press Back again to close HallFlix", Toast.LENGTH_SHORT).show()
     }
@@ -267,6 +272,12 @@ class MainActivity : Activity() {
                     web.evaluateJavascript("window.HallFlix && HallFlix.toast('Voice search is not available on this device')", null)
                 }
             }
+        }
+
+        /** The music player's state, for the notification and lock-screen controls (see MusicService). */
+        @JavascriptInterface
+        fun music(json: String) {
+            try { MusicService.update(this@MainActivity, JSONObject(json)) } catch (_: Exception) { }
         }
 
         @JavascriptInterface

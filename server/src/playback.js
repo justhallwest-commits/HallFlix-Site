@@ -14,6 +14,18 @@ import * as subtitles from './subtitles.js';
 
 const DEFAULT_CAPS = { containers: ['mp4'], video: ['h264'], video10: [], audio: ['aac', 'mp3'], hlsHevc: false, audioSwitch: false, maxHeight: 0 };
 const HLS_AUDIO_COPY = ['aac', 'mp3', 'ac3', 'eac3'];
+export const MOBILE_QUALITIES = [0, 1080, 720, 480, 360];
+
+/**
+ * On mobile data (the app or browser says caps.network = 'cellular'), films are held to the "Quality on mobile data"
+ * set in Studio → Settings (720p unless changed; 0 = no limit). A quality picked in the player still wins.
+ */
+export async function forNetwork(caps) {
+  if (!caps || caps.network !== 'cellular') return caps;
+  const q = +(await getSetting('mobileQuality', 720));
+  if (!(q > 0)) return caps;
+  return { ...caps, maxHeight: caps.maxHeight > 0 ? Math.min(caps.maxHeight, q) : q };
+}
 
 const IDENT_FILE = /^\/uploads\/[\w.-]+\.(mp4|webm)$/;
 /**
@@ -146,7 +158,7 @@ export function routes(r) {
       const entry = { kind: 'ident', itemId: 0, title: '', duration: 0, container: 'mp4', mode: 'direct', url: identUrl, audio: [], subs: [], ...(gain != null ? { gain } : {}) };
       if (ident.when === 'last') queue.push(entry); else queue.unshift(entry);
     }
-    const main = await entryFor(item, body.caps, { audio: body.audio, quality: body.quality }, 'main');
+    const main = await entryFor(item, await forNetwork(body.caps), { audio: body.audio, quality: body.quality }, 'main');
     main.resumeAt = resumeAt;
     main.marks = item.marks || {};
     main.showId = item.show_id || null;
@@ -172,7 +184,7 @@ export function routes(r) {
     const body = await readJson(req);
     const item = await q1('select id, path, container, streams from items where id=$1', [body.itemId]);
     if (!item?.path) throw new HttpError(404, 'Nothing to play');
-    const d = decide(item, body.caps, { audio: body.audio, quality: body.quality });
+    const d = decide(item, await forNetwork(body.caps), { audio: body.audio, quality: body.quality });
     if (d.mode === 'direct') return { direct: true, url: `/api/file/${item.id}` };
     if (body.replace) transcoder(`/sessions/${encodeURIComponent(body.replace)}`, { method: 'DELETE' }).catch(() => {});
     const res = await transcoder('/sessions', {

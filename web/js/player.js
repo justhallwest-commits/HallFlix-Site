@@ -5,8 +5,10 @@ import { identSound } from './feel.js';
 import { pauseEffects } from './effects.js';
 
 let capsCache;
+// On mobile data the server holds films to the Studio's "Quality on mobile data" (phone browsers that can tell).
+const withNetwork = (c) => (navigator.connection?.type === 'cellular' ? { ...c, network: 'cellular' } : c);
 export function caps() {
-  if (capsCache) return capsCache;
+  if (capsCache) return withNetwork(capsCache);
   const v = document.createElement('video');
   const can = (t) => { try { return !!v.canPlayType(t).replace(/no/, ''); } catch { return false; } };
   const mse = (t) => { try { const M = window.ManagedMediaSource || window.MediaSource; return !!M && M.isTypeSupported(t); } catch { return false; } };
@@ -19,7 +21,7 @@ export function caps() {
       ...(can('audio/mp4; codecs="ac-3"') ? ['ac3'] : []), ...(can('audio/mp4; codecs="ec-3"') ? ['eac3'] : [])],
     hlsHevc: hevc, audioSwitch: false, maxHeight: 0,
   };
-  return capsCache;
+  return withNetwork(capsCache);
 }
 
 let P = null;

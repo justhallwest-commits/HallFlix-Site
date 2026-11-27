@@ -156,6 +156,26 @@ test('direct play: the original file, with byte ranges', async () => {
   assert.equal((await fetch(hf.base + queue[0].url)).status, 401, 'files need a signed-in profile');
 });
 
+test('mobile data: films are held to the Studio quality on mobile data, Wi-Fi is not', async () => {
+  const id = items['Night Drive'].id; // 640×360
+  assert.equal((await hf.api('GET', '/api/studio/settings')).mobileQuality, '720');
+  await hf.api('PUT', '/api/studio/settings', { mobileQuality: 240 }); // not one of the choices: ignored
+  assert.equal((await hf.api('GET', '/api/studio/settings')).mobileQuality, '720');
+  const mode = async (caps, extra = {}) => (await hf.api('POST', '/api/play', { itemId: id, caps, ...extra })).queue.at(-1);
+  assert.equal((await mode({ ...browser, network: 'cellular' })).mode, 'direct'); // 360p is under 720p
+  await hf.api('PUT', '/api/studio/settings', { mobileQuality: 360 });
+  assert.equal((await mode({ ...browser, network: 'cellular' })).mode, 'direct'); // exactly at the limit
+  await hf.api('PUT', '/api/studio/settings', { mobileQuality: 0 });
+  assert.equal((await mode({ ...browser, network: 'cellular' })).mode, 'direct');
+  // A smaller limit than the film converts it down on mobile data only.
+  await hf.api('PUT', '/api/studio/settings', { mobileQuality: 360 });
+  const d = await hf.api('POST', '/api/play/session', { itemId: id, start: 0, caps: { ...browser, network: 'cellular', maxHeight: 240 } });
+  assert.ok(!d.direct, 'a lower limit from the device itself still applies');
+  assert.equal((await hf.api('POST', '/api/play/session', { itemId: id, start: 0, caps: browser })).direct, true, 'Wi-Fi is not limited');
+  if (d.sid) await hf.api('DELETE', `/api/play/session/${d.sid}`).catch(() => {});
+  await hf.api('PUT', '/api/studio/settings', { mobileQuality: 720 });
+});
+
 test('remux: video copied untouched, audio converted, seeking lands on a keyframe', async () => {
   const id = items['The Long Signal'].id;
   const { queue } = await hf.api('POST', '/api/play', { itemId: id, caps: browser });
