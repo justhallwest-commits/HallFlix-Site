@@ -1,6 +1,6 @@
 // Pages for books, comics and music: title pages for a book, a comic series, an album and an artist, and the
 // music library (albums, artists, songs).
-import { canDownload, DL_ICON, download } from './downloads.js';
+import { canDownload, DL_ICON, download, markSaved, onDownloadClick } from './downloads.js';
 import * as backdrop from './backdrop.js';
 import { $, $$, api, html, raw, icons, state, fmtRuntime, fmtTime, toast, libTitle } from './core.js';
 import { cardHtml, syncArrows } from './views.js';
@@ -72,7 +72,8 @@ export function sheet(o, d, id) {
       <div class="m-info"><p class="m-kind">${d.format === 'pdf' ? 'PDF' : 'Book'}</p><h1>${d.title}</h1>${d.author ? html`<p class="m-by">by ${d.author}</p>` : ''}
         <div class="meta">${d.year ? html`<span>${d.year}</span>` : ''}${d.pages ? html`<span>${d.format === 'pdf' ? plural(d.pages, 'page') : plural(d.pages, 'chapter')}</span>` : ''}${d.genres.slice(0, 3).map((g) => html`<span>${g}</span>`)}</div>
         <div class="actions"><a class="btn primary" href="#/read/${d.id}">${icons.book} ${reading ? `Continue · ${pct(p)}%` : p?.watched ? 'Read again' : 'Read'}</a>${listBtn}
-          <button class="btn round" data-seen aria-label="Mark as read" title="Mark as read or unread">${icons.eye}</button></div></div></div>
+          <button class="btn round" data-seen aria-label="Mark as read" title="Mark as read or unread">${icons.eye}</button>
+          ${canDownload() ? html`<button class="btn dl" data-dl="${d.id}">${raw(DL_ICON)}<span>Download</span></button>` : ''}</div></div></div>
       <div class="body">${d.overview ? html`<p class="overview">${d.overview}</p>` : ''}${facts([['Author', d.author], ['Published', d.year], ['Publisher', d.publisher], ['Format', d.format?.toUpperCase()]])}
         ${d.more?.length ? html`<h3>More by ${d.author}</h3><div class="similar">${d.more.map((x) => cardHtml(x))}</div>` : ''}</div>`;
   } else if (d.kind === 'series') {
@@ -112,6 +113,9 @@ export function sheet(o, d, id) {
     const rd = e.target.closest('[data-radio]');
     if (rd) { music.startRadio(rd.dataset.radio, { keep: false }); return; }
     if (e.target.closest('[data-dlalbum]') && d.tracks) { download(d.tracks.map((x) => x.id), { title: d.title }); return; }
+    const dl = e.target.closest('[data-dl]');
+    if (dl) { e.preventDefault(); onDownloadClick(dl, { title: d.title }); return; }
+    if (e.target.closest('[data-dlseries]') && d.issues) { download(d.issues.map((x) => x.id), { title: d.title }); return; }
     const tr = e.target.closest('[data-track]');
     if (tr) { music.play(d.tracks, +tr.dataset.track, { source: d.title }); return; }
     if (e.target.closest('[data-playall]')) { music.play(d.tracks, 0, { shuffle: false, source: d.title }); return; }
@@ -132,6 +136,7 @@ export function sheet(o, d, id) {
       const fresh = await api('GET', `/api/items/${id}`); sheet(o, fresh, id);
     }
   };
+  markSaved(o);
   o.scrollTop = 0;
   ($('.issues .focus a, .cx-ilist .focus a', o) || $('.issues .focus', o) || $('.btn.primary', o))?.focus({ preventScroll: true });
 }

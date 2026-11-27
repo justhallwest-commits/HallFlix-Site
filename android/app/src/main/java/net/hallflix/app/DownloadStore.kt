@@ -72,10 +72,10 @@ object DownloadStore {
         io.execute { prepare(app, server, token, itemId) }
     }
 
-    /** Carry on with downloads that were still being got ready when the app closed. */
+    /** Carry on with downloads that were still being got ready (or a comic still being saved page by page) when the app closed. */
     fun resume(ctx: Context, server: String, token: String?) {
         val app = ctx.applicationContext
-        val waiting = synchronized(lock) { entries(app).filter { it.optString("state") == "preparing" }.map { it.optLong("id") } }
+        val waiting = synchronized(lock) { entries(app).filter { it.optString("state") == "preparing" || (it.optBoolean("bundle") && it.optString("state") in setOf("downloading", "paused")) }.map { it.optLong("id") } }
         for (id in waiting) io.execute { prepare(app, server, token, id) }
     }
 
@@ -102,6 +102,16 @@ object DownloadStore {
                 }
             }
             update(ctx, id) { it.put("subs", subs) }
+            // Books and comics: what the reader needs (pages, or an EPUB's chapters and contents).
+            val kind = meta.optString("kind")
+            if (kind == "book" || kind == "comic") {
+                val read = Server.call(server, token, "GET", "/api/read/$id")
+                update(ctx, id) { it.put("read", JSONObject().put("mode", read.optString("mode")).put("pages", read.optInt("pages")).put("rtl", read.optBoolean("rtl"))
+                    .put("spine", read.optJSONArray("spine") ?: JSONArray()).put("toc", read.optJSONArray("toc") ?: JSONArray())
+                    .put("series", read.optJSONObject("series")).put("number", read.opt("number"))) }
+                // Comics and PDFs are saved page by page, as pictures sized for a phone (any comic format works this way).
+                if (read.optString("mode") == "pages") { savePages(ctx, server, token, id, read.optInt("pages")); return }
+            }
             // The file: a smaller copy is made by the server first; ask every few seconds until it is ready.
             val quality = e0.optString("quality", "original")
             var p: JSONObject
@@ -129,6 +139,31 @@ object DownloadStore {
         }
     }
 
+    /** A comic or PDF, page by page into the app's folder; carries on from where it stopped. Honours Wi-Fi only. */
+    private fun savePages(ctx: Context, server: String, token: String?, id: Long, pages: Int) {
+        if (pages <= 0) throw Exception("This has no pages to save")
+        val dir = dir(ctx)
+        update(ctx, id) { it.put("bundle", true).put("state", "downloading").put("pages", pages).put("file", "$id-p1.jpg").remove("progress") }
+        var bytes = 0L
+        for (n in 1..pages) {
+            val f = File(dir, "$id-p$n.jpg")
+            if (find(ctx, id) == null) return // removed meanwhile
+            while (wifiOnly(ctx) && Server.onMobileData(ctx)) {
+                update(ctx, id) { it.put("state", "paused").put("why", "Waiting for Wi-Fi") }
+                Thread.sleep(15_000)
+                if (find(ctx, id) == null) return
+            }
+            if (!f.exists() || f.length() == 0L) {
+                val tmp = File(dir, "$id-p$n.part")
+                fetch(absolute(server, "/api/read/$id/page/$n?w=1600"), token, tmp) ?: throw Exception("Page $n could not be saved")
+                tmp.renameTo(f)
+            }
+            bytes += f.length()
+            if (n == pages || n % 3 == 0) update(ctx, id) { it.put("state", "downloading").remove("why"); it.put("bytes", bytes).put("size", bytes * pages / n).put("progress", n.toDouble() / pages) }
+        }
+        update(ctx, id) { it.put("state", "done").put("size", bytes).put("bytes", bytes).remove("progress") }
+    }
+
     private fun absolute(server: String, url: String) = if (url.startsWith("http")) url else server + url
 
     private fun fetch(url: String, token: String?, to: File): File? = try {
@@ -147,6 +182,7 @@ object DownloadStore {
             for (e in entries(ctx)) {
                 val s = e.optString("state")
                 if (s == "preparing") { busy = true; continue }
+                if (e.optBoolean("bundle")) { if (s != "done" && s != "failed") busy = true; continue } // saved page by page, not by the download manager
                 if (s != "downloading" && s != "paused") continue
                 busy = true
                 val c = dm.query(DownloadManager.Query().setFilterById(e.optLong("dm"))) ?: continue
@@ -230,6 +266,9 @@ object DownloadStore {
                 o.optString("file").takeIf { it.isNotEmpty() }?.let { o.put("url", "$ASSET_FILES$it").put("path", Uri.fromFile(File(dir, it)).toString()) }
                 o.optString("poster").takeIf { it.isNotEmpty() }?.let { o.put("posterUrl", "$ASSET_FILES$it").put("posterPath", Uri.fromFile(File(dir, it)).toString()) }
                 o.optJSONArray("subs")?.let { s -> for (i in 0 until s.length()) s.getJSONObject(i).let { x -> x.put("url", ASSET_FILES + x.optString("file")) } }
+                // Books and comics, for the reader on the Downloads page.
+                if (o.optBoolean("bundle")) o.put("pagesBase", "$ASSET_FILES${o.optLong("id")}-p")
+                if (o.optString("file").endsWith(".epub")) o.put("epubBase", "https://${LocalFiles.HOST}/epub/${o.optLong("id")}/")
                 a.put(o)
             }
         }
