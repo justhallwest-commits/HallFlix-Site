@@ -176,6 +176,22 @@ test('mobile data: films are held to the Studio quality on mobile data, Wi-Fi is
   await hf.api('PUT', '/api/studio/settings', { mobileQuality: 720 });
 });
 
+test('home address: the Android app gets it at boot, the Studio tidies and checks it, and /api/hello answers anyone', async () => {
+  const hello = await fetch(`${hf.base}/api/hello`);
+  assert.equal(hello.status, 200);
+  assert.equal((await hello.json()).hallflix, true);
+  assert.equal((await hf.api('GET', '/api/studio/settings')).directUrl, 'http://100.117.23.98:8780', 'the built-in default');
+  assert.equal((await hf.api('GET', '/api/boot')).directUrl, 'http://100.117.23.98:8780');
+  assert.equal((await (await fetch(`${hf.base}/api/boot`)).json()).directUrl, undefined, 'only signed-in profiles are told');
+  assert.equal((await hf.api('PUT', '/api/studio/settings', { directUrl: '100.64.0.7:8780/' })).ok, true);
+  assert.equal((await hf.api('GET', '/api/boot')).directUrl, 'http://100.64.0.7:8780');
+  assert.equal((await hf.api('PUT', '/api/studio/settings', { directUrl: 'http://not an address' })).ok, false);
+  assert.equal((await hf.api('GET', '/api/boot')).directUrl, 'http://100.64.0.7:8780', 'a bad address is not saved');
+  await hf.api('PUT', '/api/studio/settings', { directUrl: '' }); // off
+  assert.equal((await hf.api('GET', '/api/boot')).directUrl, '');
+  await hf.api('PUT', '/api/studio/settings', { directUrl: 'http://100.117.23.98:8780' });
+});
+
 test('downloads: sizes to choose from, a smaller copy made by the transcoder, and the per-profile switch', async () => {
   const id = items['Night Drive'].id; // 640×360, so only the original is offered (no copy would be smaller)
   const info = await hf.api('GET', `/api/downloads/${id}`);

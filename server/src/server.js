@@ -42,6 +42,9 @@ const r = new Router();
 // The theme contract as a JSON Schema, for editors and plugin authors (the same file as docs/theme.schema.json).
 r.get('/api/theme.schema.json', async () => themeFileSchema(), open);
 
+// A quick "is this HallFlix?" check. The Android app calls it on the home address before choosing it.
+r.get('/api/hello', async () => ({ hallflix: true, version: cfg.version }), open);
+
 // Everything an app needs to draw its first screen, in one request.
 r.get('/api/boot', async (ctx) => {
   const profile = await auth.authenticate(ctx);
@@ -51,6 +54,7 @@ r.get('/api/boot', async (ctx) => {
     version: cfg.version, setup, look: lk, plugins: setup ? [] : await plugins.clientPlugins(),
     profile: profile ? auth.publicProfile(profile) : null,
   };
+  if (profile) out.directUrl = await getSetting('directUrl', cfg.directUrl);
   if (profile) out.media = { ratings: await ratingsMod.clientSettings(), subtitles: await subtitlesMod.clientSettings() };
   if (profile) {
     const acc = await access.forProfile(profile);

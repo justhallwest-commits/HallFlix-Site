@@ -372,3 +372,13 @@ test('"Fast on TVs": every setting is allowed by the theme contract, and it reac
   assert.equal(tv.tiles3d.depth, look.DEFAULT_THEME.tiles3d.depth, 'settings it does not mention are untouched');
   assert.deepEqual([r.theme.glass, r.theme.glow, r.theme.tiles3d.style], [true, 0.8, 'layered'], 'computers and phones keep the everyday look');
 });
+
+test('home address is tidied to an origin', async () => {
+  const { directOrigin } = await import('../src/studio.js');
+  assert.equal(directOrigin('100.117.23.98:8780'), 'http://100.117.23.98:8780');
+  assert.equal(directOrigin(' http://100.117.23.98:8780/ '), 'http://100.117.23.98:8780');
+  assert.equal(directOrigin('https://nas.example.ts.net:8780/home'), 'https://nas.example.ts.net:8780');
+  assert.equal(directOrigin(''), '');
+  assert.equal(directOrigin('http://a b'), null);
+  assert.equal(directOrigin('http://me:pw@host'), null);
+});

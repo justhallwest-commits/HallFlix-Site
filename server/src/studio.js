@@ -16,6 +16,21 @@ import { checkTheme } from './themespec.js';
 import { MOBILE_QUALITIES } from './playback.js';
 import { IMAGE_EXT, isVideo } from './names.js';
 
+/**
+ * The Android app's home address, tidied to just "http(s)://host:port". "" turns it off; null means it isn't an address.
+ * "100.117.23.98:8780" → "http://100.117.23.98:8780".
+ */
+export function directOrigin(raw) {
+  let s = String(raw ?? '').trim().replace(/\/+$/, '');
+  if (!s) return '';
+  if (!/^https?:\/\//i.test(s)) s = 'http://' + s;
+  try {
+    const u = new URL(s);
+    if (!u.hostname || u.username || u.password) return null;
+    return u.origin;
+  } catch { return null; }
+}
+
 const AUDIO_EXT = ['mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac'];
 import { img } from './catalog.js';
 
@@ -113,7 +128,7 @@ export function routes(r) {
   // ----- settings
   r.get('/api/studio/settings', async () => {
     const key = await tmdb.tmdbKey();
-    return { tmdbKey: key ? `${key.slice(0, 4)}…${key.slice(-4)}` : '', hasTmdb: !!key, prerolls: await getSetting('prerolls', {}), showProfilesOnLogin: await getSetting('showProfilesOnLogin', true), mobileQuality: String(await getSetting('mobileQuality', 720)) };
+    return { tmdbKey: key ? `${key.slice(0, 4)}…${key.slice(-4)}` : '', hasTmdb: !!key, prerolls: await getSetting('prerolls', {}), showProfilesOnLogin: await getSetting('showProfilesOnLogin', true), mobileQuality: String(await getSetting('mobileQuality', 720)), directUrl: await getSetting('directUrl', cfg.directUrl) };
   }, admin);
   r.put('/api/studio/settings', async ({ req }) => {
     const b = await readJson(req);
@@ -127,6 +142,11 @@ export function routes(r) {
       }
     }
     if (b.mobileQuality != null && MOBILE_QUALITIES.includes(+b.mobileQuality)) await setSetting('mobileQuality', +b.mobileQuality);
+    if (typeof b.directUrl === 'string') {
+      const d = directOrigin(b.directUrl);
+      if (d === null) return { ok: false, error: 'The home address should look like http://100.117.23.98:8780' };
+      await setSetting('directUrl', d);
+    }
     if (b.prerolls) await setSetting('prerolls', { ...(await getSetting('prerolls', {})), enabled: b.prerolls.enabled !== false, max: Math.max(0, Math.min(6, +b.prerolls.max || 0)), onResume: !!b.prerolls.onResume });
     if (b.showProfilesOnLogin !== undefined) await setSetting('showProfilesOnLogin', !!b.showProfilesOnLogin);
     return { ok: true };

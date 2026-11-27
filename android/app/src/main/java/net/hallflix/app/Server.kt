@@ -23,6 +23,39 @@ object Server {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("server", url).apply()
     }
 
+    /** The home address (through Tailscale), tried before the saved one. The Studio can change it; "" means off. */
+    const val DEFAULT_DIRECT = "http://100.117.23.98:8780"
+
+    fun direct(ctx: Context): String = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("direct", DEFAULT_DIRECT) ?: ""
+
+    fun saveDirect(ctx: Context, url: String) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("direct", url).apply()
+    }
+
+    /** Is HallFlix answering at this address right now? Quick: gives up after a second and a half. Blocks. */
+    fun hello(server: String): Boolean = try {
+        val c = URL("$server/api/hello").openConnection() as HttpURLConnection
+        c.connectTimeout = 1_500
+        c.readTimeout = 1_500
+        c.setRequestProperty("Accept", "application/json")
+        val ok = c.responseCode == 200 && JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optBoolean("hallflix")
+        c.disconnect()
+        ok
+    } catch (e: Exception) { false }
+
+    /**
+     * Keep the sign-in the same on both addresses, so switching between home and away never asks again.
+     * onlyIfMissing: copy a sign-in across but never take one away (used before the first page loads).
+     */
+    fun shareSignIn(from: String, to: String, onlyIfMissing: Boolean = false) {
+        if (from.isEmpty() || to.isEmpty() || from == to) return
+        val have = token(from)
+        val cm = CookieManager.getInstance()
+        if (have != null) { if (token(to) != have) cm.setCookie(to, "hf_token=$have; Path=/; Max-Age=34560000; HttpOnly") }
+        else if (!onlyIfMissing && token(to) != null) cm.setCookie(to, "hf_token=; Path=/; Max-Age=0")
+        cm.flush()
+    }
+
     /**
      * "192.168.1.83:8780" → "http://192.168.1.83:8780"; "new.hallflix.net" → "https://new.hallflix.net".
      * A bare name gets https; an IP address, a port or a local name gets http. Trailing slashes removed.
