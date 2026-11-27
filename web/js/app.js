@@ -125,13 +125,25 @@ function welcome() {
     };
     const key = (e) => { e.preventDefault(); e.stopPropagation(); end(); };
     v.addEventListener('playing', () => box.classList.add('on'), { once: true });
-    v.src = S.video;
+    // TVs and the Android app play the server's 1080p H.264 copy (Fire TV sticks can't play every video); if that
+    // fails, or there is no copy yet, the original.
+    const copy = (isTV() || window.HallFlixNative) && state.boot?.tvIdents?.[S.video];
+    const tries = copy ? [copy, S.video] : [S.video];
+    let attempt = 0;
+    const next = () => {
+      if (done) return;
+      if (!tries.length) { end(); return; }
+      const mine = ++attempt;
+      v.src = tries.shift();
+      // A browser that blocks sound plays it silently; one that won't play this file at all moves on to the next.
+      v.play().catch(() => { if (mine !== attempt) return; v.muted = true; v.play().catch(() => { if (mine === attempt) next(); }); });
+    };
     v.muted = audioMode !== 'own';
     v.addEventListener('ended', end);
-    v.addEventListener('error', end);
+    v.addEventListener('error', () => next());
     box.addEventListener('click', end);
     addEventListener('keydown', key, true);
-    v.play().catch(() => { v.muted = true; v.play().catch(end); }); // a browser that blocks sound plays it silently
+    next();
     setTimeout(end, 30000); // never longer than half a minute
     box.querySelector('.skip').focus();
   });

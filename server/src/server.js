@@ -9,6 +9,7 @@ import * as auth from './auth.js';
 import * as catalog from './catalog.js';
 import * as playback from './playback.js';
 import * as downloads from './downloads.js';
+import * as ident from './ident.js';
 import * as studio from './studio.js';
 import * as manage from './manage.js';
 import * as extras from './extras.js';
@@ -55,6 +56,7 @@ r.get('/api/boot', async (ctx) => {
     profile: profile ? auth.publicProfile(profile) : null,
   };
   if (profile) out.directUrl = await getSetting('directUrl', cfg.directUrl);
+  out.tvIdents = ident.tvCopies(lk); // TV-safe copies of the welcome ident (see ident.js)
   if (profile) out.media = { ratings: await ratingsMod.clientSettings(), subtitles: await subtitlesMod.clientSettings() };
   if (profile) {
     const acc = await access.forProfile(profile);

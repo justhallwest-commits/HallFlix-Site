@@ -382,3 +382,11 @@ test('home address is tidied to an origin', async () => {
   assert.equal(directOrigin('http://a b'), null);
   assert.equal(directOrigin('http://me:pw@host'), null);
 });
+
+test('welcome idents are found anywhere in a look', async () => {
+  const { identsIn, tvArgs } = await import('../src/ident.js');
+  assert.deepEqual(identsIn({ splash: { video: '/uploads/a.mp4' }, devices: { tv: { splash: { video: '/uploads/b.webm' } } }, seasons: [{ theme: { splash: { video: '/uploads/a.mp4' } } }] }).sort(), ['/uploads/a.mp4', '/uploads/b.webm']);
+  assert.deepEqual(identsIn({ splash: { video: '' } }), []);
+  const a = tvArgs('in.webm', 'out.mp4');
+  assert.ok(a.includes('libx264') && a.includes('aac') && a.includes('+faststart') && a.at(-1) === 'out.mp4');
+});

@@ -192,6 +192,27 @@ test('home address: the Android app gets it at boot, the Studio tidies and check
   await hf.api('PUT', '/api/studio/settings', { directUrl: 'http://100.117.23.98:8780' });
 });
 
+test('welcome ident: a TV-safe 1080p H.264 copy is made for Fire TVs, and boot says where it is', async () => {
+  const src = path.join(os.tmpdir(), 'hf-ident-4k.webm'); // a 4K VP9 WebM: the kind a Fire TV stick can't play
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=3840x2160:d=1:r=24', '-f', 'lavfi', '-i', 'sine=d=1',
+    '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '1M', '-c:a', 'libopus', '-shortest', src]);
+  const up = await hf.api('POST', '/api/studio/upload?name=welcome.webm', fs.readFileSync(src));
+  const theme = (await hf.api('GET', '/api/studio/look')).theme;
+  await hf.api('PUT', '/api/studio/theme', { theme: { ...theme, splash: { ...(theme.splash || {}), video: up.url, when: 'signin' } } });
+  let copy;
+  for (let i = 0; i < 120 && !copy; i++) { copy = (await hf.api('GET', '/api/boot')).tvIdents?.[up.url]; if (!copy) await new Promise((r) => setTimeout(r, 250)); }
+  assert.equal(copy, up.url.replace(/\.webm$/, '.tv.mp4'));
+  const res = await fetch(hf.base + copy);
+  assert.equal(res.status, 200);
+  const got = path.join(os.tmpdir(), 'hf-ident-tv.mp4');
+  fs.writeFileSync(got, Buffer.from(await res.arrayBuffer()));
+  const v = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_streams', '-of', 'json', got])).streams;
+  const video = v.find((x) => x.codec_type === 'video'), audio = v.find((x) => x.codec_type === 'audio');
+  assert.deepEqual([video.codec_name, video.width, video.height, video.pix_fmt], ['h264', 1920, 1080, 'yuv420p']);
+  assert.equal(audio.codec_name, 'aac');
+  await hf.api('PUT', '/api/studio/theme', { theme });
+});
+
 test('downloads: sizes to choose from, a smaller copy made by the transcoder, and the per-profile switch', async () => {
   const id = items['Night Drive'].id; // 640×360, so only the original is offered (no copy would be smaller)
   const info = await hf.api('GET', `/api/downloads/${id}`);

@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { clearClips } from './clips.js';
+import * as ident from './ident.js';
 import { cfg } from './config.js';
 import { q, q1, getSetting, setSetting } from './db.js';
 import { HttpError, readJson, readBody } from './http.js';
@@ -171,6 +172,7 @@ export function routes(r) {
     // New clip window or length: the old clips no longer fit, so they are made again as the banner asks for them.
     const after = theme.heroClips || {};
     if (['start', 'end', 'length'].some((k) => (before[k] ?? null) !== (after[k] ?? null))) clearClips();
+    ident.tvCopies(theme); // a new welcome ident: start its TV-safe copy now, so it's ready by the next sign-in
     return { ok: true, theme, problems };
   }, admin);
   r.post('/api/studio/look/preview', async ({ req }) => {
