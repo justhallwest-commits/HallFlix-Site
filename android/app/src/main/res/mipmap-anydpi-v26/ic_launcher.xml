@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phones and tablets on Android 8+: the HallFlix crown and wordmark, masked to the launcher's shape.
+     TVs use mipmap-television-* instead (Fire TV squeezes the icon into a square tile). -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
