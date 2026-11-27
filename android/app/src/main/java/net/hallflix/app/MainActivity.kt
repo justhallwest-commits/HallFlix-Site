@@ -38,6 +38,13 @@ import org.json.JSONObject
  * Video is handed to PlayerActivity, which plays it natively with ExoPlayer.
  */
 class MainActivity : Activity() {
+    companion object {
+        /** JavaScript a native TV screen left for the web app to run when it comes back (usually a page to go to). */
+        var pendingJs: String? = null
+        /** True while the native TV screens are showing on top of the web app. */
+        var nativeOpen = false
+    }
+
     private lateinit var web: WebView
     private lateinit var panel: ScrollView
     private lateinit var splash: ImageView
@@ -279,8 +286,16 @@ class MainActivity : Activity() {
         Server.shareSignIn(server, otherAddress()) // a sign-in or sign-out on one address applies to the other
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
     override fun onResume() {
         super.onResume()
+        // Back from the native TV screens (they close when they hand a page to the web app).
+        nativeOpen = false
+        pendingJs?.let { js -> pendingJs = null; web.evaluateJavascript(js, null) }
         if (web.visibility == View.VISIBLE) web.requestFocus() // focus comes back to the page after the player or another app
         if (playerOpen) {
             playerOpen = false
@@ -360,6 +375,38 @@ class MainActivity : Activity() {
                     .putExtra("start", if (o.isNull("start") || !o.has("start")) -1.0 else o.getDouble("start")))
             }
         }
+
+        /**
+         * The web app reached its home page on a TV: show the native TV screens instead (faster on Fire TV sticks).
+         * Returns false when they're switched off, or not a TV, so the web app draws its own home page.
+         */
+        @JavascriptInterface
+        fun nativeHome(json: String): Boolean {
+            if (!isTv() || !nativeTvOn()) return false
+            if (nativeOpen) return true
+            nativeOpen = true
+            val o = try { JSONObject(json) } catch (e: Exception) { JSONObject() }
+            val token = Server.token(server)
+            runOnUiThread {
+                TvSession.server = server
+                TvSession.token = token
+                TvSession.device = o.optString("device")
+                TvSession.deviceName = o.optString("name").ifEmpty { "Fire TV" }
+                // The look and libraries first (quick), then the home screen.
+                Thread {
+                    try { TvLook.apply(Server.call(server, token, "GET", "/api/boot")) } catch (e: Exception) { /* default colours */ }
+                    runOnUiThread { if (!isDestroyed) startActivity(Intent(this@MainActivity, TvHomeActivity::class.java)) }
+                }.start()
+            }
+            return true
+        }
+
+        /** The native TV screens on or off (on by default on TVs). */
+        @JavascriptInterface
+        fun setNativeTv(on: Boolean) { getSharedPreferences("hallflix", MODE_PRIVATE).edit().putBoolean("nativeTv", on).apply() }
+
+        @JavascriptInterface
+        fun nativeTvOn(): Boolean = isTv() && getSharedPreferences("hallflix", MODE_PRIVATE).getBoolean("nativeTv", true)
 
         /** The home address from Studio → Settings → Apps ("" turns it off). Used from the next start. */
         @JavascriptInterface

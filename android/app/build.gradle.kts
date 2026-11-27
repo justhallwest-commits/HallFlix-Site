@@ -52,4 +52,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-ui:$media3")
     implementation("androidx.core:core-ktx:1.13.1")
+    // The native TV screens: sideways rows and the library grid, and artwork loading with a memory and disk cache.
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("com.github.bumptech.glide:glide:4.16.0")
 }

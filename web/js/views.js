@@ -267,6 +267,7 @@ async function onClick(e) {
   const act = t.closest('[data-do]')?.dataset.do;
   if (act === 'signout' || act === 'switch') { await api('POST', '/api/logout'); location.hash = '#/'; location.reload(); }
   if (act === 'server') window.HallFlixNative?.changeServer();
+  if (act === 'nativetv') { window.HallFlixNative?.setNativeTv?.(true); $('.menu')?.remove(); location.hash = '#/'; dispatchEvent(new Event('hallflix-native-closed')); return; }
   if (act === 'downloads') { $('.menu')?.remove(); openDownloads(); return; }
   if (act === 'fx') {
     try { localStorage.setItem('hf_fx', effectsOff() ? 'on' : 'off'); } catch { /* private mode */ }
@@ -288,7 +289,7 @@ function toggleMenu() {
     ${can('editProfile') ? html`<button data-do="profile">Edit profile</button>` : ''}<button data-do="switch">Switch profile</button>${p.admin ? html`<a href="/studio">Open the Studio</a><a href="/studio#profiles">Manage profiles</a>` : ''}
     ${can('me') ? html`<a href="#/me">My HallFlix</a>` : ''}${can('remote') ? html`<a href="#/remote">Remote for another screen</a>` : ''}${can('wrapped') ? html`<a href="#/wrapped">Your year in review</a>` : ''}
     ${themeNow()?.previews !== false && !document.body.classList.contains('tv') ? html`<button data-do="previews">${more.previewsOn() ? 'Turn previews off' : 'Turn previews on'}</button>` : ''}${themeNow()?.effect && themeNow().effect !== 'none' && !document.body.classList.contains('tv') ? html`<button data-do="fx">${effectsOff() ? 'Turn seasonal effects on' : 'Turn seasonal effects off'}</button>` : ''}${feel.soundsAvailable() ? html`<button data-do="sounds">${feel.soundsOn() ? 'Turn sounds off' : 'Turn sounds on'}</button>` : ''}
-    ${canDownload() ? html`<button data-do="downloads">Downloads</button>` : ''}${window.HallFlixNative ? html`<button data-do="server">Change server</button>` : ''}<button data-do="signout">Sign out</button></div>`));
+    ${canDownload() ? html`<button data-do="downloads">Downloads</button>` : ''}${window.HallFlixNative ? html`<button data-do="server">Change server</button>` : ''}${window.HallFlixNative?.setNativeTv && document.body.classList.contains('tv') && !window.HallFlixNative.nativeTvOn?.() ? html`<button data-do="nativetv">Use the fast TV screens</button>` : ''}<button data-do="signout">Sign out</button></div>`));
   $('.menu button').focus();
   for (const a of $$('.menu a')) a.addEventListener('click', () => $('.menu')?.remove());
 }
@@ -473,6 +474,11 @@ async function search(term) {
   setNav(''); applyLook(state.look, null);
   const input = $('.search input');
   if (input && document.activeElement !== input) input.value = term;
+  if (!term.trim()) { // opened from the TV's Search button: ready to type
+    view().innerHTML = String(html`<div class="page"><div class="lib-head"><h1>Search</h1></div><div class="empty"><p>Type a title, a person or a genre, or describe what you want, like “funny movies from the 90s under two hours”.</p></div></div>`);
+    input?.focus();
+    return;
+  }
   const d = await api('GET', `/api/search?q=${encodeURIComponent(term)}`);
   view().innerHTML = String(html`<div class="page"><div class="lib-head"><h1>Results for “${term}”</h1></div>
     ${d.understood?.length ? html`<p class="understood">Showing ${d.understood.map((u) => html`<span class="chip on">${u}</span>`)}</p>` : ''}

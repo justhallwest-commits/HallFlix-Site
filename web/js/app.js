@@ -61,6 +61,11 @@ async function route() {
     return;
   }
   views.closeTitle();
+  // TVs in the Android app: the native home screen (much faster on Fire TV sticks). The web app keeps the rarer pages,
+  // and the native screens send them here (search, My List, music, books, Studio…). Back on Home, they open again.
+  if (!parts[0] && isTV() && !state.preview && window.HallFlixNative?.nativeHome) {
+    try { if (window.HallFlixNative.nativeHome(JSON.stringify({ device: deviceId(), name: deviceName() }))) { baseHash = null; return; } } catch { /* older app: the web home */ }
+  }
   if (hash !== baseHash || !views.hasBase() || views.isStale()) { baseHash = hash; await views.show(parts[0] || 'home', parts[1]); }
 }
 
