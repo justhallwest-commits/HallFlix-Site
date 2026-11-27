@@ -689,6 +689,42 @@ async function removeDialog(itemId, done) {
 }
 
 // ---------- sign-in and first run ----------
+// ── Which server the Android app connects to (sign-in screen) ──
+// Only in the app (a browser is already at an address of its own choosing), and only in apps new enough to switch.
+function serverInfo() {
+  try { return window.HallFlixNative?.serverInfo ? JSON.parse(window.HallFlixNative.serverInfo()) : null; } catch { return null; }
+}
+const SERVER_MODES = { auto: 'Automatic', home: 'Home (Tailscale)', away: 'Internet' };
+function serverLink() {
+  const s = !state.signinPreview && serverInfo();
+  if (!s) return '';
+  const now = s.home ? 'Home (Tailscale)' : s.current.replace(/^https?:\/\//, '');
+  return html`<button class="linkbtn" data-server>Server: ${now}${s.mode === 'auto' ? ' (auto)' : ''}</button>`;
+}
+function serverChooser(box, back) {
+  const s = serverInfo();
+  if (!s) return;
+  const opt = (m, label, sub) => html`<button class="server-opt${s.mode === m ? ' on' : ''}" data-mode="${m}"><b>${label}${s.mode === m ? ' ✓' : ''}</b><small>${sub}</small></button>`;
+  box.innerHTML = String(html`<h1 style="text-align:center">Connect to</h1>
+    <div class="server-opts">
+      ${opt('auto', SERVER_MODES.auto, `Home when it answers, otherwise ${s.away.replace(/^https?:\/\//, '')}`)}
+      ${s.direct ? opt('home', SERVER_MODES.home, `${s.direct.replace(/^https?:\/\//, '')}: fastest, needs the Tailscale app connected`) : ''}
+      ${opt('away', SERVER_MODES.away, `${s.away.replace(/^https?:\/\//, '')}: works anywhere`)}
+      <button class="server-opt" data-other><b>Another address…</b><small>Type in a server address</small></button>
+    </div>
+    <div class="alt"><button class="linkbtn" data-back>Back</button></div>`);
+  for (const b of box.querySelectorAll('[data-mode]')) {
+    b.onclick = () => {
+      if (b.dataset.mode === s.mode) { back(); return; }
+      toast(`Connecting to ${SERVER_MODES[b.dataset.mode]}…`);
+      window.HallFlixNative.useServer(b.dataset.mode);
+    };
+  }
+  box.querySelector('[data-other]').onclick = () => window.HallFlixNative.changeServer();
+  box.querySelector('[data-back]').onclick = back;
+  box.querySelector(`[data-mode="${s.mode}"]`)?.focus();
+}
+
 export function login(boot) {
   applyLook(boot.look, null);
   const tiles = boot.profiles?.length;
@@ -698,7 +734,7 @@ export function login(boot) {
     box().innerHTML = String(html`<form class="form">${p ? html`<h1 style="text-align:center;margin-bottom:6px">Hi, ${p.name}</h1>` : html`<label>Name<input name="name" autocomplete="username" required></label>`}
       <label>Password or PIN<input name="password" type="password" autocomplete="current-password" ${preview ? '' : raw('required')}></label>
       <div class="err"></div><button class="btn primary">Sign in</button></form>
-      <div class="alt">${tiles ? html`<button class="linkbtn" data-back>Choose a different profile</button>` : ''}<button class="linkbtn" data-pair data-default="Sign in with your phone instead">Sign in with your phone instead</button></div>
+      <div class="alt">${tiles ? html`<button class="linkbtn" data-back>Choose a different profile</button>` : ''}<button class="linkbtn" data-pair data-default="Sign in with your phone instead">Sign in with your phone instead</button>${serverLink()}</div>
       <div class="signin-foot" hidden></div>`);
     styleLogin();
     $('[data-pair]').onclick = () => (preview ? toast('This is a preview') : more.pairScreen(box(), tiles ? picker : () => formFor(null)));
@@ -723,15 +759,17 @@ export function login(boot) {
       catch (err) { $('.err', form).textContent = err.message; $('[name=password]', form).select(); }
     };
     $('[data-back]')?.addEventListener('click', picker);
+    $('[data-server]')?.addEventListener('click', () => serverChooser(box(), () => formFor(p)));
   };
   const picker = () => {
     box().innerHTML = String(html`<h1 data-login-title></h1>
       <div class="who">${boot.profiles.map((p) => html`<button data-p="${p.id}"><div class="avatar" style="${avatarStyle(p)}">${p.avatar ? html`<img src="${p.avatar}" alt="">` : p.name[0].toUpperCase()}</div>${p.name}</button>`)}</div>
-      <div class="alt"><button class="linkbtn" data-manual>Sign in with name and password</button><button class="linkbtn" data-pair data-default="Sign in with your phone">Sign in with your phone</button></div>
+      <div class="alt"><button class="linkbtn" data-manual>Sign in with name and password</button><button class="linkbtn" data-pair data-default="Sign in with your phone">Sign in with your phone</button>${serverLink()}</div>
       <div class="signin-foot" hidden></div>`);
     styleLogin();
     $('[data-manual]').onclick = () => formFor(null);
     $('[data-pair]').onclick = () => (preview ? toast('This is a preview') : more.pairScreen(box(), picker));
+    $('[data-server]')?.addEventListener('click', () => serverChooser(box(), picker));
     for (const b of $$('.who button')) b.onclick = () => formFor(boot.profiles.find((p) => p.id === +b.dataset.p));
     if (!preview) $('.who button')?.focus();
   };
