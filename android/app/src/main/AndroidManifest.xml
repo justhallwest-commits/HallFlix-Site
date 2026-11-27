@@ -46,6 +46,11 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize"
             android:theme="@style/HallFlix.Player" />
 
+        <!-- The native TV screens (home, library, title page); the web app opens them on TVs. -->
+        <activity android:name=".TvHomeActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />
+        <activity android:name=".TvLibraryActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />
+        <activity android:name=".TvDetailsActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />
+
         <service
             android:name=".MusicService"
             android:exported="false"
