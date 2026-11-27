@@ -1,5 +1,6 @@
 // Pages for books, comics and music: title pages for a book, a comic series, an album and an artist, and the
 // music library (albums, artists, songs).
+import { canDownload, DL_ICON, download } from './downloads.js';
 import * as backdrop from './backdrop.js';
 import { $, $$, api, html, raw, icons, state, fmtRuntime, fmtTime, toast, libTitle } from './core.js';
 import { cardHtml, syncArrows } from './views.js';
@@ -83,7 +84,8 @@ export function sheet(o, d, id) {
       <div class="m-info"><p class="m-kind">Album</p><h1>${d.title}</h1><p class="m-by"><a href="#/title/${d.artistId}">${d.author}</a></p>
         <div class="meta">${d.year ? html`<span>${d.year}</span>` : ''}<span>${plural(d.tracks.length, 'song')}</span><span>${fmtRuntime(total)}</span>${d.genres.slice(0, 2).map((g) => html`<span>${g}</span>`)}</div>
         <div class="actions"><button class="btn primary" data-playall>${icons.play} Play</button><button class="btn" data-shuffle>${icons.shuffle} Shuffle</button>
-          ${d.artistId ? html`<button class="btn" data-radio="artist:${d.artistId}" title="Songs by ${d.author} and artists like them">${RADIO} Radio</button>` : ''}${listBtn}</div></div></div>
+          ${d.artistId ? html`<button class="btn" data-radio="artist:${d.artistId}" title="Songs by ${d.author} and artists like them">${RADIO} Radio</button>` : ''}${listBtn}
+          ${canDownload() ? html`<button class="btn" data-dlalbum title="Download the album to listen offline">${raw(DL_ICON)} Download</button>` : ''}</div></div></div>
       <div class="body">${trackList(Object.assign(d.tracks, { artist: d.author }), { discs: d.discs })}
         ${d.more?.length ? html`<h3>More by ${d.author}</h3><div class="similar squares">${d.more.map((x) => cardHtml(x))}</div>` : ''}</div>`;
   } else if (d.kind === 'artist') {
@@ -109,6 +111,7 @@ export function sheet(o, d, id) {
     if (tm && d.tracks) { music.trackMenu(tm, d.tracks[+tm.dataset.tmenu], { list: d.tracks }); return; }
     const rd = e.target.closest('[data-radio]');
     if (rd) { music.startRadio(rd.dataset.radio, { keep: false }); return; }
+    if (e.target.closest('[data-dlalbum]') && d.tracks) { download(d.tracks.map((x) => x.id), { title: d.title }); return; }
     const tr = e.target.closest('[data-track]');
     if (tr) { music.play(d.tracks, +tr.dataset.track, { source: d.title }); return; }
     if (e.target.closest('[data-playall]')) { music.play(d.tracks, 0, { shuffle: false, source: d.title }); return; }

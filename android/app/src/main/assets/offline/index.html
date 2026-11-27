@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Downloads · HallFlix</title>
+<link rel="stylesheet" href="offline.css">
+</head>
+<body>
+  <!-- HallFlix Downloads: built into the Android app so it works with no connection. Lists what's saved on this phone
+       and plays it (films and episodes in the app's player, music here). Talks to the app through window.HallFlixNative. -->
+  <header class="top">
+    <div class="brand"><b>HALL</b><b class="v">FLIX</b></div>
+    <h1>Downloads</h1>
+    <button class="btn" id="online" hidden>Back to HallFlix</button>
+  </header>
+  <section class="space" id="space"></section>
+  <main id="list" aria-live="polite"></main>
+  <footer class="player" id="player" hidden>
+    <img id="np-art" alt="">
+    <div class="np-text"><b id="np-title"></b><span id="np-artist"></span>
+      <input type="range" id="np-seek" min="0" max="1" step="0.1" value="0" aria-label="Seek"></div>
+    <div class="np-btns">
+      <button id="np-prev" aria-label="Previous">⏮</button>
+      <button id="np-play" class="big" aria-label="Pause">⏸</button>
+      <button id="np-next" aria-label="Next">⏭</button>
+      <button id="np-close" aria-label="Stop">✕</button>
+    </div>
+  </footer>
+  <div class="confirm" id="confirm" hidden></div>
+  <script src="offline.js"></script>
+</body>
+</html>

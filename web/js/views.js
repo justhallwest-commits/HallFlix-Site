@@ -5,6 +5,7 @@ import * as feel from './feel.js';
 import * as media from './media.js';
 import * as more from './more.js';
 import { addCastButton, castTo } from './cast.js';
+import { canDownload, DL_ICON, download, markSaved, onDownloadClick, openDownloads } from './downloads.js';
 import * as comics from './comics.js';
 import * as profileEdit from './profile.js';
 import * as ratings from './ratings.js';
@@ -266,6 +267,7 @@ async function onClick(e) {
   const act = t.closest('[data-do]')?.dataset.do;
   if (act === 'signout' || act === 'switch') { await api('POST', '/api/logout'); location.hash = '#/'; location.reload(); }
   if (act === 'server') window.HallFlixNative?.changeServer();
+  if (act === 'downloads') { $('.menu')?.remove(); openDownloads(); return; }
   if (act === 'fx') {
     try { localStorage.setItem('hf_fx', effectsOff() ? 'on' : 'off'); } catch { /* private mode */ }
     $('.menu')?.remove();
@@ -286,7 +288,7 @@ function toggleMenu() {
     ${can('editProfile') ? html`<button data-do="profile">Edit profile</button>` : ''}<button data-do="switch">Switch profile</button>${p.admin ? html`<a href="/studio">Open the Studio</a><a href="/studio#profiles">Manage profiles</a>` : ''}
     ${can('me') ? html`<a href="#/me">My HallFlix</a>` : ''}${can('remote') ? html`<a href="#/remote">Remote for another screen</a>` : ''}${can('wrapped') ? html`<a href="#/wrapped">Your year in review</a>` : ''}
     ${themeNow()?.previews !== false && !document.body.classList.contains('tv') ? html`<button data-do="previews">${more.previewsOn() ? 'Turn previews off' : 'Turn previews on'}</button>` : ''}${themeNow()?.effect && themeNow().effect !== 'none' && !document.body.classList.contains('tv') ? html`<button data-do="fx">${effectsOff() ? 'Turn seasonal effects on' : 'Turn seasonal effects off'}</button>` : ''}${feel.soundsAvailable() ? html`<button data-do="sounds">${feel.soundsOn() ? 'Turn sounds off' : 'Turn sounds on'}</button>` : ''}
-    ${window.HallFlixNative ? html`<button data-do="server">Change server</button>` : ''}<button data-do="signout">Sign out</button></div>`));
+    ${canDownload() ? html`<button data-do="downloads">Downloads</button>` : ''}${window.HallFlixNative ? html`<button data-do="server">Change server</button>` : ''}<button data-do="signout">Sign out</button></div>`));
   $('.menu button').focus();
   for (const a of $$('.menu a')) a.addEventListener('click', () => $('.menu')?.remove());
 }
@@ -522,6 +524,7 @@ export async function title(id) {
         ${resuming ? html`<a class="btn" href="#/watch/${d.playId}?t=0">From the start</a>` : ''}
         <button class="btn round ${d.inList ? 'on' : ''}" data-list aria-label="My List" title="My List">${d.inList ? icons.check : icons.plus}</button>
         <button class="btn round" data-seen aria-label="Mark as watched" title="Mark as watched or unwatched">${icons.eye}</button>
+        ${canDownload() && d.kind === 'movie' && d.playId ? html`<button class="btn dl" data-dl="${d.playId}">${raw(DL_ICON)}<span>Download</span></button>` : ''}
         ${d.trailer ? html`<a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=${d.trailer}">${icons.trailer} Trailer</a>` : ''}
         ${d.kind === 'movie' && d.playId && !window.HallFlixNative ? html`<a class="btn" href="#/watch/${d.playId}?night=1" title="Dims the room, plays the opening and starts from the beginning">${raw(MOON)} Movie night</a>` : ''}
         ${state.profile.admin ? html`<span class="manage"><button class="btn round" data-manage aria-label="Remove or delete" title="Remove or delete" aria-haspopup="menu">${raw(TRASH)}</button></span>` : ''}
@@ -539,7 +542,7 @@ export async function title(id) {
       <div class="stabs" role="tablist">${tabs.map(([k, n], i) => html`<button role="tab" data-stab="${k}" class="${i ? '' : 'on'}" aria-selected="${!i}">${n}</button>`)}</div>
       ${d.seasons ? html`<section class="spane" data-pane="episodes">
         ${d.seasons.length > 1 ? html`<div class="seasons" role="tablist">${d.seasons.map((s) => html`<button data-season="${s.id}" class="${s === season ? 'on' : ''}">${s.title}</button>`)}</div>` : ''}
-        <div class="season-bar"><span class="muted season-info"></span><button class="linkbtn" data-seasonseen></button></div>
+        <div class="season-bar"><span class="muted season-info"></span><button class="linkbtn" data-seasonseen></button>${canDownload() ? html`<button class="linkbtn" data-dlseason>${raw(DL_ICON)} Download season</button>` : ''}</div>
         <div class="episodes"></div></section>` : ''}
       ${d.similar.length ? html`<section class="spane" data-pane="similar" ${tabs[0][0] === 'similar' ? '' : raw('hidden')}><div class="similar">${d.similar.map((it) => cardHtml(it))}</div></section>` : ''}
       <section class="spane details" data-pane="details" ${tabs[0][0] === 'details' ? '' : raw('hidden')}>
@@ -569,10 +572,11 @@ export async function title(id) {
       const pct = e.progress && !e.progress.watched && e.progress.duration ? (e.progress.position / e.progress.duration) * 100 : 0;
       const next = e.id === d.playId;
       const aired = e.premiered ? new Date(`${e.premiered}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-      return html`<div class="ep-wrap">${state.profile.admin ? html`<button class="ep-manage" data-remove="${e.id}" aria-label="Remove or delete episode ${e.number}" title="Remove or delete this episode">${raw(TRASH)}</button>` : ''}<a class="episode ${e.id === (d.focus || d.playId) ? 'focus' : ''} ${e.progress?.watched ? 'watched' : ''}" href="#/watch/${e.id}"><div class="n">${e.number}</div>
+      return html`<div class="ep-wrap">${state.profile.admin ? html`<button class="ep-manage" data-remove="${e.id}" aria-label="Remove or delete episode ${e.number}" title="Remove or delete this episode">${raw(TRASH)}</button>` : ''}${canDownload() ? html`<button class="ep-dl" data-dl="${e.id}" aria-label="Download episode ${e.number}" title="Download to watch offline">${raw(DL_ICON)}<span hidden>Download</span></button>` : ''}<a class="episode ${e.id === (d.focus || d.playId) ? 'focus' : ''} ${e.progress?.watched ? 'watched' : ''}" href="#/watch/${e.id}"><div class="n">${e.number}</div>
         <div class="still">${e.still ? html`<img loading="lazy" src="${e.still}" alt="">` : ''}<span class="eplay">${icons.play}</span>${pct ? html`<div class="bar"><i style="width:${pct}%"></i></div>` : ''}${e.progress?.watched ? html`<div class="seen">✓</div>` : ''}</div>
         <div><div class="t"><span>${e.title}${next ? html` <em class="upnext-tag">${resuming ? 'Resume' : 'Up next'}</em>` : ''}</span><small>${fmtRuntime(e.runtime)}</small></div>
           <div class="epmeta">${[aired, e.score ? `★ ${e.score.toFixed(1)}` : ''].filter(Boolean).join(' · ')}</div><p>${e.overview || ''}</p></div></a></div>`; })}`);
+    markSaved(o);
   };
   if (season) eps(season);
   o.onchange = null;
@@ -614,6 +618,9 @@ export async function title(id) {
     }
     const cast = e.target.closest('[data-cast]');
     if (cast) { castTo(+cast.dataset.cast); return; }
+    const dl = e.target.closest('[data-dl]');
+    if (dl) { e.preventDefault(); onDownloadClick(dl, { title: d.kind === 'movie' ? d.title : undefined }); return; }
+    if (e.target.closest('[data-dlseason]') && cur) { download(cur.episodes.map((x) => x.id), { title: `${d.title} · ${cur.title}` }); return; }
     if (e.target.closest('[data-seen]')) {
       const all = d.kind === 'movie' ? !!d.progress?.watched : d.seasons.every((s) => s.episodes.every((x) => x.progress?.watched));
       await api('POST', '/api/watched', { itemId: d.id, watched: !all }).catch((err) => toast(err.message));
@@ -623,6 +630,7 @@ export async function title(id) {
   o.scrollTop = 0;
   ($('.episode.focus', o) && d.focus ? $('.episode.focus', o) : $('.btn.primary', o))?.focus({ preventScroll: !d.focus });
   addCastButton(o, d.playId); // "Play on TV", when a HallFlix TV signed in as this profile is on
+  markSaved(o);
 }
 
 const LANG_NAMES = { en: 'English', eng: 'English', es: 'Spanish', spa: 'Spanish', fr: 'French', fre: 'French', fra: 'French', de: 'German', ger: 'German', deu: 'German', it: 'Italian', ita: 'Italian',

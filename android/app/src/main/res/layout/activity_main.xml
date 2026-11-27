@@ -27,6 +27,9 @@
                     android:background="@drawable/button" android:textColor="@color/hf_bg" android:textSize="17sp" android:textStyle="bold" android:textAllCaps="false" android:text="Connect" />
                 <Button android:id="@+id/retry" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="10dp" android:visibility="gone"
                     android:background="@drawable/button_quiet" android:textColor="@color/hf_text" android:textSize="16sp" android:textAllCaps="false" android:text="Try again" />
+                <!-- With no connection, what's been downloaded still plays. -->
+                <Button android:id="@+id/offline" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="10dp" android:visibility="gone"
+                    android:background="@drawable/button_quiet" android:textColor="@color/hf_text" android:textSize="16sp" android:textAllCaps="false" android:text="My downloads" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

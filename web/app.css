@@ -2053,3 +2053,12 @@ body.tv .sheet .cast { padding: 10px 6px 14px !important; }
 /* Only what's on screen (web/js/lean.js): a title far off screen is a plain block of the same height. */
 .grid > .lean-ph { min-width: 0; }
 .search-gap { flex: 1; }
+
+/* Downloads (in the Android app): the episode download button, and buttons already saved or on their way */
+.ep-dl { position: absolute; z-index: 2; right: 8px; bottom: 8px; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(var(--text-rgb), 0.2); background: rgba(var(--bg-rgb), 0.85);
+  display: grid; place-items: center; cursor: pointer; color: var(--muted); }
+.ep-dl svg, .btn.dl svg, [data-dlseason] svg { width: 18px; height: 18px; }
+.ep-dl.on, .btn.dl.on { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.6); }
+.ep-dl.busy, .btn.dl.busy { color: var(--accent); animation: dlpulse 1.6s ease-in-out infinite; }
+@keyframes dlpulse { 50% { opacity: 0.55; } }
+.season-bar [data-dlseason] { display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; }

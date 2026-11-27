@@ -176,6 +176,48 @@ test('mobile data: films are held to the Studio quality on mobile data, Wi-Fi is
   await hf.api('PUT', '/api/studio/settings', { mobileQuality: 720 });
 });
 
+test('downloads: sizes to choose from, a smaller copy made by the transcoder, and the per-profile switch', async () => {
+  const id = items['Night Drive'].id; // 640×360, so only the original is offered (no copy would be smaller)
+  const info = await hf.api('GET', `/api/downloads/${id}`);
+  assert.deepEqual([info.title, info.kind, info.ext, info.options.map((o) => o.quality)], ['Night Drive', 'movie', 'mp4', ['original']]);
+  assert.ok(info.options[0].size > 0 && Array.isArray(info.subs) && info.poster !== undefined);
+  const orig = await hf.api('POST', `/api/downloads/${id}/prepare`, { quality: 'original' });
+  assert.deepEqual([orig.ready, orig.url, orig.size, orig.ext], [true, `/api/file/${id}`, info.options[0].size, 'mp4']);
+  assert.equal((await hf.api('POST', `/api/downloads/${id}/prepare`, { quality: 999 })).$status, 400);
+  // A smaller copy: queued, made, then downloadable with byte ranges.
+  let p = await hf.api('POST', `/api/downloads/${id}/prepare`, { quality: 480 });
+  assert.equal(p.url, `/api/downloads/${id}/file?quality=480`);
+  for (let i = 0; i < 120 && !p.ready; i++) { assert.notEqual(p.state, 'failed', p.error); await new Promise((r) => setTimeout(r, 500)); p = await hf.api('POST', `/api/downloads/${id}/prepare`, { quality: 480 }); }
+  assert.ok(p.ready && p.size > 1000, 'the copy was made');
+  const whole = await hf.api('GET', p.url, null, { raw: true });
+  assert.equal(whole.status, 200);
+  assert.equal((await whole.arrayBuffer()).byteLength, p.size);
+  const part = await hf.api('GET', p.url, null, { raw: true, headers: { Range: 'bytes=100-199' } });
+  assert.deepEqual([part.status, (await part.arrayBuffer()).byteLength], [206, 100]);
+  // Together: the songs of an album.
+  const album = (await hf.api('GET', '/api/search?q=Night%20Drive')).items.find((x) => x.kind === 'album');
+  if (album) {
+    const { ids } = await hf.api('GET', `/api/downloads/${album.id}/children`);
+    assert.ok(ids.length >= 2);
+    const song = await hf.api('GET', `/api/downloads/${ids[0]}`);
+    assert.deepEqual([song.kind, song.album, song.options.map((o) => o.quality)], ['track', 'Night Drive', ['original']]);
+  }
+  assert.equal((await hf.api('GET', `/api/downloads/${album?.id || 999999}`)).$status, 404, 'an album itself is saved song by song');
+  // Studio → Menu access → Downloads, off for one profile.
+  const kid = await hf.api('POST', '/api/studio/profiles', { name: 'No Downloads', password: '2468' });
+  assert.ok((await hf.api('GET', '/api/studio/access')).features.some((f) => f.key === 'download'));
+  await hf.api('PUT', '/api/studio/access', { access: { [kid.id]: { off: ['download'] } } });
+  const admin = hf.getCookie();
+  const { token } = await hf.api('POST', '/api/login', { profileId: kid.id, password: '2468' });
+  hf.setCookie(admin);
+  const as = (url) => fetch(`${hf.base}${url}`, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal((await as(`/api/downloads/${id}`)).status, 403);
+  assert.equal((await as(`/api/items/${id}`)).status, 200, 'everything else still works');
+  await hf.api('PUT', '/api/studio/access', { access: {} });
+  assert.equal((await as(`/api/downloads/${id}`)).status, 200);
+  await hf.api('DELETE', `/api/studio/profiles/${kid.id}`);
+});
+
 test('remux: video copied untouched, audio converted, seeking lands on a keyframe', async () => {
   const id = items['The Long Signal'].id;
   const { queue } = await hf.api('POST', '/api/play', { itemId: id, caps: browser });
