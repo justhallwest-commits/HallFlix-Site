@@ -22,7 +22,7 @@
                     android:textSize="15sp" android:textColor="@color/hf_muted" android:gravity="center" android:layout_marginTop="8dp" android:layout_marginBottom="20dp" />
                 <EditText android:id="@+id/server" android:layout_width="match_parent" android:layout_height="56dp" android:background="@drawable/field"
                     android:paddingStart="16dp" android:paddingEnd="16dp" android:textColor="@color/hf_text" android:textColorHint="@color/hf_muted"
-                    android:hint="http://192.168.1.83:8780" android:inputType="textUri" android:imeOptions="actionGo" android:singleLine="true" android:textSize="18sp" />
+                    android:hint="https://new.hallflix.net" android:inputType="textUri" android:imeOptions="actionGo" android:singleLine="true" android:textSize="18sp" />
                 <Button android:id="@+id/connect" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="14dp"
                     android:background="@drawable/button" android:textColor="@color/hf_bg" android:textSize="17sp" android:textStyle="bold" android:textAllCaps="false" android:text="Connect" />
                 <Button android:id="@+id/retry" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="10dp" android:visibility="gone"

@@ -47,8 +47,10 @@ function audio() {
     if (S.sleep?.mode === 'song') { S.sleep = null; paintSleep(); paint(); toast('Sleep timer: goodnight'); return; }
     next(true);
   });
-  a.addEventListener('play', () => { paint(); session(); lyricLoop(); });
-  a.addEventListener('pause', paint);
+  a.addEventListener('play', () => { paint(); session(); lyricLoop(); toApp('playing'); });
+  a.addEventListener('pause', () => { paint(); toApp('paused'); });
+  a.addEventListener('seeked', () => toApp(a.paused ? 'paused' : 'playing'));
+  a.addEventListener('loadedmetadata', () => toApp(a.paused ? 'paused' : 'playing'));
   a.addEventListener('volumechange', paintVolume);
   a.addEventListener('error', () => {
     const t = cur();
@@ -63,6 +65,20 @@ function audio() {
 }
 
 const time = () => S.offset + (S.audio?.currentTime || 0);
+
+/**
+ * The HallFlix Android app shows what is playing in a notification and on the lock screen, and keeps the music going
+ * with the screen off. Its buttons call HallFlix.music.resume/pause/next/prev/seek/stop.
+ */
+function toApp(state) {
+  const N = window.HallFlixNative;
+  if (!N?.music) return;
+  const t = cur();
+  try {
+    N.music(JSON.stringify(state === 'stopped' || !t ? { state: 'stopped' }
+      : { state, title: t.title || '', artist: t.author || '', album: t.album || '', art: t.poster ? new URL(t.poster, location.href).href : '', position: time(), duration: length() }));
+  } catch { /* the app is older than this page */ }
+}
 const length = () => cur()?.runtime || (Number.isFinite(S.audio?.duration) ? S.offset + S.audio.duration : 0);
 
 function load(at = 0, play = true) {
@@ -365,6 +381,7 @@ function stop() {
   bar().hidden = true; document.body.classList.remove('has-nowbar');
   if ('mediaSession' in navigator) navigator.mediaSession.metadata = null;
   markPlaying();
+  toApp('stopped');
 }
 
 // ---------- volume and sleep timer ----------
@@ -702,7 +719,10 @@ export function initMusic() {
   let mt = 0;
   new MutationObserver(() => { clearTimeout(mt); mt = setTimeout(markPlaying, 60); }).observe(document.body, { childList: true, subtree: true });
   window.HallFlix && Object.assign(window.HallFlix, {
-    music: { play, playNext, addToQueue, startRadio, toggle, next, prev, get playing() { return playing(); }, get track() { return cur() || null; }, get queue() { return upcoming(); } },
+    music: { play, playNext, addToQueue, startRadio, toggle, next, prev, seek, stop,
+      resume: () => { if (S.audio && cur() && S.audio.paused) S.audio.play().catch(() => {}); },
+      pause: () => { if (S.audio && !S.audio.paused) S.audio.pause(); },
+      get playing() { return playing(); }, get track() { return cur() || null; }, get queue() { return upcoming(); } },
     /** Add a lyrics service in the browser: { name, find(track) } resolving to { synced: "LRC text" | [{ t, text }], plain }. */
     addLyricsProvider(p) { if (p && typeof p.find === 'function') lyricsProviders.push({ name: String(p.name || 'Plugin'), find: p.find }); },
   });

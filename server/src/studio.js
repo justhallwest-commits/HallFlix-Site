@@ -13,6 +13,7 @@ import * as tmdb from './tmdb.js';
 import * as look from './look.js';
 import * as plugins from './plugins.js';
 import { checkTheme } from './themespec.js';
+import { MOBILE_QUALITIES } from './playback.js';
 import { IMAGE_EXT, isVideo } from './names.js';
 
 const AUDIO_EXT = ['mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac'];
@@ -112,7 +113,7 @@ export function routes(r) {
   // ----- settings
   r.get('/api/studio/settings', async () => {
     const key = await tmdb.tmdbKey();
-    return { tmdbKey: key ? `${key.slice(0, 4)}…${key.slice(-4)}` : '', hasTmdb: !!key, prerolls: await getSetting('prerolls', {}), showProfilesOnLogin: await getSetting('showProfilesOnLogin', true) };
+    return { tmdbKey: key ? `${key.slice(0, 4)}…${key.slice(-4)}` : '', hasTmdb: !!key, prerolls: await getSetting('prerolls', {}), showProfilesOnLogin: await getSetting('showProfilesOnLogin', true), mobileQuality: String(await getSetting('mobileQuality', 720)) };
   }, admin);
   r.put('/api/studio/settings', async ({ req }) => {
     const b = await readJson(req);
@@ -125,6 +126,7 @@ export function routes(r) {
         scan.scanAll();
       }
     }
+    if (b.mobileQuality != null && MOBILE_QUALITIES.includes(+b.mobileQuality)) await setSetting('mobileQuality', +b.mobileQuality);
     if (b.prerolls) await setSetting('prerolls', { ...(await getSetting('prerolls', {})), enabled: b.prerolls.enabled !== false, max: Math.max(0, Math.min(6, +b.prerolls.max || 0)), onResume: !!b.prerolls.onResume });
     if (b.showProfilesOnLogin !== undefined) await setSetting('showProfilesOnLogin', !!b.showProfilesOnLogin);
     return { ok: true };

@@ -3,6 +3,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Music keeps playing with the screen off, with controls in a notification and on the lock screen (MusicService). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- One APK for phones and TVs: neither a touch screen nor the TV launcher is required. -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -33,8 +37,15 @@
         <activity
             android:name=".PlayerActivity"
             android:exported="false"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
             android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize"
             android:theme="@style/HallFlix.Player" />
+
+        <service
+            android:name=".MusicService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 </manifest>
