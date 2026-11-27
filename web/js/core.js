@@ -185,8 +185,12 @@ export function applyLook(look = state.look, libraryId = currentLibrary) {
   root.setProperty('--tile-thick', `${Math.max(0, Math.min(16, T.thickness ?? 6))}px`);
   // Library tiles on Home: width before another fits in a row, height for their width, picture brightness; and the banner logo.
   const H = t.homeTiles || {};
-  root.setProperty('--libs-min', `${Math.max(180, Math.min(900, +H.width || 320))}px`);
-  root.setProperty('--libs-ratio', String(Math.max(20, Math.min(80, +H.height || 44)) / 100));
+  root.setProperty('--libs-min', `${Math.max(120, Math.min(900, +H.width || 320))}px`);
+  root.setProperty('--libs-ratio', String(Math.max(20, Math.min(100, +H.height || 44)) / 100));
+  // Whole picture (fitted over a blurred copy) or filling the tile; how dark the shading behind the name is; spacing.
+  document.documentElement.dataset.tileFit = H.fit === 'whole' ? 'whole' : 'fill';
+  root.setProperty('--tile-shade', String(Math.max(0, Math.min(100, H.shade ?? 100)) / 100));
+  if (+H.gap > 0) root.setProperty('--libs-gap', `${Math.min(60, +H.gap)}px`); else root.removeProperty('--libs-gap');
   root.setProperty('--tile-bright', String(Math.max(20, Math.min(160, +H.brightness || 100)) / 100));
   // A set number of tiles side by side (e.g. two on a phone), instead of as many as fit at the tile width.
   const cols = Math.max(0, Math.min(4, Math.round(+H.columns || 0)));

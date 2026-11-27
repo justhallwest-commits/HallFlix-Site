@@ -497,7 +497,7 @@ test('looks: theme, library looks, seasons, uploads', async () => {
   assert.deepEqual([d.glowStyle, d.focusRing, d.atmosphere, d.tiles3d.style, d.soundFx.volume, d.login.music.enabled], ['natural', 'glow', 'none', 'layered', 0.8, false]);
   assert.deepEqual(d.rows, { items: 15, sections: 8, scroll: 'arrows', panel: false, panelHeight: 60 });
   assert.deepEqual([d.tileLogo, d.libLogoSize], [{ place: 'bl', size: 100, x: 0, y: 0, count: 'yes' }, 0]);
-  assert.deepEqual([d.homeTiles, d.bannerLogo, d.ident.order], [{ width: 320, height: 44, brightness: 100, columns: 0 }, 100, 'shuffle']);
+  assert.deepEqual([d.homeTiles, d.bannerLogo, d.ident.order], [{ width: 320, height: 44, brightness: 100, columns: 0, fit: 'fill', shade: 100, gap: 0 }, 100, 'shuffle']);
   assert.deepEqual(d.libPage, { place: 'left', x: 0, y: 0 });
   assert.deepEqual(d.splash, { image: '', size: 100, motion: 'pulse', background: '', video: '', when: 'signin', sound: true, audio: '' });
   assert.equal((await fetch(`${hf.base}/js/splash.js`)).status, 200, 'the loading screen script is served');
