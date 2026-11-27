@@ -131,17 +131,68 @@ function tileEditor(l, own, base, bright = 100) {
       ${own.tileLogo ? html`<button class="btn sm" data-tl-reset title="Follow the Whole app settings again">Reset</button>` : ''}</div></div>`;
 }
 /** Home: how big the library tiles are, how bright their pictures, and the film logo on the banner. */
-const homeCard = (theme) => html`<div class="card"><h2>Home page</h2>
-  ${choose(theme, 'homeTiles.columns', 'Library tiles in a row', [['0', 'Automatic (as many as fit at the width below)'], ['1', '1 (full width)'], ['2', '2 side by side'], ['3', '3 side by side'], ['4', '4 side by side']])}
-  ${+theme.homeTiles?.columns ? '' : range(theme, 'homeTiles.width', 'Library tile width (pixels; smaller fits more in a row)', 180, 900, 10, 320)}
-  ${range(theme, 'homeTiles.height', 'Library tile height (% of its width)', 20, 80, 1, 44)}
+/** Shrink the sizer's imitation screen to fit the card, keeping its real proportions. */
+function fitSizer(sizer) {
+  const frame = sizer.querySelector('.sz-frame'); if (!frame) return;
+  const k = Math.min(1, sizer.clientWidth / frame.offsetWidth || 1);
+  frame.style.transform = `scale(${k})`;
+  frame.style.setProperty('--sz-k', String(k)); // the corner handle keeps its size on screen
+  sizer.style.height = `${Math.ceil(frame.offsetHeight * k)}px`;
+}
+// ---------- Home page: library tile size and shape, with a tile you resize by dragging its corner ----------
+const SHAPES = [['match', 'Match the pictures'], [56, '16:9'], [50, '2:1'], [43, '21:9'], [67, '3:2'], [75, '4:3'], [100, 'Square']];
+const shapeName = (h) => {
+  const named = [[56.25, '16:9'], [50, '2:1'], [42.86, '21:9'], [43.75, '16:7'], [66.67, '3:2'], [75, '4:3'], [100, '1:1'], [62.5, '16:10']].find(([v]) => Math.abs(v - h) < 0.8);
+  return named ? named[1] : `${(100 / h).toFixed(2).replace(/\.?0+$/, '')}:1`;
+};
+/** The screen the sizer imitates: a phone when editing for phones, a TV for TVs, a computer otherwise. */
+const sizerScreen = (dev, theme) => (dev === 'phone' ? { w: 412, pad: 16, gap: 10, name: 'a phone' }
+  : dev === 'tv' ? { w: Math.max(960, Math.min(1920, +theme.tv?.width || 1600)), pad: 54, gap: 22, name: 'a TV' } : { w: 1400, pad: 56, gap: 20, name: 'a computer' });
+/** Grid and tile sizes for the sizer, worked out the same way the app lays out its tiles (app.css .libs). */
+function sizerVars(theme, scr) {
+  const H = theme.homeTiles || {}, cols = Math.max(0, Math.min(4, +H.columns || 0));
+  const layered = (theme.tiles3d?.style || 'layered') === 'layered';
+  const gap = (+H.gap > 0 ? +H.gap : scr.gap) + (layered ? Math.max(0, Math.min(16, theme.tiles3d?.thickness ?? 6)) * 1.7 : 0);
+  const width = Math.max(120, Math.min(900, +H.width || 320)), height = Math.max(20, Math.min(100, +H.height || 44));
+  const inner = scr.w - scr.pad * 2;
+  const across = cols || Math.max(1, Math.floor((inner + gap) / (Math.min(width, inner) + gap)));
+  const tileW = (inner - gap * (across - 1)) / across;
+  return { cols, gap, width, height, across, tileW, inner,
+    css: `--sz-w:${scr.w}px;--sz-pad:${scr.pad}px;--sz-gap:${gap}px;--sz-cols:${across};--sz-ar:${(100 / height).toFixed(4)};--sz-shade:${Math.max(0, Math.min(100, H.shade ?? 100)) / 100}` };
+}
+const tilePic = (l, own = {}) => {
+  const vid = (u) => /\.(mp4|webm|m4v|mov)(\?|$)/i.test(u || '');
+  return own.tileBackground && !vid(own.tileBackground) ? own.tileBackground : own.tileUse !== 'artwork' && own.background && !vid(own.background) ? own.background : l.art;
+};
+function sizerReadout(v, scr) {
+  return `${shapeName(v.height)} · ${v.across} across on ${scr.name} · each tile about ${Math.round(v.tileW)} × ${Math.round(v.tileW * v.height / 100)} px`;
+}
+const homeCard = (theme, libraries = [], libs = {}, dev = '') => {
+  const H = theme.homeTiles || {}, scr = sizerScreen(dev, theme), v = sizerVars(theme, scr);
+  const shown = libraries.slice(0, Math.max(v.across * 2, 3)).slice(0, 8);
+  return html`<div class="card"><h2>Home page</h2>
+  ${choose(theme, 'homeTiles.columns', 'Library tiles in a row', [['0', 'Automatic (as many as fit at the tile width)'], ['1', '1 (full width)'], ['2', '2 side by side'], ['3', '3 side by side'], ['4', '4 side by side']])}
+  <div class="f block"><span>Tile size and shape</span>
+    <p class="muted small">Drag the corner of the first tile: right or left changes the size${v.cols ? ' (and how many sit in a row)' : ''}, up or down changes the shape. This is how the tiles fit on ${scr.name}${dev ? '' : '; use 📱 Phones above to size them for phones'}.</p>
+    <div class="sizer ${H.fit === 'whole' ? 'whole' : ''}" data-sizer><div class="sz-frame" style="${v.css}"><div class="sz-grid">
+      ${shown.map((l, i) => { const pic = tilePic(l, libs[l.id]); return html`<div class="sz-tile" style="${pic ? `--pic:url('${encodeURI(pic)}')` : ''}"><i class="sz-fill"></i><i class="sz-art"></i><b>${l.name}</b>${i === 0 ? html`<span class="sz-handle" role="slider" tabindex="0" aria-label="Drag to resize the library tiles" title="Drag to resize"></span>` : ''}</div>`; })}
+    </div></div></div>
+    <div class="sz-bar"><span class="muted small" data-sz-read>${sizerReadout(v, scr)}</span><label class="check sm"><input type="checkbox" data-sz-lock> Keep the shape while resizing</label></div>
+    <div class="sz-shapes" role="group" aria-label="Tile shape">${SHAPES.map(([h, n]) => html`<button type="button" class="btn sm ${h !== 'match' && Math.abs(h - v.height) < 0.8 ? 'on' : ''}" data-sz-shape="${h}">${n}</button>`)}</div>
+  </div>
+  ${v.cols ? '' : range(theme, 'homeTiles.width', 'Library tile width (pixels; smaller fits more in a row)', 120, 900, 10, 320)}
+  ${range(theme, 'homeTiles.height', 'Library tile height (% of its width)', 20, 100, 1, 44)}
+  ${choose(theme, 'homeTiles.fit', 'Tile picture', [['fill', 'Fill the tile (the edges may be cut off)'], ['whole', 'Show the whole picture (a blurred copy fills any space)']])}
+  ${range(theme, 'homeTiles.shade', 'Shading behind the name (%; less shows more of the picture)', 0, 100, 5, 100)}
+  ${range(theme, 'homeTiles.gap', 'Space between tiles (pixels; 0 is automatic, with room for 3D tiles)', 0, 60, 2, 0)}
   ${range(theme, 'homeTiles.brightness', 'Brightness of the tile pictures (%)', 20, 160, 5, 100)}
   <p class="muted small">Each library can have its own brightness: use its slider under “Logo on each tile”, or on its tab.</p>
   ${range(theme, 'bannerLogo', 'Size of the film’s logo on the banner (% of the usual size)', 30, 250, 5, 100)}
   <p class="muted small">The preview shows Home while you adjust.</p></div>`;
-const tilesEditorCard = (libraries, libs, base, bright = 100) => html`<div class="card"><h2>Logo on each tile</h2>
+};
+const tilesEditorCard = (libraries, libs, base, bright = 100, height = 44) => html`<div class="card"><h2>Logo on each tile</h2>
   <p class="muted small">Every library’s Home tile, each with its own logo position and size. Drag a logo anywhere on its tile (or click it and use the arrow keys), then set its size. Each tile keeps its own spot; the preview shows the Home tiles as you go.</p>
-  <div class="tl-grid">${libraries.map((l) => tileEditor(l, libs[l.id], base, bright))}</div></div>`;
+  <div class="tl-grid" style="--tl-ar:${(100 / Math.max(20, Math.min(100, +height || 44))).toFixed(4)}">${libraries.map((l) => tileEditor(l, libs[l.id], base, bright))}</div></div>`;
 
 const LOGO_GRID = [['tl', 'Top left'], ['tc', 'Top centre'], ['tr', 'Top right'], ['ml', 'Middle left'], ['mc', 'Centre'], ['mr', 'Middle right'], ['bl', 'Bottom left'], ['bc', 'Bottom centre'], ['br', 'Bottom right']];
 /** The logo (or name) on a library's Home tile, and the logo on its own page: for the whole app, or one library. */
@@ -760,8 +811,8 @@ pages.look = async (main) => {
         ${tilesCard(theme)}
         ${rowsCard(theme, '')}
         ${rankedCard(theme, L.options.fonts || [])}
-        ${homeCard(theme)}
-        ${dev ? '' : tilesEditorCard(L.libraries, libs, theme.tileLogo || {}, theme.homeTiles?.brightness ?? 100)}
+        ${homeCard(theme, L.libraries, libs, dev)}
+        ${dev ? '' : tilesEditorCard(L.libraries, libs, theme.tileLogo || {}, theme.homeTiles?.brightness ?? 100, theme.homeTiles?.height)}
         ${logoCard(theme, theme.tileLogo || {}, '')}
         ${coversCard(theme, theme.tileCovers || {}, '')}
         <div class="card"><h2>Motion</h2>
@@ -800,6 +851,7 @@ pages.look = async (main) => {
         <div class="card"><h2>Name and logo</h2>${text(theme, 'siteName', 'Site name')}${image(theme, 'logo.image', 'Logo (empty uses the HallFlix neon logo)')}${range(theme, 'logo.height', 'Logo size', 20, 120, 2)}${image(theme, 'logo.favicon', 'Browser tab icon (a small square picture; empty uses the HallFlix crown)')}</div></div>`}
       <div class="savebar"><button class="btn primary" data-save ${dirty ? '' : 'disabled'}>Save and go live</button><button class="btn" data-undo ${dirty ? '' : 'disabled'}>Undo changes</button></div>`);
     markOwn();
+    for (const s of $$('[data-sizer]', box)) fitSizer(s);
   };
   const curLib = () => L.libraries.find((l) => `lib-${l.id}` === tab);
   const target = () => (curLib() ? libs[curLib().id] : editing());
@@ -835,6 +887,55 @@ pages.look = async (main) => {
     }
     if (e.target.closest('[data-dev-reset]')) { theme.devices[dev] = {}; dirty = true; draw(); send(); }
   });
+  // The tile sizer: drag the first tile's corner, or pick a shape. Writes homeTiles to the look being edited.
+  const setTiles = (next) => { const o = editing(); o.homeTiles = { ...(o.homeTiles || {}), ...next }; dirty = true; send(); };
+  const sizerLive = (sizer) => {
+    const theme = view(), scr = sizerScreen(dev, theme), v = sizerVars(theme, scr);
+    $('.sz-frame', sizer).style.cssText = v.css; fitSizer(sizer);
+    const read = $('[data-sz-read]', box); if (read) read.textContent = sizerReadout(v, scr);
+    for (const b of $$('.savebar button', box)) b.disabled = false;
+  };
+  box.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest('.sz-handle'); if (!h) return;
+    e.preventDefault(); h.setPointerCapture(e.pointerId);
+    const sizer = h.closest('[data-sizer]'), frame = $('.sz-frame', sizer), tile = h.closest('.sz-tile');
+    const scale = frame.getBoundingClientRect().width / frame.offsetWidth;
+    const r = tile.getBoundingClientRect(), w0 = r.width / scale, h0 = r.height / scale;
+    const lock = $('[data-sz-lock]', box)?.checked, start = sizerVars(view(), sizerScreen(dev, view()));
+    sizer.classList.add('dragging');
+    const move = (ev) => {
+      const w = Math.max(60, w0 + (ev.clientX - e.clientX) / scale), hh = Math.max(30, h0 + (ev.clientY - e.clientY) / scale);
+      const next = {};
+      if (start.cols) next.columns = Math.max(1, Math.min(4, Math.round((start.inner + start.gap) / (w + start.gap))));
+      else next.width = Math.max(120, Math.min(900, Math.round(w / 10) * 10));
+      if (!lock) next.height = Math.max(20, Math.min(100, Math.round((hh / w) * 100)));
+      setTiles(next); sizerLive(sizer);
+    };
+    const up = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); sizer.classList.remove('dragging'); draw(); };
+    h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+  });
+  // Arrow keys on the corner: left/right size, up/down shape.
+  box.addEventListener('keydown', (e) => {
+    if (!e.target.matches('.sz-handle') || !/^Arrow/.test(e.key)) return;
+    e.preventDefault();
+    const v = sizerVars(view(), sizerScreen(dev, view())), step = e.shiftKey ? 5 : 1;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') setTiles({ height: Math.max(20, Math.min(100, v.height + (e.key === 'ArrowDown' ? step : -step))) });
+    else if (v.cols) setTiles({ columns: Math.max(1, Math.min(4, v.cols + (e.key === 'ArrowLeft' ? 1 : -1))) });
+    else setTiles({ width: Math.max(120, Math.min(900, v.width + (e.key === 'ArrowRight' ? 10 : -10) * step)) });
+    draw(); $('.sz-handle', box)?.focus();
+  });
+  box.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-sz-shape]'); if (!b) return;
+    if (b.dataset.szShape !== 'match') { setTiles({ height: +b.dataset.szShape }); draw(); return; }
+    // Match the pictures: the usual shape of the libraries' tile pictures, so each shows in full.
+    const pics = L.libraries.map((l) => tilePic(l, libs[l.id])).filter(Boolean);
+    const sizes = await Promise.all(pics.map((src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i.naturalWidth && i.naturalHeight ? i.naturalHeight / i.naturalWidth : null); i.onerror = () => ok(null); i.src = src; })));
+    const r = sizes.filter(Boolean).sort((a, z) => a - z);
+    if (!r.length) { toast('None of the libraries has a tile picture to match yet.'); return; }
+    const h = Math.max(20, Math.min(100, Math.round(r[Math.floor(r.length / 2)] * 100)));
+    setTiles({ height: h }); draw();
+    toast(`Tiles set to ${shapeName(h)}, the shape of ${r.length > 1 ? 'most of your library pictures' : 'your library picture'}.${r.some((x) => Math.abs(x * 100 - h) > 4) ? ' Pictures with another shape show in full with “Show the whole picture”.' : ''}`, 7000);
+  });
   box.addEventListener('change', (e) => {
     if (!e.target.matches('[data-phone-browsers]')) return;
     theme.devices ||= {}; theme.devices.phoneBrowsers = e.target.checked; dirty = true; draw(); send();
@@ -842,7 +943,7 @@ pages.look = async (main) => {
   // On the Sign-in page tab, some choices show or hide others (panel strength, how dark, where to blur).
   box.addEventListener('change', (e) => { if (tab === 'signin' && e.target.matches('select[data-path^="login."], [data-path="login.focusBlur"]')) draw(); });
   // Choices that show or hide others on the Whole app tab.
-  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"], [data-path="ranked.style"], [data-path="heroMotion"], [data-path="homeTiles.columns"]')) draw(); });
+  box.addEventListener('change', (e) => { if (e.target.matches('[data-path="tiles3d.style"], [data-path="login.music.enabled"], [data-path="rows.panel"], [data-path="tileUse"], [data-path="tilePos"], [data-path="ranked.style"], [data-path="heroMotion"], [data-path="homeTiles.columns"], [data-path="homeTiles.fit"], [data-path="homeTiles.width"], [data-path="homeTiles.height"], [data-path="homeTiles.gap"]')) draw(); });
   // Sounds and sign-in music: test, upload, reorder and remove.
   const touched = (redraw = true) => { dirty = true; if (redraw) draw(); else for (const b of $$('.savebar button', box)) b.disabled = false; send(); };
   const music = () => { const o = editing(); o.login ||= {}; o.login.music ||= {}; if (!Array.isArray(o.login.music.tracks)) o.login.music.tracks = clone(view().login?.music?.tracks || []); return o.login.music; };

@@ -123,7 +123,7 @@ function tilesHtml(list) {
     // The slab carries the tile's thickness and 3D turn; the tile inside holds the layers that move at different depths.
     const bright = Number.isFinite(+lk.tileBrightness) && +lk.tileBrightness > 0 ? `;--tile-bright:${Math.max(20, Math.min(160, +lk.tileBrightness)) / 100}` : '';
     return html`<div class="tile-slab"><a class="lib-tile" href="#/library/${l.id}" style="${style}${bright}" aria-label="${l.name}, ${l.count} ${noun}" ${video ? raw(`data-video="${esc(video)}"`) : ''}>
-      <span class="tile-art"></span>
+      <span class="tile-fill"></span><span class="tile-art"></span>
       ${coversHtml(l.posters, lk)}
       ${(() => { const ls = logoStyle(lk); return html`<span class="tile-text placed ${lk.logo ? 'has-logo' : ''}" data-align="${ls.align}" style="${ls.style}">${lk.logo ? html`<img class="tile-logo" src="${lk.logo}" alt="">` : html`<b class="tile-name">${l.name}</b>`}
         ${ls.count ? html`<span class="tile-count">${l.count} ${noun}${l.fresh ? html`<em>${l.fresh} new</em>` : ''}</span>` : ''}</span>`; })()}

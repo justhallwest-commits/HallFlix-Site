@@ -821,14 +821,14 @@
           "properties": {
             "width": {
               "type": "number",
-              "minimum": 180,
+              "minimum": 120,
               "maximum": 900,
               "default": 320
             },
             "height": {
               "type": "number",
               "minimum": 20,
-              "maximum": 80,
+              "maximum": 100,
               "default": 44
             },
             "brightness": {
@@ -841,6 +841,26 @@
               "type": "number",
               "minimum": 0,
               "maximum": 4,
+              "default": 0
+            },
+            "fit": {
+              "enum": [
+                "fill",
+                "whole",
+                ""
+              ],
+              "default": "fill"
+            },
+            "shade": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 100
+            },
+            "gap": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 60,
               "default": 0
             }
           }

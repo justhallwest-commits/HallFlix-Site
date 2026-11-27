@@ -1746,6 +1746,19 @@ body.tv .cap-panel { -webkit-mask-image: none; mask-image: none; }
 .libs .lib-tile .tile-text.placed .tile-name { font-size: calc(clamp(16px, 9.5cqw, 56px) * var(--tl-k, 1) * min(1, var(--libs-ratio, 0.4375) / 0.4375 + 0.25)); }
 .libs .lib-tile .tile-count { font-size: clamp(10.5px, 3.3cqw, 15px); }
 .lib-tile .tile-art { filter: brightness(var(--tile-bright, 1)); }
+/* Space between tiles (Studio: "Space between tiles"; automatic when 0). 3D tiles draw their thickness below and beside
+   the tile, so the gap grows by that much and neighbouring tiles never overlap, even two across a phone. */
+.libs { gap: var(--libs-gap, clamp(10px, 1.4vw, 20px)); }
+body.tiles-layered .libs { gap: calc(var(--libs-gap, clamp(10px, 1.4vw, 20px)) + var(--tile-thick, 6px) * 1.7); }
+/* The shading behind the name (Studio: "Shading behind the name"). */
+.lib-tile .tile-art::after { opacity: var(--tile-shade, 1); }
+/* "Show the whole picture": the picture is fitted inside the tile and a blurred copy fills the rest. */
+.lib-tile .tile-fill { display: none; }
+:root[data-tile-fit="whole"] .lib-tile .tile-fill { display: block; position: absolute; inset: -14%; z-index: -2; pointer-events: none;
+  background: var(--tile-bg, none) center / cover no-repeat; filter: blur(22px) brightness(calc(var(--tile-bright, 1) * 0.55)) saturate(1.2); }
+:root[data-tile-fit="whole"] .lib-tile .tile-art { background-size: contain; background-position: center; }
+:root[data-tile-fit="whole"] body.tiles-layered .lib-tile .tile-art { inset: 0; }
+:root[data-tile-fit="whole"] .lib-tile .tile-art video { object-fit: contain; }
 /* "Library tiles in a row" set in the Studio: exactly that many side by side, whatever the screen width. */
 :root[data-libs-cols] .libs, :root[data-libs-cols] .libs[data-count="1"] { grid-template-columns: repeat(var(--libs-cols), minmax(0, 1fr)); }
 /* Small tiles (two or more across a phone): the name gets the whole tile, and the cover stack shrinks to fit. */
