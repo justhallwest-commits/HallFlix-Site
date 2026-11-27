@@ -776,6 +776,8 @@ pages.look = async (main) => {
     if (n) n.textContent = own.size ? `${own.size} setting${own.size > 1 ? 's' : ''} set for ${DEV_NAMES[dev]}` : `No settings set for ${DEV_NAMES[dev]} yet`;
   };
   const DEV_NAMES = { phone: 'phones', tv: 'TVs' };
+  // Is every "Fast on TVs" setting in the TV look?
+  const fastOn = () => { const tv = theme.devices?.tv || {}; const has = (o, f) => Object.entries(f).every(([k, v]) => (v && typeof v === 'object' ? has(o?.[k] || {}, v) : o?.[k] === v)); return !!L.fastTv && has(tv, L.fastTv); };
   const draw = () => {
     if (dev && tab.startsWith('lib-')) tab = 'theme'; // library looks are shared by every device
     const theme = view(); // what this device sees; edits go to editing()
@@ -786,6 +788,8 @@ pages.look = async (main) => {
         <p class="muted small">${dev === 'phone' ? 'Used by the HallFlix app on Android phones and tablets.' : 'Used by the Fire TV and Android TV apps, Roku and TV web browsers.'}
           Change anything below and it changes on ${DEV_NAMES[dev]} only; settings marked <b class="own-dot"></b> are set for ${DEV_NAMES[dev]}, and everything else follows Everywhere. Seasons still apply on top.</p>
         ${dev === 'phone' ? html`<label class="check"><input type="checkbox" data-phone-browsers ${theme.devices?.phoneBrowsers ? 'checked' : ''}> Also use the phone look in web browsers on phones</label>` : ''}
+        ${dev === 'tv' && L.fastTv ? html`<div class="fasttv"><button class="btn primary" data-fast-tv>⚡ Fast on TVs</button>
+          <span class="muted small">${fastOn() ? 'On. ' : ''}Turns off what slows a Fire TV Stick most: see-through glass panels, blur, glow, the 3D tile movement, atmosphere, banner clips and motion, pop-up previews and moving backgrounds. Each one is marked below and can be put back on its own.</span></div>` : ''}
         <div class="tools"><span class="muted small" data-own-count>No settings set for ${DEV_NAMES[dev]} yet</span><button class="btn sm danger" data-dev-reset>Reset the ${dev === 'phone' ? 'phone' : 'TV'} look</button></div></div>` : ''}
       <div class="tabs"><button data-tab="theme" class="${tab === 'theme' ? 'on' : ''}">Whole app</button><button data-tab="signin" class="${tab === 'signin' ? 'on' : ''}">Sign-in page</button>${dev ? '' : L.libraries.map((l) => html`<button data-tab="lib-${l.id}" class="${tab === `lib-${l.id}` ? 'on' : ''}">${l.name}</button>`)}</div>
       ${tab === 'signin' ? signinCards(theme) : lib ? html`<div class="card" data-form="lib"><h2>${lib.name} only</h2><p class="muted small">Leave anything empty to use the whole-app look.</p>
@@ -895,6 +899,11 @@ pages.look = async (main) => {
       dirty = true; draw(); send(); return;
     }
     if (e.target.closest('[data-dev-reset]')) { theme.devices[dev] = {}; dirty = true; draw(); send(); }
+    if (e.target.closest('[data-fast-tv]')) {
+      theme.devices.tv = merge(theme.devices.tv || {}, L.fastTv);
+      dirty = true; draw(); send();
+      toast('Fast on TVs is on. Save and go live, and the TVs pick it up the next time HallFlix opens on them.', 6000);
+    }
   });
   // The tile sizer: drag the first tile's corner, or pick a shape. Writes homeTiles to the look being edited.
   const setTiles = (next) => { const o = editing(); o.homeTiles = { ...(o.homeTiles || {}), ...next }; dirty = true; send(); };

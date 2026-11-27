@@ -134,7 +134,7 @@ export function routes(r) {
 
   // ----- look
   r.get('/api/studio/look', async () => ({
-    defaults: look.DEFAULT_THEME, theme: await getSetting('theme', {}), options: look.OPTIONS, dateRules: look.DATE_RULES,
+    defaults: look.DEFAULT_THEME, theme: await getSetting('theme', {}), options: look.OPTIONS, dateRules: look.DATE_RULES, fastTv: look.FAST_TV,
     presets: [...look.PRESETS, ...(await plugins.listPlugins()).filter((p) => p.enabled).flatMap((p) => p.themes)],
     seasons: await q('select * from seasons order by starts, id'),
     // Each library with a recent picture from it, for the Studio's mini tiles (where logos are dragged into place).
