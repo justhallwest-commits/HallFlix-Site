@@ -1773,6 +1773,8 @@ pages.settings = async (main) => {
       <div class="row"><div class="grow"><b>Fire TV, Android TV and Android phones</b><span>On a Fire TV, type <code>${location.origin}/get/android</code> into the Downloader app. On a phone, open that address in the browser.</span></div><a class="btn sm" href="/get/android">Download APK</a></div>
       ${choose(s, 'mobileQuality', 'Quality on mobile data (phones and tablets; Wi-Fi is not limited)', [['0', 'No limit'], ['1080', '1080p'], ['720', '720p (saves data)'], ['480', '480p (saves more data)'], ['360', '360p (least data)']])}
       <p class="muted small">Films that are bigger are converted down while a phone is on mobile data. Anyone can still pick a higher quality from the player's quality button.</p>
+      ${text(s, 'directUrl', 'Home address (Tailscale)', 'http://100.117.23.98:8780')}
+      <p class="muted small">When a phone or Fire TV can reach this address, the app uses it instead of ${location.host}: video comes straight from the server, which is much faster. When it can't (Tailscale off, or away without it), the app quietly uses ${location.host}. Leave it empty to turn this off.</p>
       <div class="row"><div class="grow"><b>Roku</b><span>Download the channel on a computer, then upload it on your Roku's Developer Settings page. The install guide has the steps.</span></div><a class="btn sm" href="/get/roku">Download channel</a></div></div>
     <div class="card"><h2>Sign-in screen</h2>${check(s, 'showProfilesOnLogin', 'Show the “Who’s watching?” profile picker (off asks for a name instead)')}</div>`);
   $('[data-key]', main).onfocus = (e) => { if (e.target.value.includes('…')) e.target.value = ''; };
@@ -1783,7 +1785,10 @@ pages.settings = async (main) => {
       msg.innerHTML = r.ok ? '<span class="pill ok">Connected</span> Scanning your libraries for details now.' : `<span class="pill bad">Not accepted</span> ${String(r.error || '').replace(/[<>&]/g, '')}`;
     } catch (e) { fail(e); }
   };
-  bind(main, s, async () => { try { await api('PUT', '/api/studio/settings', { showProfilesOnLogin: s.showProfilesOnLogin, mobileQuality: s.mobileQuality }); toast('Saved', 1200); } catch (e) { fail(e); } });
+  // Waits for a pause in typing, so a half-typed home address isn't saved.
+  let wait;
+  bind(main, s, () => { clearTimeout(wait); wait = setTimeout(save, 800); });
+  const save = async () => { try { const r = await api('PUT', '/api/studio/settings', { showProfilesOnLogin: s.showProfilesOnLogin, mobileQuality: s.mobileQuality, directUrl: s.directUrl ?? '' }); toast(r.ok === false ? r.error : 'Saved', r.ok === false ? 4000 : 1200); } catch (e) { fail(e); } };
 };
 
 // ---------- start ----------

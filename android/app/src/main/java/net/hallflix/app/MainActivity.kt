@@ -40,7 +40,13 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var panel: ScrollView
     private lateinit var splash: ImageView
+    /** The address the page is using right now: the home address when it answers, otherwise the saved one. */
     private var server = ""
+    /** The address typed in (or new.hallflix.net); kept even while the home address is in use. */
+    private var saved = ""
+    /** True while using the home (Tailscale) address. */
+    private var home = false
+    private var probe = 0
     private var loadFailed = false
     private var playerOpen = false
     private val ui = Handler(Looper.getMainLooper())
@@ -48,6 +54,7 @@ class MainActivity : Activity() {
     private val slow = Runnable {
         if (web.visibility == View.VISIBLE) return@Runnable
         web.stopLoading()
+        if (home && saved.isNotEmpty()) { fallBack(); return@Runnable }
         loadFailed = true
         showPanel("HallFlix is taking too long", "Couldn't reach $server. ${AWAY_HINT}", retry = true)
     }
@@ -103,10 +110,12 @@ class MainActivity : Activity() {
                 if (loadFailed) return
                 // If the server sent us somewhere else on the same site (usually http → https), remember that address.
                 val landed = Server.origin(url)
-                if (landed != null && landed != server && Server.sameSite(server, Uri.parse(url))) {
+                if (!home && landed != null && landed != server && Server.sameSite(server, Uri.parse(url))) {
                     server = landed
+                    saved = landed
                     Server.save(this@MainActivity, landed)
                 }
+                Server.shareSignIn(server, otherAddress())
                 reveal()
                 CookieManager.getInstance().flush()
                 // Online again: send where films were stopped offline, and carry on getting downloads ready.
@@ -119,6 +128,8 @@ class MainActivity : Activity() {
             }
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                 if (!request.isForMainFrame) return
+                // The home address stopped answering (Tailscale turned off, left home): carry on with the saved one.
+                if (home && saved.isNotEmpty()) { fallBack(); return }
                 loadFailed = true
                 showPanel("Can't reach HallFlix", "Check that HallFlix is running, or change the server address. $AWAY_HINT", retry = true)
             }
@@ -130,8 +141,9 @@ class MainActivity : Activity() {
         DownloadStore.changed = { if (!isDestroyed) web.evaluateJavascript("window.dispatchEvent(new Event('hallflix-downloads'))", null) }
         findViewById<EditText>(R.id.server).setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_GO) { connect(); true } else false }
 
-        server = Server.url(this)
-        if (server.isEmpty()) showPanel("Welcome to HallFlix", "Enter the address of your HallFlix server. It is shown in the Studio and in the install guide.", retry = false)
+        saved = Server.url(this)
+        server = saved
+        if (saved.isEmpty() && Server.direct(this).isEmpty()) showPanel("Welcome to HallFlix", "Enter the address of your HallFlix server. It is shown in the Studio and in the install guide.", retry = false)
         else load()
     }
 
@@ -145,18 +157,54 @@ class MainActivity : Activity() {
     private fun connect() {
         val url = Server.normalise(findViewById<EditText>(R.id.server).text.toString())
         if (url.isEmpty()) return
-        server = url
+        saved = url
         Server.save(this, url)
         load()
     }
 
+    /**
+     * Try the home address first (a second and a half at most). If HallFlix answers there, use it: video comes straight
+     * from the server instead of round the internet. If not, use the saved address (usually https://new.hallflix.net).
+     */
     private fun load() {
         panel.visibility = View.GONE
         splash.visibility = View.VISIBLE
         ui.removeCallbacks(slow)
+        val direct = Server.direct(this)
+        val ticket = ++probe
+        if (direct.isEmpty() || direct == saved) { open(saved, false); return }
+        Thread {
+            val answers = Server.hello(direct)
+            runOnUiThread {
+                if (ticket != probe || isDestroyed) return@runOnUiThread
+                when {
+                    answers -> open(direct, true)
+                    saved.isNotEmpty() -> open(saved, false)
+                    else -> showPanel("Welcome to HallFlix", "Enter the address of your HallFlix server. It is shown in the Studio and in the install guide.", retry = false)
+                }
+            }
+        }.start()
+    }
+
+    private fun open(url: String, atHome: Boolean) {
+        home = atHome
+        server = url
+        Server.shareSignIn(otherAddress(), url, onlyIfMissing = true) // signed in on the other address? Then here too.
+        ui.removeCallbacks(slow)
         ui.postDelayed(slow, LOAD_TIMEOUT_MS)
         web.loadUrl("$server/")
     }
+
+    /** The home address stopped answering part-way: switch to the saved address without showing an error. */
+    private fun fallBack() {
+        loadFailed = false
+        web.visibility = View.INVISIBLE
+        panel.visibility = View.GONE
+        splash.visibility = View.VISIBLE
+        open(saved, false)
+    }
+
+    private fun otherAddress(): String = if (home) saved else Server.direct(this)
 
     private fun reveal() {
         ui.removeCallbacks(slow)
@@ -192,7 +240,7 @@ class MainActivity : Activity() {
         findViewById<TextView>(R.id.panel_title).text = title
         findViewById<TextView>(R.id.panel_text).text = text
         val field = findViewById<EditText>(R.id.server)
-        if (field.text.isEmpty()) field.setText(server.ifEmpty { DEFAULT_SERVER })
+        if (field.text.isEmpty()) field.setText(saved.ifEmpty { DEFAULT_SERVER })
         val retryButton = findViewById<Button>(R.id.retry)
         retryButton.visibility = if (retry) View.VISIBLE else View.GONE
         findViewById<Button>(R.id.offline).visibility = if (retry && hasDownloads()) View.VISIBLE else View.GONE
@@ -204,6 +252,11 @@ class MainActivity : Activity() {
         // The music lives in this page, so it ends with it.
         if (isFinishing) { MusicService.stopAll(); MusicService.commands = null }
         super.onDestroy()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Server.shareSignIn(server, otherAddress()) // a sign-in or sign-out on one address applies to the other
     }
 
     override fun onResume() {
@@ -287,6 +340,10 @@ class MainActivity : Activity() {
                     .putExtra("start", if (o.isNull("start") || !o.has("start")) -1.0 else o.getDouble("start")))
             }
         }
+
+        /** The home address from Studio → Settings → Apps ("" turns it off). Used from the next start. */
+        @JavascriptInterface
+        fun setDirect(url: String) { Server.saveDirect(this@MainActivity, Server.normalise(url)) }
 
         @JavascriptInterface
         fun changeServer() {

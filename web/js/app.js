@@ -163,6 +163,8 @@ async function boot() {
   }
   if (b.setup) return views.setup();
   if (!b.profile) return views.login(b);
+  // Tell the Android app the home address (Studio → Settings → Apps) so it can try it first next time.
+  if (typeof b.directUrl === 'string') { try { window.HallFlixNative?.setDirect?.(b.directUrl); } catch { /* older app */ } }
   await welcome();
   loadPlugins(b.plugins);
   views.shell();

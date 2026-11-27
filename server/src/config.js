@@ -26,5 +26,7 @@ export const cfg = {
   subdlBase: env.SUBDL_BASE || 'https://api.subdl.com/api/v1',
   subdlFiles: env.SUBDL_FILES || 'https://dl.subdl.com',
   comicCacheGB: +(env.COMIC_CACHE_GB || 4), // room for unpacked CBR/CB7 comics; the ones read longest ago are cleared first
+  // The home (direct) address the Android app tries first, e.g. through Tailscale; Studio → Settings → Apps can change it.
+  directUrl: env.HALLFLIX_DIRECT_URL ?? 'http://100.117.23.98:8780',
   version: '0.1.0',
 };
