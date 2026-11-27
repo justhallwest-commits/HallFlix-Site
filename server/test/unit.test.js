@@ -390,3 +390,15 @@ test('welcome idents are found anywhere in a look', async () => {
   const a = tvArgs('in.webm', 'out.mp4');
   assert.ok(a.includes('libx264') && a.includes('aac') && a.includes('+faststart') && a.at(-1) === 'out.mp4');
 });
+
+test('Fire TV app settings: defaults, limits and choices are checked like the rest of the theme', async () => {
+  const { checkTheme } = await import('../src/themespec.js');
+  const { DEFAULT_THEME } = await import('../src/look.js');
+  assert.equal(DEFAULT_THEME.tvApp.hero.height, 56);
+  assert.equal(DEFAULT_THEME.tvApp.tiles.art, 'library');
+  const r = checkTheme({ tvApp: { hero: { height: 10, follow: false }, tiles: { width: 260, art: 'spinning' }, cards: { focus: 'accent', scale: 300 }, details: { episodes: 'list' } } });
+  assert.deepEqual(r.theme.tvApp, { hero: { height: 30, follow: false }, tiles: { width: 260 }, cards: { focus: 'accent', scale: 125 }, details: { episodes: 'list' } });
+  assert.equal(r.problems.length, 3);
+  // A TV look can carry its own Fire TV app settings too.
+  assert.equal(checkTheme({ devices: { tv: { tvApp: { nav: { align: 'center' } } } } }).theme.devices.tv.tvApp.nav.align, 'center');
+});

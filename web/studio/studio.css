@@ -425,3 +425,67 @@ textarea.code { width: 100%; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo,
 /* "Fast on TVs" in the TV look */
 .card.devnote .fasttv { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; margin-top: 12px; padding: 12px; border-radius: 10px; background: rgba(53, 208, 208, 0.07); border: 1px solid rgba(53, 208, 208, 0.25); }
 @media (max-width: 560px) { .card.devnote .fasttv { grid-template-columns: 1fr; } }
+
+/* ── Studio → Fire TV app: a 960×540 imitation of the native TV screens, scaled to fit ── */
+.tvp-stage { position: relative; display: block !important; flex: none !important; width: 100%; aspect-ratio: 16 / 9; height: auto; }
+.tvp-screen { position: absolute; left: 50%; top: 50%; width: 960px; height: 540px; margin: -270px 0 0 -480px; overflow: hidden; background: var(--bg); color: var(--tx);
+  font: 15px/1.25 Roboto, "Segoe UI", system-ui, sans-serif; transform-origin: center; }
+.tvp-screen * { box-sizing: border-box; }
+.tvp-bg, .tvp-dim { position: absolute; inset: 0; background-size: cover; background-position: center; }
+.tvp-dim { background: var(--bg); }
+.tvp-hero { position: absolute; right: 0; top: 0; background-size: cover; background-position: center top; }
+.tvp-fade { position: absolute; right: 0; top: 0; background: linear-gradient(90deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 80%, transparent) 22%, transparent 60%), linear-gradient(0deg, var(--bg) 0%, transparent 45%); }
+.tvp-solid { position: absolute; left: 0; top: 0; background: var(--bg); }
+.tvp-nav { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 4px; padding: 18px 40px 0; z-index: 3; }
+.tvp-nav img { margin-right: 22px; object-fit: contain; }
+.tvp-nav .tabs { display: flex; gap: 2px; }
+.tvp-nav.mid .tabs { margin: 0 auto; }
+.tvp-nav .tabs span, .tvp-nav .who { padding: 7px 12px; color: var(--mu); font-weight: 600; font-size: 15px; white-space: nowrap; }
+.tvp-nav .tabs span.on { color: var(--tx); }
+.tvp-nav .who { margin-left: auto; }
+.tvp-nav.mid .who { margin-left: 0; }
+.tvp-info, .tvp-detail { position: absolute; left: 48px; z-index: 2; }
+.tvp-info { max-width: 440px; }
+.tvp-info h2, .tvp-detail h2 { font-size: 34px; margin: 0 0 8px; line-height: 1.05; }
+.tvp-screen .hl { max-width: 300px; max-height: 84px; display: block; margin-bottom: 10px; object-fit: contain; object-position: left; }
+.tvp-screen .mt { color: var(--mu); font-weight: 600; font-size: 14px; margin: 0 0 10px; }
+.tvp-screen .ov { font-size: 15px; opacity: .92; margin: 0 0 16px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; max-width: 420px; }
+.tvp-screen .btns { display: flex; gap: 12px; align-items: center; margin-bottom: 26px; }
+.tvp-screen .b { padding: 10px 20px; border-radius: 8px; background: rgba(255,255,255,.2); font-weight: 700; font-size: 15px; white-space: nowrap; }
+.tvp-screen .b.p { background: var(--ac); }
+.tvp-screen .b.on { background: #fff; color: #0a0814; transform: scale(1.05); }
+.tvp-rows { position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden; z-index: 2; }
+.tvp-row { padding-bottom: var(--gap); }
+.tvp-row h4, .tvp-detail h4 { margin: 0 0 10px 48px; font-size: var(--rt); }
+.tvp-detail h4 { margin-left: 0; font-size: 18px; }
+.tvp-screen .cards { display: flex; gap: 14px; padding: 8px 0 10px 48px; overflow: hidden; }
+.tvp-detail .cards { padding-left: 0; }
+.tvp-card { position: relative; flex: none; border-radius: var(--r); background: var(--sf) center / cover no-repeat; overflow: hidden; display: grid; place-items: center; text-align: center; }
+.tvp-card.poster { width: var(--pw); height: calc(var(--pw) * 1.5); }
+.tvp-card.wide { width: var(--ww); height: calc(var(--ww) * .5625); }
+.tvp-card.square { width: calc(var(--pw) * 1.23); height: calc(var(--pw) * 1.23); }
+.tvp-card > b { padding: 10px; font-size: 14px; }
+.tvp-card .art { position: absolute; inset: 0; background: center / cover no-repeat; }
+.tvp-card .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 24px 10px 12px; text-align: left; font-weight: 700; font-size: 13px; background: linear-gradient(0deg, rgba(0,0,0,.9), transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tvp-card .lg { position: absolute; left: 12px; max-width: 60%; max-height: 34%; object-fit: contain; object-position: left bottom; }
+.tvp-card i { position: absolute; left: 0; bottom: 0; height: 4px; background: var(--ac); }
+.tvp-card.on { transform: scale(var(--zoom)); box-shadow: 0 0 0 var(--ring) var(--ringc), 0 10px 26px rgba(0,0,0,.5); z-index: 2; }
+.tvp-libhead { position: absolute; left: 48px; right: 48px; top: 26px; display: flex; align-items: center; gap: 14px; z-index: 2; }
+.tvp-libhead h2 { margin: 0; font-size: 28px; }
+.tvp-libhead .grow { flex: 1; }
+.tvp-screen .mu { color: var(--mu); }
+.tvp-screen .sm { font-size: 14px; margin: 0 0 12px; }
+.tvp-grid { position: absolute; left: 48px; top: 86px; display: grid; gap: 18px 14px; z-index: 2; }
+.tvp-grid .nm { display: block; font-size: 13px; font-weight: 600; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tvp-grid .tvp-card { aspect-ratio: auto; }
+.tvp-detail { top: 56px; right: 0; }
+.tvp-detail .ov { max-width: 460px; }
+.tvp-detail .eps .ep b { display: block; font-size: 14px; margin-top: 8px; width: var(--ww); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tvp-eplist { width: 576px; margin-bottom: 20px; }
+.tvp-eplist div { display: flex; justify-content: space-between; padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,.07); margin-bottom: 6px; }
+.tvp-eplist div:first-child { box-shadow: 0 0 0 var(--ring) var(--ringc); background: rgba(255,255,255,.2); }
+.tvp-eplist span { color: var(--mu); }
+.tvp-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--mu); }
+.tvp-lib summary { cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 8px 0; font-weight: 600; }
+.tvp-mini { width: 64px; height: 36px; border-radius: 6px; background: #222 center / cover; flex: none; }
+.tvp-lib[open] { padding-bottom: 10px; border-bottom: 1px solid var(--line); }

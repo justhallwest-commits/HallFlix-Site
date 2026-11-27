@@ -1,6 +1,7 @@
 // HallFlix Studio: the admin panel. Every page here talks to /api/studio/* and needs an admin profile.
 import { $, $$, api, html, raw, toast } from '/js/core.js';
 import * as tools from './tools.js';
+import { tvApp } from './tvapp.js';
 import { EVENTS, PACK_NAMES, playSound } from '/js/sounds.js';
 
 const root = $('#studio');
@@ -55,7 +56,7 @@ const mins = (s) => (s >= 60 ? `${Math.round(s / 60)} min` : `${Math.round(s || 
 
 const PAGES = [
   ['overview', 'Overview'], ['libraries', 'Libraries'], ['artwork', 'Artwork'], ['metadata', 'Metadata'], ['home', 'Home screen'], ['collections', 'Collections'],
-  ['look', 'Look and feel'], ['seasons', 'Seasons'], ['prerolls', 'Pre-rolls'], ['guard', 'Parental controls'], ['profiles', 'Profiles'], ['lyrics', 'Lyrics'], ['ratings', 'Ratings'], ['subtitles', 'Subtitles'], ['plugins', 'Plugins'], ['settings', 'Settings'],
+  ['look', 'Look and feel'], ['tvapp', 'Fire TV app'], ['seasons', 'Seasons'], ['prerolls', 'Pre-rolls'], ['guard', 'Parental controls'], ['profiles', 'Profiles'], ['lyrics', 'Lyrics'], ['ratings', 'Ratings'], ['subtitles', 'Subtitles'], ['plugins', 'Plugins'], ['settings', 'Settings'],
 ];
 let timer = null; // the current page's refresh timer, cleared on every page change
 
@@ -370,6 +371,7 @@ pages.artwork = (main) => tools.artwork(main, kit);
 pages.metadata = (main) => tools.metadata(main, kit);
 pages.guard = (main) => tools.guard(main, kit);
 pages.prerolls = (main) => tools.prerolls(main, kit);
+pages.tvapp = (main) => tvApp(main, { html, raw, api, toast, fail, merge, clone, bind, check, range, choose, text, image, $ });
 
 // ---------- overview ----------
 pages.overview = async (main) => {

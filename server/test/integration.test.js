@@ -213,6 +213,18 @@ test('welcome ident: a TV-safe 1080p H.264 copy is made for Fire TVs, and boot s
   await hf.api('PUT', '/api/studio/theme', { theme });
 });
 
+test('Fire TV app: settings saved in the Studio reach the app at boot, with the defaults filled in', async () => {
+  const theme = (await hf.api('GET', '/api/studio/look')).theme;
+  const saved = await hf.api('PUT', '/api/studio/theme', { theme: { ...theme, tvApp: { rows: { posterWidth: 150 }, nav: { search: false } } } });
+  assert.equal(saved.ok, true);
+  const t = (await hf.api('GET', '/api/boot')).look.theme.tvApp;
+  assert.equal(t.rows.posterWidth, 150);
+  assert.equal(t.nav.search, false);
+  assert.equal(t.rows.wideWidth, 224, 'unset values come with their defaults');
+  assert.equal(t.hero.show, true);
+  await hf.api('PUT', '/api/studio/theme', { theme });
+});
+
 test('downloads: sizes to choose from, a smaller copy made by the transcoder, and the per-profile switch', async () => {
   const id = items['Night Drive'].id; // 640×360, so only the original is offered (no copy would be smaller)
   const info = await hf.api('GET', `/api/downloads/${id}`);
