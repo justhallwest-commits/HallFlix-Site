@@ -102,7 +102,7 @@ async function sidecarSubs(file) {
   });
 }
 
-async function tracks(item) {
+export async function tracks(item) {
   const st = item.streams || [];
   const audio = st.filter((s) => s.type === 'audio').map((a, i) => ({
     index: i, label: [a.title || langName(a.lang), a.channels > 2 ? `${a.channels === 6 ? '5.1' : a.channels === 8 ? '7.1' : a.channels + 'ch'}` : ''].filter(Boolean).join(' · '),
@@ -125,7 +125,7 @@ async function entryFor(item, caps, opt, kind) {
   };
 }
 
-async function transcoder(pathname, init) {
+export async function transcoder(pathname, init) {
   let res;
   try { res = await fetch(cfg.transcoderUrl + pathname, init); }
   catch { throw new HttpError(503, 'The transcoder is not running'); }

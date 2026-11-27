@@ -12,12 +12,13 @@ export const FEATURES = [
   ['timeline', 'Timeline', 'Browse by decade'],
   ['me', 'My HallFlix', 'Their stats, history and playlists page'],
   ['remote', 'Remote', 'Using a phone as a remote for another screen'],
+  ['download', 'Downloads', 'Saving movies, episodes, music, books and comics in the app to enjoy offline'],
   ['wrapped', 'Year in review', 'Their year in review'],
   ['editProfile', 'Edit their profile', 'Changing their own name, picture and colour'],
 ];
 const KEYS = new Set(FEATURES.map((f) => f[0]));
 // API routes behind each feature, refused when it's off (the menu hides them too).
-const ROUTES = { search: /^\/api\/search(\/|$)/, surprise: /^\/api\/surprise(\/|$)/, timeline: /^\/api\/timeline(\/|$)/, wrapped: /^\/api\/wrapped(\/|$)/,
+const ROUTES = { download: /^\/api\/downloads(\/|$)/, search: /^\/api\/search(\/|$)/, surprise: /^\/api\/surprise(\/|$)/, timeline: /^\/api\/timeline(\/|$)/, wrapped: /^\/api\/wrapped(\/|$)/,
   editProfile: /^\/api\/profiles\/(me$|\d+\/avatar)/ };
 const WRITE_ONLY = new Set(['editProfile']); // reading your own profile is fine; changing it isn't
 

@@ -21,6 +21,7 @@ import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
@@ -86,9 +87,11 @@ class MainActivity : Activity() {
         // The music notification's buttons run in the web app's music player.
         MusicService.commands = { js -> runOnUiThread { if (!isDestroyed) web.evaluateJavascript("window.HallFlix && HallFlix.music && HallFlix.music.$js", null) } }
         web.webViewClient = object : WebViewClient() {
+            // The Downloads page and downloaded files, served from inside the app (works offline).
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? = LocalFiles.intercept(this@MainActivity, request)
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 // Anything on the HallFlix server stays in the app, even after an http → https redirect.
-                if (Server.sameSite(server, request.url)) return false
+                if (Server.sameSite(server, request.url) || request.url.host == LocalFiles.HOST) return false
                 // Trailers and other outside links open in another app, if there is one.
                 try { startActivity(Intent(Intent.ACTION_VIEW, request.url)) } catch (e: Exception) { /* nothing can open it */ }
                 return true
@@ -106,6 +109,13 @@ class MainActivity : Activity() {
                 }
                 reveal()
                 CookieManager.getInstance().flush()
+                // Online again: send where films were stopped offline, and carry on getting downloads ready.
+                if (Server.sameSite(server, Uri.parse(url))) {
+                    val token = Server.token(server)
+                    DownloadStore.sync(this@MainActivity, server, token)
+                    DownloadStore.resume(this@MainActivity, server, token)
+                    watchDownloads()
+                }
             }
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                 if (!request.isForMainFrame) return
@@ -116,6 +126,8 @@ class MainActivity : Activity() {
 
         findViewById<Button>(R.id.connect).setOnClickListener { connect() }
         findViewById<Button>(R.id.retry).setOnClickListener { load() }
+        findViewById<Button>(R.id.offline).setOnClickListener { openDownloads() }
+        DownloadStore.changed = { if (!isDestroyed) web.evaluateJavascript("window.dispatchEvent(new Event('hallflix-downloads'))", null) }
         findViewById<EditText>(R.id.server).setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_GO) { connect(); true } else false }
 
         server = Server.url(this)
@@ -155,6 +167,23 @@ class MainActivity : Activity() {
         web.requestFocus()
     }
 
+    private fun hasDownloads() = DownloadStore.state(this).optJSONArray("items")?.length()?.let { it > 0 } == true
+
+    /** The Downloads page: built into the app, so it opens with or without a connection. */
+    private fun openDownloads() {
+        ui.removeCallbacks(slow)
+        panel.visibility = View.GONE
+        loadFailed = false
+        web.loadUrl(LocalFiles.PAGE)
+        watchDownloads()
+    }
+
+    /** While anything is downloading, check on it every couple of seconds (the Downloads page shows the progress). */
+    private val downloadTick = object : Runnable {
+        override fun run() { if (DownloadStore.refresh(this@MainActivity)) ui.postDelayed(this, 2000) }
+    }
+    private fun watchDownloads() { ui.removeCallbacks(downloadTick); ui.post(downloadTick) }
+
     private fun showPanel(title: String, text: String, retry: Boolean) {
         ui.removeCallbacks(slow)
         web.visibility = View.INVISIBLE
@@ -166,6 +195,7 @@ class MainActivity : Activity() {
         if (field.text.isEmpty()) field.setText(server.ifEmpty { DEFAULT_SERVER })
         val retryButton = findViewById<Button>(R.id.retry)
         retryButton.visibility = if (retry) View.VISIBLE else View.GONE
+        findViewById<Button>(R.id.offline).visibility = if (retry && hasDownloads()) View.VISIBLE else View.GONE
         (if (retry) retryButton else findViewById<Button>(R.id.connect)).requestFocus()
     }
 
@@ -274,6 +304,40 @@ class MainActivity : Activity() {
                 } catch (e: Exception) {
                     web.evaluateJavascript("window.HallFlix && HallFlix.toast('Voice search is not available on this device')", null)
                 }
+            }
+        }
+
+        /** Save a title to enjoy offline: { itemId, quality: "original" | "1080" | "720" | "480" }. */
+        @JavascriptInterface
+        fun download(json: String) {
+            val o = JSONObject(json)
+            DownloadStore.add(this@MainActivity, server, Server.token(server), o.getLong("itemId"), o.optString("quality", "original"))
+            runOnUiThread { watchDownloads() }
+        }
+
+        /** What's downloaded or on its way, with progress, and the space used and left. */
+        @JavascriptInterface
+        fun downloads(): String { DownloadStore.refresh(this@MainActivity); return DownloadStore.state(this@MainActivity).toString() }
+
+        @JavascriptInterface
+        fun deleteDownload(id: Long) { DownloadStore.remove(this@MainActivity, id) }
+
+        @JavascriptInterface
+        fun setDownloadWifiOnly(on: Boolean) { DownloadStore.setWifiOnly(this@MainActivity, on) }
+
+        @JavascriptInterface
+        fun openDownloads() { runOnUiThread { this@MainActivity.openDownloads() } }
+
+        /** From the Downloads page back to HallFlix online (or the "can't reach" panel if still offline). */
+        @JavascriptInterface
+        fun goOnline() { runOnUiThread { load() } }
+
+        /** Play a downloaded film or episode in the app's player, with no connection needed. */
+        @JavascriptInterface
+        fun playOffline(id: Long) {
+            runOnUiThread {
+                playerOpen = true
+                startActivity(Intent(this@MainActivity, PlayerActivity::class.java).putExtra("server", server).putExtra("offline", id))
             }
         }
 

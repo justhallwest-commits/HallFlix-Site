@@ -8,6 +8,7 @@ import { Router, HttpError, json, readJson, sendFile, sendText, safeJoin } from 
 import * as auth from './auth.js';
 import * as catalog from './catalog.js';
 import * as playback from './playback.js';
+import * as downloads from './downloads.js';
 import * as studio from './studio.js';
 import * as manage from './manage.js';
 import * as extras from './extras.js';
@@ -101,6 +102,7 @@ catalog.routes(r);
 clips.routes(r);
 fit.routes(r, open);
 playback.routes(r);
+downloads.routes(r);
 studio.routes(r);
 manage.routes(r);
 extras.routes(r);

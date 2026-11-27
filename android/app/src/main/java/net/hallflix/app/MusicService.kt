@@ -199,11 +199,12 @@ class MusicService : Service() {
         if (url.isEmpty()) return
         io.execute {
             try {
-                val c = URL(url).openConnection() as HttpURLConnection
+                // A web address (with the web app's sign-in), or a downloaded cover on the phone (file://).
+                val c = URL(url).openConnection()
                 c.connectTimeout = 8000; c.readTimeout = 15000
-                CookieManager.getInstance().getCookie(url)?.let { c.setRequestProperty("Cookie", it) }
-                val bytes = c.inputStream.use { it.readBytes() }
-                c.disconnect()
+                if (c is HttpURLConnection) CookieManager.getInstance().getCookie(url)?.let { c.setRequestProperty("Cookie", it) }
+                val bytes = c.getInputStream().use { it.readBytes() }
+                (c as? HttpURLConnection)?.disconnect()
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
                 var sample = 1

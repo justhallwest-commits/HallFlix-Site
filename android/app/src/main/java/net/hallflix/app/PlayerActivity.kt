@@ -77,6 +77,8 @@ class PlayerActivity : Activity() {
     private var deviceId = java.util.UUID.randomUUID().toString().take(12)
     private var deviceName = if (android.os.Build.MODEL.startsWith("AFT")) "Fire TV" else android.os.Build.MODEL
     private var gestures: PlayerGestures? = null
+    /** Playing a download (no server needed): its id. Progress is kept on the phone and sent once online. */
+    private var offlineId = 0L
     private var inPip = false
     /** Phones and tablets: touch gestures and picture-in-picture. Never on Fire TV or Android TV. */
     private val tv by lazy {
@@ -125,6 +127,8 @@ class PlayerActivity : Activity() {
             override fun onIsPlayingChanged(isPlaying: Boolean) { updatePip() }
             override fun onVideoSizeChanged(videoSize: VideoSize) { updatePip() }
         })
+        offlineId = intent.getLongExtra("offline", 0L)
+        if (offlineId > 0) { startOffline(offlineId); ui.postDelayed(tick, 10_000); ui.postDelayed(introWatch, 1000); return }
         start(intent.getLongExtra("itemId", 0), intent.getDoubleExtra("start", -1.0).takeIf { it >= 0 }, prerolls = true)
         ui.postDelayed(tick, 10_000)
         ui.postDelayed(introWatch, 1000)
@@ -164,6 +168,30 @@ class PlayerActivity : Activity() {
         }
     }
 
+    /** A downloaded film or episode, from the phone: its file, its subtitles, and where it was stopped. */
+    private fun startOffline(id: Long) {
+        hideMessage()
+        val d = DownloadStore.find(this, id)
+        val file = d?.let { DownloadStore.file(this, it) }
+        if (d == null || file == null) { showMessage("Not downloaded", "This download isn't on the phone any more.", "Go back") { finish() }; return }
+        val meta = d.optJSONObject("meta") ?: JSONObject()
+        val json = JSONObject(meta.toString()).put("kind", "main").put("itemId", id).put("duration", meta.optDouble("runtime", 0.0))
+        json.put("subtitle", meta.optJSONObject("show")?.let { s -> "${s.optString("title")} · S${s.optInt("season")} E${s.optInt("episode")}" } ?: meta.optString("year").takeIf { it != "null" } ?: "")
+        // The next episode plays on if it's downloaded too.
+        meta.optLong("nextId").takeIf { it > 0 }?.let { n -> DownloadStore.find(this, n)?.takeIf { DownloadStore.file(this, it) != null }?.let { json.put("next", JSONObject().put("id", n).put("title", it.optString("title")).apply { it.optJSONObject("meta")?.optJSONObject("show")?.let { s -> put("show", s) } }) } }
+        val subs = JSONArray()
+        d.optJSONArray("subs")?.let { a -> for (i in 0 until a.length()) a.getJSONObject(i).let { s -> subs.put(JSONObject().put("id", "x$i").put("label", s.optString("label")).put("lang", s.optString("lang")).put("file", s.optString("file"))) } }
+        json.put("subs", subs)
+        val e = Entry(json, Uri.fromFile(file).toString(), false, 0.0, null)
+        entries = listOf(e)
+        resumeAt = if (d.optBoolean("watched") && d.optDouble("position", 0.0) == 0.0) 0.0 else d.optDouble("position", 0.0)
+        resumed = false
+        exo.setMediaItems(listOf(mediaItem(e, 0)))
+        exo.prepare()
+        exo.playWhenReady = true
+        onEntryChanged()
+    }
+
     /** Runs on the io thread. Direct files play from /api/file; everything else starts a converted stream at `at`. */
     private fun resolve(q: JSONObject, at: Double): Entry {
         if (q.optString("mode") == "direct") return Entry(q, server + q.optString("url", "/api/file/${q.getLong("itemId")}"), false, 0.0, null)
@@ -180,7 +208,8 @@ class PlayerActivity : Activity() {
         val configs = (0 until subs.length()).map { subs.getJSONObject(it) }
             .filter { s -> if (e.hls) e.offset < 1 else s.optString("id").startsWith("x") }
             .map { s ->
-                MediaItem.SubtitleConfiguration.Builder(Uri.parse(server + s.getString("url") + (token?.let { "?t=$it" } ?: "")))
+                val where = if (s.has("file")) Uri.fromFile(java.io.File(DownloadStore.dir(this), s.getString("file"))) else Uri.parse(server + s.getString("url") + (token?.let { "?t=$it" } ?: ""))
+                MediaItem.SubtitleConfiguration.Builder(where)
                     .setMimeType(MimeTypes.TEXT_VTT).setLanguage(s.optString("lang").ifEmpty { null }).setLabel(s.optString("label")).build()
             }
         if (configs.isNotEmpty()) b.setSubtitleConfigurations(configs)
@@ -251,6 +280,7 @@ class PlayerActivity : Activity() {
     /** A dropped stream (expired session, network blip) restarts where the viewer was, up to three times. */
     private fun recover(error: PlaybackException?) {
         val e = current() ?: return
+        if (offlineId > 0) { showMessage("Can't play this download", error?.message ?: "The file could not be played.", "Go back") { finish() }; return }
         retries++
         if (retries > 3 || (!e.hls && error?.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED && !e.main)) {
             if (!e.main && exo.hasNextMediaItem()) { exo.seekToNextMediaItem(); exo.prepare(); return } // skip a broken pre-roll
@@ -284,8 +314,8 @@ class PlayerActivity : Activity() {
         val label = if (show != null) "S${show.optInt("season")} E${show.optInt("episode")} · ${next.optString("title")}" else next.optString("title")
         val tickDown = object : Runnable {
             override fun run() {
-                if (left <= 0) { nextUp = null; start(next.getLong("id"), null, prerolls = false); return }
-                showMessage("Up next in $left", label, "Play now") { ui.removeCallbacks(this); nextUp = null; start(next.getLong("id"), null, prerolls = false) }
+                if (left <= 0) { nextUp = null; playNext(next.getLong("id")); return }
+                showMessage("Up next in $left", label, "Play now") { ui.removeCallbacks(this); nextUp = null; playNext(next.getLong("id")) }
                 left--
                 ui.postDelayed(this, 1000)
             }
@@ -294,12 +324,15 @@ class PlayerActivity : Activity() {
         tickDown.run()
     }
 
+    private fun playNext(id: Long) { if (offlineId > 0) { offlineId = id; startOffline(id) } else start(id, null, prerolls = false) }
+
     private fun report(ended: Boolean = false) {
         if (!::exo.isInitialized) return
         val e = current() ?: return
         if (!e.main || exo.playbackState == Player.STATE_IDLE) return
         val dur = if (e.duration > 0) e.duration else e.offset + exo.duration.coerceAtLeast(0) / 1000.0
         val pos = if (ended) dur else position(e)
+        if (offlineId > 0) { DownloadStore.savePosition(this, e.itemId, pos, dur, ended); return }
         val body = JSONObject().put("itemId", e.itemId).put("position", pos).put("duration", dur).put("ended", ended)
         io.execute { try { Server.call(server, token, "POST", "/api/progress", body) } catch (_: Exception) { } }
     }
@@ -307,7 +340,7 @@ class PlayerActivity : Activity() {
     private val tick = object : Runnable {
         override fun run() {
             if (exo.isPlaying) report()
-            for (sid in entries.mapNotNull { it.sid }) io.execute { try { Server.call(server, token, "POST", "/api/play/ping/$sid") } catch (_: Exception) { } }
+            if (offlineId == 0L) for (sid in entries.mapNotNull { it.sid }) io.execute { try { Server.call(server, token, "POST", "/api/play/ping/$sid") } catch (_: Exception) { } }
             ui.postDelayed(this, 10_000)
         }
     }
@@ -466,7 +499,7 @@ class PlayerActivity : Activity() {
             finished = true
             nextUp?.let { ui.removeCallbacks(it) }
             report()
-            try { remoteIo.execute { try { Server.call(server, token, "POST", "/api/remote/state", JSONObject().put("device", deviceId).put("closed", true)) } catch (_: Exception) { } } } catch (_: Exception) { }
+            if (offlineId == 0L) try { remoteIo.execute { try { Server.call(server, token, "POST", "/api/remote/state", JSONObject().put("device", deviceId).put("closed", true)) } catch (_: Exception) { } } } catch (_: Exception) { }
             if (::exo.isInitialized) stopSessions()
         }
         super.finish()

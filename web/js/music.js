@@ -2,6 +2,7 @@
 // Now Playing takes its colours from the album art, and has time-synced lyrics that sweep across each line as it is
 // sung (word by word when the lyrics have word timing), a full-screen lyrics view, a queue you can reorder, song
 // radio, likes, volume and a sleep timer. Files the browser can play go straight from the NAS; the rest arrive as MP3.
+import { canDownload, DL_ICON, download } from './downloads.js';
 import { $, $$, api, html, raw, icons, fmtTime, toast } from './core.js';
 import { tint } from './feel.js';
 
@@ -442,7 +443,7 @@ export async function trackMenu(btn, t, { list } = {}) {
   popMenu(btn, html`<div class="who">${t.title}<small>${[t.author, t.album].filter(Boolean).join(' · ')}</small></div>
     <button data-m="next">${I.next} Play next</button><button data-m="queue">${I.queue} Add to queue</button>
     <button data-m="radio">${I.radio} Start song radio</button><button data-m="like">${liked ? I.heartOn : I.heart} ${liked ? 'Remove from Liked songs' : 'Add to Liked songs'}</button>
-    <button data-m="playlist">${icons.plus} Add to a playlist</button>
+    <button data-m="playlist">${icons.plus} Add to a playlist</button>${canDownload() ? html`<button data-m="download">${raw(DL_ICON)} Download</button>` : ''}
     ${t.albumId ? html`<a href="#/title/${t.albumId}" data-m="album">${I.album} Go to the album</a>` : ''}${t.artistId ? html`<a href="#/title/${t.artistId}" data-m="artist">${I.artist} Go to the artist</a>` : ''}
     ${list?.length > 1 ? html`<button data-m="allnext">${I.next} Play all ${list.length} next</button>` : ''}`, (v) => {
     if (v === 'next') playNext([t]);
@@ -450,6 +451,7 @@ export async function trackMenu(btn, t, { list } = {}) {
     else if (v === 'radio') startRadio(`track:${t.id}`, { keep: false });
     else if (v === 'like') toggleLike(t);
     else if (v === 'playlist') pickPlaylist([t.id]);
+    else if (v === 'download') download([t.id], { title: t.title });
     else if (v === 'album') location.hash = `#/title/${t.albumId}`;
     else if (v === 'artist') location.hash = `#/title/${t.artistId}`;
     else if (v === 'allnext') playNext(list);

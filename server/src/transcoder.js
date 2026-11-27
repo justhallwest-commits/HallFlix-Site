@@ -157,12 +157,109 @@ async function detect() {
   console.log('[transcoder] no usable graphics device; converting in software');
 }
 
+// ---------- download copies: one complete MP4 at a chosen height, for watching offline ----------
+// Made one at a time (playback always comes first), kept for two days after they were last fetched, and gone when the
+// transcoder restarts (the app then asks for the copy again).
+const jobs = new Map(); // key -> { key, job, file, state: queued|working|ready|failed, progress, error, last, proc }
+const JOB_KEEP_MS = 48 * 3600e3;
+const jobDir = () => path.join(cfg.transcodeDir, 'downloads');
+
+/** ffmpeg arguments for a download copy: H.264 video at `job.height`, stereo AAC, ready to play while it downloads. */
+export function buildJobArgs(job, out, hw = null) {
+  const a = ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y'];
+  const useHw = hw && !job.hdr;
+  if (useHw) a.push('-hwaccel', 'vaapi', '-hwaccel_device', hw.device, '-hwaccel_output_format', 'vaapi');
+  a.push('-i', job.input, '-map', '0:v:0');
+  if (job.audio !== 'none') a.push('-map', `0:a:${job.audioIndex || 0}?`);
+  a.push('-sn', '-dn', '-map_metadata', '-1', '-map_chapters', '-1');
+  const h = Math.min(job.height || 720, job.srcHeight || 1080);
+  const rate = BITRATE(h);
+  if (useHw) a.push('-vf', `scale_vaapi=w=-2:h=${h}:format=nv12`, '-c:v', 'h264_vaapi', '-rc_mode', 'VBR', '-b:v', rate, '-maxrate', rate);
+  else {
+    const chain = [];
+    if (job.hdr && state.tonemap) chain.push('zscale=t=linear:npl=100', 'format=gbrpf32le', 'zscale=p=bt709', 'tonemap=hable:desat=0', 'zscale=t=bt709:m=bt709:r=tv');
+    chain.push(`scale=-2:${h}`, 'format=yuv420p');
+    a.push('-vf', chain.join(','), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-maxrate', rate, '-bufsize', rate.replace(/[\d.]+/, (n) => n * 2));
+  }
+  if (job.audio !== 'none') a.push('-c:a', 'aac', '-ac', '2', '-b:a', h > 500 ? '160k' : '128k');
+  a.push('-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', '-f', 'mp4', out);
+  return a;
+}
+
+const jobStatus = (j) => ({
+  key: j.key, state: j.state, progress: Math.round((j.progress || 0) * 1000) / 1000, error: j.error || undefined,
+  size: j.state === 'ready' ? fs.statSync(j.file).size : undefined,
+  waiting: j.state === 'queued' ? [...jobs.values()].filter((x) => x.state === 'queued' && x.at < j.at).length : undefined,
+});
+
+function runJobs() {
+  if ([...jobs.values()].some((j) => j.state === 'working')) return;
+  const next = [...jobs.values()].filter((j) => j.state === 'queued').sort((x, y) => x.at - y.at)[0];
+  if (next) startJob(next, state.hw);
+}
+
+function startJob(j, hw) {
+  fs.mkdirSync(jobDir(), { recursive: true });
+  const part = `${j.file}.part`;
+  j.state = 'working'; j.progress = 0; j.stderr = '';
+  const usedHw = !!(hw && !j.job.hdr);
+  const proc = spawn(cfg.ffmpeg, buildJobArgs(j.job, part, hw), { stdio: ['ignore', 'pipe', 'pipe'] });
+  j.proc = proc;
+  let buf = '';
+  proc.stdout.on('data', (d) => {
+    buf += d;
+    const lines = buf.split('\n'); buf = lines.pop();
+    for (const l of lines) {
+      const m = /^out_time_(?:us|ms)=(\d+)/.exec(l);
+      if (m && j.job.duration > 0) j.progress = Math.min(0.99, +m[1] / 1e6 / j.job.duration);
+    }
+  });
+  proc.stderr.on('data', (d) => { j.stderr = (j.stderr + d).slice(-2000); });
+  proc.on('exit', (code) => {
+    if (j.proc !== proc) return;
+    j.proc = null;
+    if (code === 0 && fs.existsSync(part)) { fs.renameSync(part, j.file); j.state = 'ready'; j.progress = 1; j.last = Date.now(); }
+    else if (j.cancelled) { fs.rm(part, { force: true }, () => {}); }
+    else if (usedHw && !j.retried) { j.retried = true; console.warn(`[transcoder] hardware download copy failed for ${j.key}, retrying in software`); startJob(j, null); return; }
+    else { j.state = 'failed'; j.error = j.stderr.trim().split('\n').pop() || `ffmpeg exit ${code}`; fs.rm(part, { force: true }, () => {}); console.error(`[transcoder] download copy ${j.key} failed: ${j.stderr.trim()}`); }
+    runJobs();
+  });
+}
+
+function addJob(body) {
+  if (!/^[a-f0-9]{8,40}$/.test(String(body.key))) throw new HttpError(400, 'Bad key');
+  const have = jobs.get(body.key);
+  if (have && have.state !== 'failed') { have.last = Date.now(); return jobStatus(have); }
+  if (!body.input || !fs.existsSync(body.input)) throw new HttpError(404, 'Media file not found');
+  const j = { key: body.key, at: Date.now(), last: Date.now(), state: 'queued', progress: 0,
+    file: path.join(jobDir(), `${body.key}.mp4`),
+    job: { input: body.input, height: +body.height || 720, srcHeight: +body.srcHeight || 1080, audioIndex: +body.audioIndex || 0, audio: body.audio === 'none' ? 'none' : 'aac', hdr: !!body.hdr, duration: +body.duration || 0 } };
+  jobs.set(j.key, j);
+  runJobs();
+  return jobStatus(j);
+}
+
+function dropJob(j) {
+  if (!j) return;
+  jobs.delete(j.key);
+  j.cancelled = true;
+  try { j.proc?.kill('SIGKILL'); } catch { /* gone */ }
+  fs.rm(j.file, { force: true }, () => {});
+  runJobs();
+}
+
+function jobHousekeeping() {
+  const now = Date.now();
+  for (const j of jobs.values()) if ((j.state === 'ready' || j.state === 'failed') && now - j.last > JOB_KEEP_MS) dropJob(j);
+}
+
 export async function startTranscoder(port = cfg.transcoderPort) {
   // Empty the folder rather than removing it: in Docker it is a mounted volume and cannot be deleted.
   fs.mkdirSync(cfg.transcodeDir, { recursive: true });
   for (const name of fs.readdirSync(cfg.transcodeDir)) fs.rmSync(path.join(cfg.transcodeDir, name), { recursive: true, force: true });
   await detect();
   const timer = setInterval(housekeeping, 1000);
+  const jobTimer = setInterval(jobHousekeeping, 10 * 60e3);
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://x');
@@ -171,6 +268,15 @@ export async function startTranscoder(port = cfg.transcoderPort) {
         return json(res, 200, { ok: true, hw: state.hw?.type || 'software', tonemap: state.tonemap, sessions: sessions.size });
       }
       if (req.method === 'POST' && url.pathname === '/sessions') return json(res, 200, await create(await readJson(req)));
+      if (req.method === 'POST' && url.pathname === '/jobs') return json(res, 200, addJob(await readJson(req)));
+      if (parts[0] === 'jobs' && parts[1]) {
+        const j = jobs.get(parts[1]);
+        if (req.method === 'DELETE') { dropJob(j); return json(res, 200, { ok: true }); }
+        if (!j) throw new HttpError(404, 'No such download copy');
+        if (!parts[2]) return json(res, 200, jobStatus(j));
+        if (parts[2] === 'file' && j.state === 'ready') { j.last = Date.now(); return sendFile(req, res, j.file, { cache: 'no-store' }); }
+        throw new HttpError(409, 'The download copy is not ready yet');
+      }
       const s = sessions.get(parts[1]);
       if (parts[0] === 'sessions' && req.method === 'DELETE') { destroy(s); return json(res, 200, { ok: true }); }
       if (parts[0] === 'sessions' && parts[2] === 'ping') { if (s) s.last = Date.now(); return json(res, s ? 200 : 404, { ok: !!s }); }
@@ -195,5 +301,5 @@ export async function startTranscoder(port = cfg.transcoderPort) {
   });
   await new Promise((resolve) => server.listen(port, resolve));
   console.log(`[transcoder] listening on ${port}`);
-  return { server, close: () => { clearInterval(timer); for (const s of [...sessions.values()]) destroy(s); return new Promise((r) => server.close(r)); } };
+  return { server, close: () => { clearInterval(timer); clearInterval(jobTimer); for (const s of [...sessions.values()]) destroy(s); for (const j of [...jobs.values()]) dropJob(j); return new Promise((r) => server.close(r)); } };
 }
