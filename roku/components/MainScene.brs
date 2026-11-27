@@ -49,6 +49,21 @@ sub init()
     m.ping = m.top.findNode("ping")
     m.ping.observeField("fire", "onPing")
 
+    ' This Roku as a screen for the phone remote and Play on TV: a lasting id and the name set in the Roku's settings.
+    m.device = m.reg.Read("device")
+    di = CreateObject("roDeviceInfo")
+    if m.device = "" then
+        m.device = Left(LCase(di.GetRandomUUID().Replace("-", "")), 12)
+        m.reg.Write("device", m.device)
+        m.reg.Flush()
+    end if
+    m.deviceName = "Roku"
+    friendly = di.GetFriendlyName()
+    if friendly <> invalid and friendly <> "" then m.deviceName = friendly
+    m.listen = m.top.findNode("listen")
+    m.listen.observeField("fire", "onListen")
+    m.listen.control = "start"
+
     m.logo.uri = "pkg:/images/logo.png"
     if m.server = "" then askServer() else boot()
 end sub
@@ -84,6 +99,8 @@ sub onApi(msg as object)
         onItem(r)
     else if k = "play" then
         onPlay(r)
+    else if k = "remote" then
+        onRemote(r)
     end if
 end sub
 
@@ -704,7 +721,86 @@ sub closePlayer(failed as boolean)
     end if
 end sub
 
-' ---------- remote ----------
+' ---------- phone remote and Play on TV ----------
+' Every few seconds: say what is playing (or that this Roku is free) and collect the phone's commands.
+sub onListen()
+    if m.token = invalid or m.token = "" or m.server = "" then return
+    if m.screen = "profiles" or m.screen = "problem" or m.screen = "" then return
+    body = { device: m.device, name: m.deviceName, tv: true }
+    if m.screen = "player" and m.queue <> invalid then
+        q = m.queue[m.mainIndex]
+        if q <> invalid then
+            dur = num(q.entry.duration)
+            if dur <= 0 then dur = num(q.offset) + m.video.duration
+            at = 0
+            if m.video.contentIndex = m.mainIndex then at = num(q.offset) + m.video.position
+            body.itemId = q.entry.itemId
+            body.title = q.entry.title
+            if q.entry.subtitle <> invalid then body.subtitle = q.entry.subtitle
+            if q.entry.backdrop <> invalid then body.art = img(q.entry.backdrop)
+            body.position = at
+            body.duration = dur
+            body.paused = m.video.state = "paused"
+            body.hasNext = q.entry.next <> invalid
+        end if
+    end if
+    api("remote", "POST", "/api/remote/state", body)
+end sub
+
+sub onRemote(r as object)
+    if not r.ok or r.data = invalid or r.data.commands = invalid then return
+    for each c in r.data.commands
+        remoteCommand(c)
+    end for
+end sub
+
+sub remoteCommand(c as object)
+    cmd = c.cmd
+    v = num(c.value)
+    if cmd = "start" then
+        ' Play on TV: a new title, replacing anything playing now.
+        if m.screen = "player" then
+            report(false)
+            m.video.control = "stop"
+            stopSessions()
+        end if
+        start = invalid
+        if v > 0 then start = v
+        play(idStr(c.itemId), start, true)
+        return
+    end if
+    if m.screen <> "player" or m.queue = invalid then return
+    q = m.queue[m.mainIndex]
+    if cmd = "toggle" then
+        if m.video.state = "paused" then m.video.control = "resume" else m.video.control = "pause"
+    else if cmd = "play" then
+        m.video.control = "resume"
+    else if cmd = "pause" then
+        m.video.control = "pause"
+    else if cmd = "seek" then
+        if m.video.contentIndex = m.mainIndex then
+            at = v - num(q.offset)
+            if at < 0 then at = 0
+            m.video.seek = at
+        end if
+    else if cmd = "skip" then
+        at = m.video.position + v
+        if at < 0 then at = 0
+        m.video.seek = at
+    else if cmd = "next" then
+        nxt = q.entry.next
+        if nxt <> invalid then
+            report(false)
+            m.video.control = "stop"
+            stopSessions()
+            play(idStr(nxt.id), invalid, false)
+        end if
+    else if cmd = "stop" then
+        closePlayer(false)
+    end if
+end sub
+
+' ---------- menu ----------
 sub menu()
     d = CreateObject("roSGNode", "Dialog")
     d.title = "HallFlix"

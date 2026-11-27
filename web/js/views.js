@@ -4,6 +4,7 @@ import * as browse from './browse.js';
 import * as feel from './feel.js';
 import * as media from './media.js';
 import * as more from './more.js';
+import { addCastButton, castTo } from './cast.js';
 import * as comics from './comics.js';
 import * as profileEdit from './profile.js';
 import * as ratings from './ratings.js';
@@ -611,6 +612,8 @@ export async function title(id) {
       await api('POST', '/api/mylist', { itemId: d.id, on: d.inList }).catch((err) => toast(err.message));
       toast(d.inList ? 'Added to My List' : 'Removed from My List'); markStale();
     }
+    const cast = e.target.closest('[data-cast]');
+    if (cast) { castTo(+cast.dataset.cast); return; }
     if (e.target.closest('[data-seen]')) {
       const all = d.kind === 'movie' ? !!d.progress?.watched : d.seasons.every((s) => s.episodes.every((x) => x.progress?.watched));
       await api('POST', '/api/watched', { itemId: d.id, watched: !all }).catch((err) => toast(err.message));
@@ -619,6 +622,7 @@ export async function title(id) {
   };
   o.scrollTop = 0;
   ($('.episode.focus', o) && d.focus ? $('.episode.focus', o) : $('.btn.primary', o))?.focus({ preventScroll: !d.focus });
+  addCastButton(o, d.playId); // "Play on TV", when a HallFlix TV signed in as this profile is on
 }
 
 const LANG_NAMES = { en: 'English', eng: 'English', es: 'Spanish', spa: 'Spanish', fr: 'French', fre: 'French', fra: 'French', de: 'German', ger: 'German', deu: 'German', it: 'Italian', ita: 'Italian',

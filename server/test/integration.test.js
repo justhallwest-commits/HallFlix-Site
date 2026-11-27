@@ -882,6 +882,21 @@ test('plain-language search, Top 10, the hub, cast pages, TV sign-in by phone an
   assert.deepEqual((await hf.api('POST', '/api/remote/state', { device: 'tv1', name: 'Living room', position: 12, duration: 30 })).commands, [{ cmd: 'play', value: 0 }, { cmd: 'seek', value: 20 }]);
   await hf.api('POST', '/api/remote/state', { device: 'tv1', closed: true });
   assert.equal((await hf.api('GET', '/api/remote/devices')).length, 0);
+
+  // Play on TV: an idle TV checks in, a phone sends it a title, and the TV picks it up with the start time.
+  assert.deepEqual((await hf.api('POST', '/api/remote/state', { device: 'tv2', name: 'Fire TV', tv: true })).commands, []);
+  assert.deepEqual((await hf.api('GET', '/api/remote/devices')).map((x) => [x.id, x.tv, x.idle]), [['tv2', true, true]]);
+  await hf.api('POST', '/api/remote/state', { device: 'laptop', name: 'Chrome on Windows', itemId: night.id, title: 'Night Drive' });
+  assert.equal((await hf.api('POST', '/api/remote/command', { device: 'laptop', cmd: 'start', itemId: night.id })).$status, 400, 'only TVs can be sent a title');
+  assert.equal((await hf.api('POST', '/api/remote/command', { device: 'tv2', cmd: 'start', itemId: 999999 })).$status, 404);
+  assert.equal((await hf.api('POST', '/api/remote/command', { device: 'gone', cmd: 'start', itemId: night.id })).$status, 404);
+  await hf.api('POST', '/api/remote/command', { device: 'tv2', cmd: 'pause' });
+  await hf.api('POST', '/api/remote/command', { device: 'tv2', cmd: 'start', itemId: night.id, value: 95 });
+  assert.deepEqual((await hf.api('POST', '/api/remote/state', { device: 'tv2', name: 'Fire TV', tv: true })).commands, [{ cmd: 'start', itemId: night.id, value: 95 }], 'a new title replaces waiting commands');
+  // Playing, the same TV shows once, no longer idle.
+  await hf.api('POST', '/api/remote/state', { device: 'tv2', name: 'Fire TV', tv: true, itemId: night.id, title: 'Night Drive', position: 95, duration: 300 });
+  assert.deepEqual((await hf.api('GET', '/api/remote/devices')).filter((x) => x.id === 'tv2').map((x) => [x.idle, x.title]), [[false, 'Night Drive']]);
+  for (const device of ['tv2', 'laptop']) await hf.api('POST', '/api/remote/state', { device, closed: true });
 });
 
 test('admins remove titles from HallFlix, delete files from the NAS, and bring titles back', async () => {

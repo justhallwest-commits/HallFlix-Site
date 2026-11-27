@@ -1,8 +1,9 @@
 // HallFlix web app entry: boot, routing, and the plugin API.
 import { initLean } from './lean.js';
-import { $, api, state, applyLook, on, emit, toast, html, raw, themeNow } from './core.js';
+import { $, api, state, applyLook, on, emit, toast, html, raw, themeNow, isTV } from './core.js';
 import * as views from './views.js';
-import { openPlayer, closePlayer, playerOpen } from './player.js';
+import { openPlayer, closePlayer, playerOpen, deviceId, deviceName } from './player.js';
+import { initCast } from './cast.js';
 import { initNav } from './nav.js';
 import { effects, startEffect } from './effects.js';
 import { initFeel } from './feel.js';
@@ -25,7 +26,7 @@ window.HallFlix = {
 
 let baseHash = null;
 // The Android app's player closed: refresh Continue Watching and progress bars.
-addEventListener('hallflix-native-closed', () => { views.markStale(); baseHash = null; route(); });
+addEventListener('hallflix-native-closed', () => { state.nativePlaying = false; views.markStale(); baseHash = null; route(); });
 async function route() {
   const hash = location.hash || '#/';
   const [path, qs = ''] = hash.slice(1).split('?');
@@ -33,9 +34,15 @@ async function route() {
   if (parts[0] === 'watch' && +parts[1]) {
     views.closeTitle();
     views.markStale();
-    const start = /(^|&)t=0/.test(qs) ? 0 : undefined;
-    // Inside the HallFlix Android app, video plays in the app's own player.
-    if (window.HallFlixNative) { window.HallFlixNative.play(JSON.stringify({ itemId: +parts[1], start: start ?? null })); history.back(); return; }
+    // ?t=0 starts from the beginning; ?at=SECONDS starts there (a phone's "Play on TV" from where it was).
+    const at = /(^|&)at=(\d+)/.exec(qs);
+    const start = /(^|&)t=0/.test(qs) ? 0 : at ? +at[2] : undefined;
+    // Inside the HallFlix Android app, video plays in the app's own player (as this device, for the phone remote).
+    if (window.HallFlixNative) {
+      state.nativePlaying = true;
+      window.HallFlixNative.play(JSON.stringify({ itemId: +parts[1], start: start ?? null, device: deviceId(), name: deviceName(), tv: isTV() }));
+      history.back(); return;
+    }
     await openPlayer(+parts[1], { start, cinema: /(^|&)night=1/.test(qs) });
     return;
   }
@@ -160,6 +167,7 @@ async function boot() {
   loadPlugins(b.plugins);
   views.shell();
   initMore();
+  initCast();
   on('signedout', () => location.reload());
   addEventListener('hashchange', route);
   await route();

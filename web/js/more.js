@@ -1,4 +1,5 @@
 // The personal hub, cast pages, previews on focus, the screensaver, signing a TV in from a phone, and the phone remote.
+import { castPending } from './cast.js';
 import { $, $$, api, html, raw, icons, state, themeNow, fmtTime, fmtRuntime, toast, avatarStyle, logoUrl } from './core.js';
 import { cardHtml } from './views.js';
 
@@ -185,7 +186,7 @@ export async function remote(view) {
   const draw = async () => {
     if (!box.isConnected) return clearInterval(remoteTimer);
     let list;
-    try { list = await api('GET', '/api/remote/devices'); } catch { return; }
+    try { list = (await api('GET', '/api/remote/devices')).filter((d) => !d.idle); } catch { return; }
     if (dragging) return;
     box.innerHTML = String(list.length ? html`${list.map((d) => html`<section class="rm-card" data-device="${d.id}">
         <div class="rm-art" style="${d.art ? `background-image:${bgUrl(d.art)}` : ''}"></div>
@@ -195,7 +196,8 @@ export async function remote(view) {
           <button class="rm-play" data-cmd="toggle" aria-label="${d.paused ? 'Play' : 'Pause'}">${d.paused ? icons.play : icons.pause}</button>
           <button data-cmd="skip" data-v="30" aria-label="Forward 30 seconds">${icons.fwd}</button></div>
         <div class="actions">${d.hasNext ? html`<button class="btn" data-cmd="next">${icons.next} Next episode</button>` : ''}<button class="btn" data-cmd="stop">Stop</button></div></section>`)}`
-      : html`<div class="empty"><h2>Nothing is playing</h2><p>Start a movie or episode on a TV, computer or the HallFlix app signed in as ${state.profile.name}, and its controls appear here.</p></div>`);
+      : castPending() ? html`<div class="empty"><h2>Starting on ${castPending()}…</h2><p>Its controls appear here as soon as it starts playing.</p></div>`
+      : html`<div class="empty"><h2>Nothing is playing</h2><p>Start a movie or episode on a TV, computer or the HallFlix app signed in as ${state.profile.name}, and its controls appear here. To start one on a TV from here, open the title and choose Play on TV.</p></div>`);
   };
   box.addEventListener('click', (e) => { const b = e.target.closest('[data-cmd]'); if (!b) return; send(b.closest('[data-device]').dataset.device, b.dataset.cmd, +b.dataset.v || 0); setTimeout(draw, 700); });
   box.addEventListener('input', (e) => { if (e.target.matches('input[type=range]')) dragging = e.target; });

@@ -271,6 +271,8 @@ export function routes(r) {
   });
 
   // ----- phone as a remote: a playing device reports in every couple of seconds and collects its commands -----
+  // TVs (the Fire TV / Android TV app, Roku, TV browsers) also report while idle (no itemId, tv: true), so a phone can
+  // start something on them: "Play on TV" sends { cmd: 'start', itemId, value: start time }.
   r.post('/api/remote/state', async ({ profile, req }) => {
     const b = await readJson(req);
     const id = String(b.device || '').slice(0, 40);
@@ -280,16 +282,25 @@ export function routes(r) {
     if (b.closed) { m.delete(id); return { commands: [] }; }
     const d = m.get(id) || { commands: [] };
     Object.assign(d, { name: String(b.name || 'A screen').slice(0, 60), seen: Date.now(),
+      tv: !!b.tv,
       state: { itemId: +b.itemId || null, title: String(b.title || '').slice(0, 200), subtitle: String(b.subtitle || '').slice(0, 200), position: +b.position || 0, duration: +b.duration || 0, paused: !!b.paused, art: String(b.art || '').slice(0, 300), hasNext: !!b.hasNext, at: Date.now() } });
     m.set(id, d);
     return { commands: d.commands.splice(0) };
   });
-  r.get('/api/remote/devices', async ({ profile }) => [...(devices.get(profile.id) || new Map())].map(([id, d]) => ({ id, name: d.name, ...d.state, position: d.state.paused ? d.state.position : d.state.position + (Date.now() - d.state.at) / 1000 })));
+  r.get('/api/remote/devices', async ({ profile }) => [...(devices.get(profile.id) || new Map())].map(([id, d]) => ({ id, name: d.name, tv: !!d.tv, idle: !d.state.itemId, ...d.state, position: d.state.paused ? d.state.position : d.state.position + (Date.now() - d.state.at) / 1000 })));
   r.post('/api/remote/command', async ({ profile, req }) => {
     const b = await readJson(req);
     const d = devices.get(profile.id)?.get(String(b.device));
-    if (!d) throw new HttpError(404, 'That screen is no longer playing');
-    if (!['toggle', 'play', 'pause', 'seek', 'skip', 'next', 'stop'].includes(b.cmd)) throw new HttpError(400, 'Unknown command');
+    if (!d) throw new HttpError(404, b.cmd === 'start' ? 'That TV is no longer on' : 'That screen is no longer playing');
+    if (!['toggle', 'play', 'pause', 'seek', 'skip', 'next', 'stop', 'start'].includes(b.cmd)) throw new HttpError(400, 'Unknown command');
+    if (b.cmd === 'start') {
+      if (!d.tv) throw new HttpError(400, 'Only TVs can be sent something to play');
+      const item = +b.itemId && await q1("select id from items where id=$1 and kind in ('movie','episode','clip')", [+b.itemId]);
+      if (!item) throw new HttpError(404, 'Nothing to play');
+      d.commands.splice(0); // a new title replaces anything still waiting
+      d.commands.push({ cmd: 'start', itemId: item.id, value: +b.value || 0 });
+      return { ok: true };
+    }
     if (d.commands.length < 20) d.commands.push({ cmd: b.cmd, value: +b.value || 0 });
     return { ok: true };
   });
