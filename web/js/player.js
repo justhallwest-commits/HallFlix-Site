@@ -1,6 +1,6 @@
 // The player. Plays a queue (pre-rolls, then the title), keeping the next item loaded on a second
 // video element so the switch from a pre-roll to the feature is instant.
-import { $, $$, api, html, raw, esc, icons, fmtTime, emit, toast, state, themeNow, logoUrl } from './core.js';
+import { $, $$, api, html, raw, esc, icons, fmtTime, emit, toast, state, themeNow, logoUrl, isTV } from './core.js';
 import { identSound } from './feel.js';
 import { pauseEffects } from './effects.js';
 
@@ -184,8 +184,8 @@ async function loadChapters(p, entry) {
 const chapterAt = (p, t) => { let c = null; for (const x of p.chapters || []) if (x.start <= t + 0.5) c = x; return c; };
 
 /** The phone remote: say what is playing every couple of seconds and do what the phone asked. */
-const deviceId = () => { let id = localStorageGet('hf_device', ''); if (!id) { id = Math.random().toString(36).slice(2, 12); localStorageSet('hf_device', id); } return id; };
-function deviceName() {
+export const deviceId = () => { let id = localStorageGet('hf_device', ''); if (!id) { id = Math.random().toString(36).slice(2, 12); localStorageSet('hf_device', id); } return id; };
+export function deviceName() {
   const ua = navigator.userAgent;
   if (/AFT|Fire TV/i.test(ua)) return 'Fire TV';
   if (/Android TV|GoogleTV|BRAVIA|SmartTV|Tizen|Web0S/i.test(ua)) return 'TV';
@@ -197,7 +197,7 @@ async function remoteReport(p, closed = false) {
   const e = p.slots[p.active]?.entry;
   if (state.preview || (!closed && e?.kind !== 'main')) return;
   const body = closed ? { device: deviceId(), closed: true }
-    : { device: deviceId(), name: deviceName(), itemId: e.itemId, title: e.title, subtitle: e.subtitle || '', position: now(p), duration: duration(p), paused: p.slots[p.active].video.paused, art: e.backdrop || '', hasNext: !!e.next };
+    : { device: deviceId(), name: deviceName(), tv: isTV(), itemId: e.itemId, title: e.title, subtitle: e.subtitle || '', position: now(p), duration: duration(p), paused: p.slots[p.active].video.paused, art: e.backdrop || '', hasNext: !!e.next };
   try {
     const r = await fetch('/api/remote/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: closed, credentials: 'same-origin' });
     if (closed || p.closed || !r.ok) return;
@@ -211,6 +211,7 @@ async function remoteReport(p, closed = false) {
       else if (c.cmd === 'skip') seekTo(p, (p.pending ?? now(p)) + c.value);
       else if (c.cmd === 'next' && e.next) { report(p); goNext(p, e.next); return; }
       else if (c.cmd === 'stop') { history.back(); return; }
+      else if (c.cmd === 'start' && +c.itemId) { report(p); location.hash = `#/watch/${+c.itemId}${+c.value > 0 ? `?at=${Math.floor(+c.value)}` : ''}`; return; }
     }
   } catch { /* offline for a moment */ }
 }

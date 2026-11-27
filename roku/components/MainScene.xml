@@ -54,5 +54,7 @@
             <Label width="180" height="44" horizAlign="center" vertAlign="center" text="Coming up" color="0xFFFFFFFF" font="font:SmallBoldSystemFont" />
         </Rectangle>
         <Timer id="ping" repeat="true" duration="30" />
+        <!-- Checks in with the server for the phone remote and Play on TV (see onListen). -->
+        <Timer id="listen" repeat="true" duration="3" />
     </children>
 </component>

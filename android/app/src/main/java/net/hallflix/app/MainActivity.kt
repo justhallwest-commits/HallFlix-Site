@@ -251,6 +251,9 @@ class MainActivity : Activity() {
                     .putExtra("server", server)
                     .putExtra("token", Server.token(server))
                     .putExtra("itemId", o.getLong("itemId"))
+                    .putExtra("device", o.optString("device"))
+                    .putExtra("deviceName", o.optString("name"))
+                    .putExtra("tv", o.optBoolean("tv"))
                     .putExtra("start", if (o.isNull("start") || !o.has("start")) -1.0 else o.getDouble("start")))
             }
         }

@@ -73,8 +73,9 @@ class PlayerActivity : Activity() {
     private var finished = false
     private var nextUp: Runnable? = null
     private val remoteIo = Executors.newSingleThreadExecutor()
-    private val deviceId = java.util.UUID.randomUUID().toString().take(12)
-    private val deviceName = if (android.os.Build.MODEL.startsWith("AFT")) "Fire TV" else android.os.Build.MODEL
+    // The same id and name the web app uses on this device, so the phone remote (and Play on TV) sees one screen.
+    private var deviceId = java.util.UUID.randomUUID().toString().take(12)
+    private var deviceName = if (android.os.Build.MODEL.startsWith("AFT")) "Fire TV" else android.os.Build.MODEL
     private var gestures: PlayerGestures? = null
     private var inPip = false
     /** Phones and tablets: touch gestures and picture-in-picture. Never on Fire TV or Android TV. */
@@ -88,6 +89,8 @@ class PlayerActivity : Activity() {
         setContentView(R.layout.activity_player)
         server = intent.getStringExtra("server") ?: return finish()
         token = intent.getStringExtra("token")
+        intent.getStringExtra("device")?.takeIf { it.isNotEmpty() }?.let { deviceId = it }
+        intent.getStringExtra("deviceName")?.takeIf { it.isNotEmpty() }?.let { deviceName = it }
         // Starting something new while an earlier film plays in the small window: that one stops.
         open?.get()?.takeIf { it !== this && !it.isFinishing }?.finish()
         open = WeakReference(this)
@@ -332,7 +335,7 @@ class PlayerActivity : Activity() {
             if (e != null && e.main && exo.playbackState != Player.STATE_IDLE && !finished) {
                 val dur = if (e.duration > 0) e.duration else e.offset + exo.duration.coerceAtLeast(0) / 1000.0
                 val next = e.json.optJSONObject("next")
-                val body = JSONObject().put("device", deviceId).put("name", deviceName).put("itemId", e.itemId).put("title", e.json.optString("title"))
+                val body = JSONObject().put("device", deviceId).put("name", deviceName).put("tv", tv).put("itemId", e.itemId).put("title", e.json.optString("title"))
                     .put("subtitle", e.json.optString("subtitle")).put("position", position(e)).put("duration", dur).put("paused", !exo.isPlaying)
                     .put("art", e.json.optString("backdrop")).put("hasNext", next != null)
                 remoteIo.execute {
@@ -358,6 +361,8 @@ class PlayerActivity : Activity() {
             "skip" -> p.seekTo((exo.currentPosition + (v * 1000).toLong()).coerceAtLeast(0))
             "next" -> if (next != null) { report(); start(next.getLong("id"), null, prerolls = false) }
             "stop" -> finish()
+            // Play on TV from a phone while something is already playing here: the new title replaces it.
+            "start" -> c.optLong("itemId").takeIf { it > 0 }?.let { id -> report(); stopSessions(); start(id, v.takeIf { it > 0 }, prerolls = true) }
         }
     }
 
