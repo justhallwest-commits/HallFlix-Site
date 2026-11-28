@@ -196,6 +196,9 @@ object TvApi {
 
 /** Moving between the native screens, the player and the web app. */
 object TvNav {
+    /** A title picked on the TV's own home screen before HallFlix had started: played once Home opens. */
+    var pendingPlay = 0L
+
     /** Native screens that are open, so going to the web app can close them all. */
     val open = mutableSetOf<Activity>()
 

@@ -55,4 +55,6 @@ dependencies {
     // The native TV screens: sideways rows and the library grid, and artwork loading with a memory and disk cache.
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("com.github.bumptech.glide:glide:4.16.0")
+    // Continue watching on Android TV's own home screen.
+    implementation("androidx.tvprovider:tvprovider:1.0.0")
 }
