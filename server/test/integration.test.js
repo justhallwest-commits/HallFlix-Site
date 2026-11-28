@@ -264,6 +264,26 @@ test('theme gallery: looks and Fire TV layouts listed, and an unreachable online
   await hf.api('PUT', '/api/studio/gallery', { catalogUrl: '' });
 });
 
+test('welcome ident: due once after each new sign-in, decided by the server', async () => {
+  const login = async () => {
+    const r = await fetch(`${hf.base}/api/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Jus', password: 'reel-2026' }) });
+    return /hf_token=([^;]+)/.exec(r.headers.get('set-cookie') || '')?.[1];
+  };
+  const boot = (tok) => fetch(`${hf.base}/api/boot`, { headers: { authorization: `Bearer ${tok}` } }).then((x) => x.json());
+  const a = await login();
+  assert.equal((await boot(a)).welcome, 'signin', 'right after signing in');
+  assert.equal((await boot(a)).welcome, undefined, 'only once');
+  const b = await login();
+  assert.equal((await boot(b)).welcome, 'signin', 'a new sign-in is due again');
+  assert.equal((await boot(a)).welcome, undefined, 'the first one stays done');
+  // Anonymous boots never say so.
+  assert.equal((await (await fetch(`${hf.base}/api/boot`)).json()).welcome, undefined);
+  // The app's update check answers even when GitHub can't be reached (versionCode 0: nothing to offer).
+  const latest = await (await fetch(`${hf.base}/api/app/latest`)).json();
+  assert.equal(typeof latest.versionCode, 'number');
+  assert.match(latest.apk, /hallflix\.apk$/);
+});
+
 test('downloads: sizes to choose from, a smaller copy made by the transcoder, and the per-profile switch', async () => {
   const id = items['Night Drive'].id; // 640×360, so only the original is offered (no copy would be smaller)
   const info = await hf.api('GET', `/api/downloads/${id}`);

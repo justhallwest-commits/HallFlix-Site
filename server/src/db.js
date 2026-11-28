@@ -116,6 +116,9 @@ export const MIGRATIONS = [
   `alter table sessions add column ua text;
    alter table sessions add column via text;
    alter table sessions add column ip text;`,
+  // 13: the welcome ident is due once after each sign-in (any way of signing in), reported by /api/boot and then cleared.
+  `alter table sessions add column welcome boolean not null default false;
+   alter table sessions alter column welcome set default true;`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {

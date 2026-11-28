@@ -96,9 +96,32 @@ function welcome() {
   const S = themeNow()?.splash || {};
   let flag = '', seen = '';
   try { flag = sessionStorage.getItem('hf_welcome') || ''; seen = sessionStorage.getItem('hf_welcomed') || ''; sessionStorage.removeItem('hf_welcome'); } catch { /* private mode */ }
-  const due = S.video && (S.when === 'open' ? !seen : S.when !== 'never' && flag === 'signin');
+  // After signing in: the server says so (state.boot.welcome, set once for each new sign-in however it happened);
+  // the page's own note is kept as a fallback for an older server.
+  const due = S.video && (S.when === 'open' ? !seen : S.when !== 'never' && (state.boot?.welcome === 'signin' || flag === 'signin'));
   if (!due || state.preview) return Promise.resolve();
   try { sessionStorage.setItem('hf_welcomed', '1'); } catch { /* private mode */ }
+  // In the Android / Fire TV app: the app's own video player plays it (hardware decoding, any format the TV plays,
+  // and only Back or Skip end it). The page waits for it to finish.
+  if (window.HallFlixNative?.playIdent) {
+    const copy = state.boot?.tvIdents?.[S.video];
+    const abs = (u) => (u ? new URL(u, location.href).href : '');
+    let carry = null;
+    try { carry = JSON.parse(sessionStorage.getItem('hf_music_carry') || 'null'); sessionStorage.removeItem('hf_music_carry'); } catch { /* private mode */ }
+    const audioMode = views.splashAudio(S);
+    try {
+      const started = window.HallFlixNative.playIdent(JSON.stringify({
+        url: abs(copy || S.video), fallback: copy ? abs(S.video) : '', sound: audioMode === 'own',
+        music: audioMode === 'music' && carry?.url ? { url: abs(carry.url), time: carry.time || 0, volume: carry.volume ?? 0.5 } : null,
+        logo: abs(S.image || themeNow()?.logo?.image || '/assets/logo.png'),
+      }));
+      if (started) return new Promise((resolve) => {
+        const done = () => { removeEventListener('hallflix-ident-done', done); resolve(); };
+        addEventListener('hallflix-ident-done', done);
+        setTimeout(done, 40000); // never stuck waiting
+      });
+    } catch { /* an older app: the page plays it */ }
+  }
   return new Promise((resolve) => {
     // No player look: no controls, no grey play-button poster, no picture-in-picture or casting button, and the
     // video stays invisible until its first frame is on screen (the sign-in logo shows beneath until then).

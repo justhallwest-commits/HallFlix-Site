@@ -39,6 +39,8 @@ import org.json.JSONObject
  */
 class MainActivity : Activity() {
     companion object {
+        /** The welcome ident is playing in IdentActivity: tell the web app when it's over. */
+        var identOpen = false
         /** JavaScript a native TV screen left for the web app to run when it comes back (usually a page to go to). */
         var pendingJs: String? = null
         /** True while the native TV screens are showing on top of the web app. */
@@ -305,6 +307,9 @@ class MainActivity : Activity() {
         super.onResume()
         // Back from the native TV screens (they close when they hand a page to the web app).
         nativeOpen = false
+        // Back from the welcome ident: the web app carries on to Home.
+        if (identOpen) { identOpen = false; web.evaluateJavascript("window.dispatchEvent(new Event('hallflix-ident-done'))", null) }
+        if (server.isNotEmpty()) Updates.check(this, at = server)
         pendingJs?.let { js -> pendingJs = null; web.evaluateJavascript(js, null) }
         if (web.visibility == View.VISIBLE) web.requestFocus() // focus comes back to the page after the player or another app
         if (playerOpen) {
@@ -407,6 +412,17 @@ class MainActivity : Activity() {
                     try { TvLook.apply(Server.call(server, token, "GET", "/api/boot")) } catch (e: Exception) { /* default colours */ }
                     runOnUiThread { if (!isDestroyed) startActivity(Intent(this@MainActivity, TvHomeActivity::class.java)) }
                 }.start()
+            }
+            return true
+        }
+
+        /** The welcome ident, played by IdentActivity (see web/js/app.js welcome()). */
+        @JavascriptInterface
+        fun playIdent(json: String): Boolean {
+            runOnUiThread {
+                identOpen = true
+                startActivity(Intent(this@MainActivity, IdentActivity::class.java).putExtra("ident", json))
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
             return true
         }

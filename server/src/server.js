@@ -58,6 +58,12 @@ r.get('/api/boot', async (ctx) => {
     profile: profile ? auth.publicProfile(profile) : null,
   };
   if (profile) out.directUrl = await getSetting('directUrl', cfg.directUrl);
+  // The welcome ident is due right after signing in, however that happened (password, phone, a new device):
+  // each new session starts due, and the first boot on it says so and clears it.
+  if (profile) {
+    const tok = auth.tokenFrom(ctx);
+    if (tok && (await q1('update sessions set welcome = false where token = $1 and welcome returning 1', [tok]))) out.welcome = 'signin';
+  }
   out.tvIdents = ident.tvCopies(lk); // TV-safe copies of the welcome ident (see ident.js)
   if (profile) out.media = { ratings: await ratingsMod.clientSettings(), subtitles: await subtitlesMod.clientSettings() };
   if (profile) {
@@ -135,6 +141,18 @@ const SIZES = new Set(['w185', 'w300', 'w342', 'w500', 'w780', 'w1280', 'origina
 const fetching = new Map();
 // Short links for installing the apps: type <server>/get/android into Downloader on a Fire TV.
 const APPS = 'https://github.com/justhallwest-commits/HallFlix-Site/releases/download/apps';
+
+// The newest Android app (version.json, published with each build): the app checks it to offer "Update available".
+let latestApp = null;
+r.get('/api/app/latest', async () => {
+  if (!latestApp || Date.now() - latestApp.at > 15 * 60e3) {
+    try {
+      const v = await (await fetch(`${APPS}/version.json`, { signal: AbortSignal.timeout(8000) })).json();
+      latestApp = { at: Date.now(), data: { versionCode: +v.versionCode || 0, versionName: String(v.versionName || ''), signer: String(v.signer || ''), apk: `${APPS}/hallflix.apk`, built: v.built || null } };
+    } catch { if (!latestApp) return { versionCode: 0, apk: `${APPS}/hallflix.apk`, error: 'The newest version couldn’t be checked' }; }
+  }
+  return latestApp.data;
+}, open);
 r.get('/get/:app', async ({ res, params }) => {
   const file = { android: 'hallflix.apk', apk: 'hallflix.apk', roku: 'hallflix-roku.zip' }[params.app];
   if (!file) throw new HttpError(404, 'Not found');

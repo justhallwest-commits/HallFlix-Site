@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Where a downloaded update waits for the installer (Updates.kt). -->
+<paths>
+    <external-files-path name="updates" path="updates/" />
+    <files-path name="updates-internal" path="updates/" />
+</paths>
