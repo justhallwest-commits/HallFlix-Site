@@ -423,3 +423,12 @@ test('theme gallery: every built-in Fire TV layout passes the theme contract', a
   for (const l of TV_LAYOUTS) assert.deepEqual(checkTheme({ tvApp: l.tvApp }).problems, [], l.id);
   assert.ok(TV_LAYOUTS.some((l) => l.id === 'jellyfin'));
 });
+
+test('Fire TV app: tile logo placement, big picture text and focus are checked by the theme contract', async () => {
+  const { checkTheme } = await import('../src/themespec.js');
+  const { DEFAULT_THEME } = await import('../src/look.js');
+  assert.equal(DEFAULT_THEME.tvApp.tiles.logoFrom, 'site', 'the TV follows the website’s placement unless told otherwise');
+  const r = checkTheme({ tvApp: { hero: { text: 'bottom', focusY: 140 }, tiles: { shade: 50, logoFrom: 'tv', logo: { place: 'free', fx: 85, fy: 15, size: 120, count: 'no' } } } });
+  assert.deepEqual(r.theme.tvApp, { hero: { text: 'bottom', focusY: 100 }, tiles: { shade: 50, logoFrom: 'tv', logo: { place: 'free', fx: 85, fy: 15, size: 120, count: 'no' } } });
+  assert.equal(checkTheme({ tvApp: { tiles: { logo: { place: 'middle' } } } }).problems.length, 1);
+});

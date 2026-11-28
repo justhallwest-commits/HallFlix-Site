@@ -82,6 +82,8 @@ object TvLook {
     /** A TV-safe copy of an uploaded video when the server has made one. */
     fun tvVideo(url: String?): String? = url?.let { tvCopies.optString(it).ifEmpty { it } }
     private var libLooks = JSONObject()
+    /** Look and feel → library tiles → logo placement (the whole app), which the TV follows unless told otherwise. */
+    private var siteTileLogo = JSONObject()
 
     private fun color(o: JSONObject?, key: String, fallback: Int): Int {
         val s = o?.optString(key)?.trim().orEmpty()
@@ -111,6 +113,7 @@ object TvLook {
         logo = usable(theme.optJSONObject("logo")?.optString("image"))
         background = if (str("background", "use", "color") == "image") usable(theme.optJSONObject("background")?.optString("image"))?.let { fit(it, 1280) } else null
         libLooks = look.optJSONObject("libraries") ?: JSONObject()
+        siteTileLogo = theme.optJSONObject("tileLogo") ?: JSONObject()
         libraries = boot.optJSONArray("libraries") ?: JSONArray()
         profileName = boot.optJSONObject("profile")?.optString("name").orEmpty()
         loaded = true
@@ -136,6 +139,42 @@ object TvLook {
             if (lk.optString("tileUse") != "artwork") usable(lk.optString("background"))?.let { return fit(it, 800) }
         }
         return usable(tile.optString("backdrop"))
+    }
+
+    /** Where a library's logo or name sits on its tile, and how big: anchor (0–1 across, down), nudge (share of the tile), size, count. */
+    class LogoSpot(val ax: Float, val ay: Float, val nx: Float, val ny: Float, val k: Float, val count: Boolean)
+
+    private val PLACES = mapOf("tl" to (0f to 0f), "tc" to (0.5f to 0f), "tr" to (1f to 0f), "ml" to (0f to 0.5f), "mc" to (0.5f to 0.5f),
+        "mr" to (1f to 0.5f), "bl" to (0f to 1f), "bc" to (0.5f to 1f), "br" to (1f to 1f))
+
+    /**
+     * The logo placement for a library's tile: its TV-only placement (Studio → Fire TV app) if it has one, then either the
+     * TV-wide placement or the website's (the whole app's, then that library's), the same rules the website uses.
+     */
+    fun logoSpot(tile: JSONObject): LogoSpot {
+        val lk = libLook(tile.optLong("id"))
+        val c = JSONObject().put("place", "bl").put("size", 100).put("x", 0).put("y", 0).put("count", "yes")
+        fun over(o: JSONObject?) { o?.keys()?.forEach { k -> c.put(k, o.get(k)) } }
+        if (str("tiles", "logoFrom", "site") == "tv") over(app.optJSONObject("tiles")?.optJSONObject("logo"))
+        else { over(siteTileLogo); over(lk.optJSONObject("tileLogo")) }
+        over(lk.optJSONObject("tvTileLogo"))
+        val fx = c.optDouble("fx", -1.0); val fy = c.optDouble("fy", -1.0)
+        val free = c.optString("place") == "free" && fx >= 0 && fy >= 0
+        val (ax, ay) = if (free) (fx.toFloat() / 100f).coerceIn(0f, 1f) to (fy.toFloat() / 100f).coerceIn(0f, 1f) else PLACES[c.optString("place")] ?: (0f to 1f)
+        val nx = if (free) 0f else (c.optDouble("x", 0.0).toFloat().coerceIn(-45f, 45f)) / 100f
+        val ny = if (free) 0f else (c.optDouble("y", 0.0).toFloat().coerceIn(-45f, 45f)) / 100f
+        val k = (c.optDouble("size", 100.0).toFloat().coerceIn(30f, 300f)) / 100f
+        return LogoSpot(ax, ay, nx, ny, k, c.optString("count") != "no")
+    }
+
+    /** Which part of a library's tile picture shows (Look and feel → that library → "Which part of the picture shows"). */
+    fun tileFocus(tile: JSONObject): Pair<Float, Float> = when (libLook(tile.optLong("id")).optString("tilePos")) {
+        "center" -> 0.5f to 0.5f
+        "top" -> 0.5f to 0f
+        "bottom" -> 0.5f to 1f
+        "left" -> 0f to 0.5f
+        "right" -> 1f to 0.5f
+        else -> 0.5f to 0.3f // centre, a little high, as on the website
     }
 
     /** A library's own logo (Studio → Look and feel → that library), shown on its tile instead of its name. */
@@ -164,6 +203,25 @@ object TvLook {
 
     /** The background behind a library's page, if it has one and the Fire TV app shows them. */
     fun libraryBackground(id: Long): String? = if (flag("library", "background", true)) usable(libLook(id).optString("background"))?.let { fit(it, 1280) } else null
+}
+
+/** A picture that fills its frame like a centre crop, but shows the chosen part (fx, fy: 0 = left/top, 1 = right/bottom). */
+class FocalImageView(ctx: Context) : ImageView(ctx) {
+    var fx = 0.5f
+        set(v) { field = v; refit() }
+    var fy = 0.5f
+        set(v) { field = v; refit() }
+    init { scaleType = ScaleType.MATRIX }
+    override fun setFrame(l: Int, t: Int, r: Int, b: Int): Boolean { val changed = super.setFrame(l, t, r, b); refit(); return changed }
+    override fun setImageDrawable(d: android.graphics.drawable.Drawable?) { super.setImageDrawable(d); refit() }
+    private fun refit() {
+        val d = drawable ?: return
+        val vw = (width - paddingLeft - paddingRight).toFloat(); val vh = (height - paddingTop - paddingBottom).toFloat()
+        val dw = d.intrinsicWidth.toFloat(); val dh = d.intrinsicHeight.toFloat()
+        if (vw <= 0 || vh <= 0 || dw <= 0 || dh <= 0) return
+        val s = maxOf(vw / dw, vh / dh)
+        imageMatrix = android.graphics.Matrix().apply { setScale(s, s); postTranslate((vw - dw * s) * fx, (vh - dh * s) * fy) }
+    }
 }
 
 /** Darker (below 100) or brighter (above) artwork, for the brightness settings. */
@@ -408,7 +466,7 @@ class RowRecycler @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? =
 }
 
 /** One card: artwork, a fallback title, an optional caption and a progress bar. */
-class CardHolder(val root: FrameLayout, val image: ImageView, val name: TextView, val caption: TextView?, val bar: View, val barTrack: View) : RecyclerView.ViewHolder(root)
+class CardHolder(val root: FrameLayout, val image: FocalImageView, val name: TextView, val caption: TextView?, val bar: View, val barTrack: View) : RecyclerView.ViewHolder(root)
 
 /** Card sizes from Studio → Fire TV app → Rows (posters 2:3, wide cards 16:9, music squares). */
 fun Activity.cardSize(shape: Shape): Pair<Int, Int> {
@@ -441,7 +499,7 @@ fun Activity.makeCard(shape: Shape, withCaption: Boolean, size: Pair<Int, Int>? 
         setPadding(dp(10), dp(10), dp(10), dp(10))
     }
     frame.addView(name, FrameLayout.LayoutParams(-1, -1))
-    val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+    val img = FocalImageView(this)
     frame.addView(img, FrameLayout.LayoutParams(-1, -1))
     var caption: TextView? = null
     if (withCaption) {

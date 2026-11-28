@@ -12,7 +12,7 @@ export async function tvApp(main, kit) {
   let theme = clone(L.theme || {});
   const form = { tvApp: merge(clone(D), theme.tvApp || {}), libs: Object.fromEntries(L.libraries.map((l) => [l.id, clone(l.look || {})])) };
   const box = $('.controls', main), screen = $('.tvp-screen', main), bar = $('.bar', main);
-  let tab = 'home', dirty = false, detail = null, library = null;
+  let tab = 'home', dirty = false, detail = null, library = null, openLib = null;
 
   // The look the TV app actually uses: the everyday look plus the TV look's changes.
   const tvTheme = () => merge(merge(clone(L.defaults), theme), theme.devices?.tv || {});
@@ -27,8 +27,48 @@ export async function tvApp(main, kit) {
     return t.backdrop || '';
   };
 
+  // ── Where a library's logo (or name) sits on its tile: the same rules as the Fire TV app (TvLook.logoSpot) ──
+  const PL = { tl: [0, 0], tc: [0.5, 0], tr: [1, 0], ml: [0, 0.5], mc: [0.5, 0.5], mr: [1, 0.5], bl: [0, 1], bc: [0.5, 1], br: [1, 1] };
+  const logoConf = (t) => {
+    const lk = form.libs[t.id] || {}, a = form.tvApp.tiles;
+    let c = { place: 'bl', size: 100, x: 0, y: 0, count: 'yes' };
+    c = a.logoFrom === 'tv' ? { ...c, ...a.logo } : { ...c, ...(tvTheme().tileLogo || {}), ...(lk.tileLogo || {}) };
+    return { ...c, ...(lk.tvTileLogo || {}) };
+  };
+  const spotOf = (c) => {
+    const free = c.place === 'free' && +c.fx >= 0 && +c.fy >= 0;
+    const [ax, ay] = free ? [Math.min(1, +c.fx / 100), Math.min(1, +c.fy / 100)] : PL[c.place] || PL.bl;
+    const nx = free ? 0 : Math.max(-45, Math.min(45, +c.x || 0)) / 100, ny = free ? 0 : Math.max(-45, Math.min(45, +c.y || 0)) / 100;
+    return { ax, ay, nx, ny, k: Math.max(30, Math.min(300, +c.size || 100)) / 100, count: c.count !== 'no' };
+  };
+  /** The logo block on a tile of w×h: positioned with CSS variables so dragging can move it without redrawing. */
+  function logoBlock(t, w, h, attrs = '') {
+    const a = form.tvApp.tiles, lk = form.libs[t.id] || {}, sp = spotOf(logoConf(t)), logo = pic(lk.logo);
+    const j = sp.ax < 0.34 ? 'start' : sp.ax > 0.66 ? 'end' : 'center';
+    const name = !logo && a.names ? `<b style="font-size:${(18 * sp.k).toFixed(1)}px">${esc(t.name)}</b>` : '';
+    const count = a.counts && sp.count ? `<small>${t.count ?? 12} titles${t.fresh ? ` · ${t.fresh} new` : ''}</small>` : '';
+    return `<span class="blk" ${attrs} style="--ax:${sp.ax};--ay:${sp.ay};--nx:${sp.nx};--ny:${sp.ny};justify-items:${j};text-align:${j === 'start' ? 'left' : j === 'end' ? 'right' : 'center'}">${logo ? `<img src="${esc(logo)}" draggable="false" style="max-height:${(h * 0.3 * sp.k).toFixed(0)}px;max-width:${(w * Math.min(0.94, 0.58 * Math.max(1, sp.k))).toFixed(0)}px">` : ''}${name}${count}</span>`;
+  }
+  const shadeCss = (t) => {
+    const sp = spotOf(logoConf(t)), a = form.tvApp.tiles.shade / 100;
+    const dir = sp.ay > 0.66 ? 'to top' : sp.ay < 0.34 ? 'to bottom' : sp.ax < 0.34 ? 'to right' : sp.ax > 0.66 ? 'to left' : 'to top';
+    return `linear-gradient(${dir}, rgba(0,0,0,${a}), rgba(0,0,0,${(a / 3).toFixed(2)}) 50%, transparent)`;
+  };
+  const FOCUS = { center: '50% 50%', top: '50% 0%', bottom: '50% 100%', left: '0% 50%', right: '100% 50%' };
+  /** One library's tile at the TV's size, for the editors: drag the logo; the tile follows the library's picture rules. */
+  function tileEditor(t, attrs) {
+    const a = form.tvApp.tiles, lk = form.libs[t.id] || {};
+    const own = +lk.tileBrightness, bright = own >= 20 && own <= 160 ? own : a.brightness;
+    const zoom = Math.min(1, 320 / a.width);
+    return `<div class="tve" style="width:${a.width}px;height:${a.height}px;zoom:${zoom.toFixed(3)}">
+      <span class="art" style="background-image:${url(tileArt(t))};background-position:${FOCUS[lk.tilePos] || '50% 30%'};filter:brightness(${bright / 100})"></span>
+      <span class="shade" style="background:${shadeCss(t)}"></span>${logoBlock(t, a.width, a.height, attrs)}</div>`;
+  }
+
   const LIB_USE = [['', 'The library page’s background, if it has one'], ['artwork', 'New artwork from the library']];
   function controls() {
+    const keep = box.scrollTop, keepPage = document.scrollingElement?.scrollTop || 0;
+    requestAnimationFrame(() => { box.scrollTop = keep; if (document.scrollingElement) document.scrollingElement.scrollTop = keepPage; });
     const t = form.tvApp;
     const libs = home.libraries?.length ? home.libraries : L.libraries.map((l) => ({ id: l.id, name: l.name, kind: l.kind, backdrop: l.art }));
     box.innerHTML = String(html`
@@ -36,25 +76,27 @@ export async function tvApp(main, kit) {
         <p class="muted small">Seasons (<a href="#seasons">Seasons</a>) change the TV too: a season’s colours, logo, background and library pictures show on the TV while it runs.</p><p class="muted small">How HallFlix looks on Fire TV and Android TV, where the app draws Home, the libraries and title pages itself so it stays quick on a Fire TV stick. Colours, the logo and the focus ring come from <a href="#look">Look and feel</a> (the 📺 TVs look when it has one). The preview uses your own titles. Changes reach the TV the next time the app opens.</p>
         <div class="row-btns"><button class="btn primary" data-save ${dirty ? '' : 'disabled'}>Save</button><button class="btn" data-undo ${dirty ? '' : 'disabled'}>Undo changes</button><button class="btn" data-reset>HallFlix defaults</button></div></div>
 
-      <div class="card"><h2>Big picture</h2><p class="muted small">The large artwork at the top of Home, like the Jellyfin and Netflix TV apps.</p>
+      <div class="card" data-card="hero"><h2>Big picture</h2><p class="muted small">The large artwork at the top of Home, like the Jellyfin and Netflix TV apps.</p>
         ${check(form, 'tvApp.hero.show', 'Show the big picture')}
         ${t.hero.show ? html`
           ${check(form, 'tvApp.hero.follow', 'Follow the highlighted title (the picture changes as you move along the rows)')}
-          ${range(form, 'tvApp.hero.height', 'Rows start at (% down the screen)', 30, 80, 1)}
+          ${range(form, 'tvApp.hero.height', 'Rows start at (% down the screen; or drag the dashed line in the preview)', 30, 80, 1)}
           ${range(form, 'tvApp.hero.width', 'Picture width (% of the screen)', 40, 100, 1)}
           ${range(form, 'tvApp.hero.brightness', 'Picture brightness (%)', 30, 130, 5)}
           ${range(form, 'tvApp.hero.rotate', 'Next spotlight title every (seconds, 0 = never)', 0, 60, 1)}
+          ${choose(form, 'tvApp.hero.text', 'Title and buttons', [['top', 'Near the top'], ['middle', 'In the middle'], ['bottom', 'Just above the rows']])}
+          ${range(form, 'tvApp.hero.focusY', 'Which part of the picture shows (0 = top, 100 = bottom)', 0, 100, 5)}
           ${check(form, 'tvApp.hero.logos', 'Show title logos instead of names when there is one')}
           ${check(form, 'tvApp.hero.overview', 'Show the description')}` : ''}</div>
 
-      <div class="card"><h2>Top menu</h2>
+      <div class="card" data-card="nav"><h2>Top menu</h2>
         ${check(form, 'tvApp.nav.show', 'Show the top menu (without it, the remote’s ☰ button opens the menu)')}
         ${t.nav.show ? html`
           ${check(form, 'tvApp.nav.libraries', 'A tab for each library')}${check(form, 'tvApp.nav.search', 'Search')}${check(form, 'tvApp.nav.myList', 'My List')}${check(form, 'tvApp.nav.upNext', 'Up next')}
           ${choose(form, 'tvApp.nav.align', 'Tabs', [['left', 'Next to the logo'], ['center', 'In the middle']])}
           ${range(form, 'tvApp.nav.logoHeight', 'Logo height', 16, 60, 1)}` : ''}</div>
 
-      <div class="card"><h2>Library tiles</h2><p class="muted small">The row of libraries on Home. Where it sits among the rows is set in <a href="#home">Home screen</a>.</p>
+      <div class="card" data-card="tiles"><h2>Library tiles</h2><p class="muted small">The row of libraries on Home. Where it sits among the rows is set in <a href="#home">Home screen</a>.</p>
         ${check(form, 'tvApp.tiles.show', 'Show the library tiles')}
         ${t.tiles.show ? html`
           ${text(form, 'tvApp.tiles.title', 'Row title', 'Libraries')}
@@ -63,10 +105,23 @@ export async function tvApp(main, kit) {
           <div class="row-btns"><button class="btn sm" data-ratio="16:9">16:9</button><button class="btn sm" data-ratio="2:1">2:1</button><button class="btn sm" data-ratio="21:9">21:9</button><button class="btn sm" data-ratio="4:3">4:3</button><span class="muted small">Make the height fit the width</span></div>
           ${choose(form, 'tvApp.tiles.art', 'Tile pictures', [['library', 'Each library’s own picture (below), else new artwork'], ['newest', 'Always new artwork from the library']])}
           ${range(form, 'tvApp.tiles.brightness', 'Brightness (unless a library sets its own)', 30, 130, 5)}
+          ${range(form, 'tvApp.tiles.shade', 'Darken behind the logo (%)', 0, 90, 5)}
+          <h3>Logos and names on the tiles</h3>
+          <p class="muted small">Drag a logo on the preview’s tiles to move it for that library on the TV, or use the editors below.</p>
+          ${choose(form, 'tvApp.tiles.logoFrom', 'Where they sit', [['site', 'As on the website (Look and feel → library tiles)'], ['tv', 'Their own place on the TV, for every library']])}
+          ${t.tiles.logoFrom === 'tv' && libs[0] ? html`<div class="tve-wrap">${raw(tileEditor(libs[0], 'data-drag="global"'))}</div>
+            ${range(form, 'tvApp.tiles.logo.size', 'Size (%)', 30, 300, 5)}
+            ${choose(form, 'tvApp.tiles.logo.count', 'Title count under it', [['yes', 'Show'], ['no', 'Hide']])}` : ''}
           ${check(form, 'tvApp.tiles.videos', 'Play a library’s tile video on the highlighted tile (muted; a TV-sized copy is made for Fire TV)')}
           ${check(form, 'tvApp.tiles.names', 'Library names (hidden when a library has a logo)')}${check(form, 'tvApp.tiles.counts', 'How many titles, and how many are new')}
           <h3>Each library</h3><p class="muted small">The same pictures and logos the website’s tiles use, so one change updates both.</p>
-          ${libs.map((l) => html`<details class="tvp-lib"><summary><span class="tvp-mini" style="background-image:url('${encodeURI(tileArt(l))}')"></span>${l.name}</summary>
+          ${libs.map((l) => html`<details class="tvp-lib" data-lib="${l.id}" ${openLib === l.id ? 'open' : ''}><summary><span class="tvp-mini" style="background-image:url('${encodeURI(tileArt(l))}')"></span>${l.name}</summary>
+            <div class="tve-wrap">${raw(tileEditor(l, `data-drag="lib" data-lib="${l.id}"`))}</div>
+            <div class="tve-ctl">${(() => { const c = logoConf(l), sp = spotOf(c), mine = !!form.libs[l.id]?.tvTileLogo; return html`
+              <label class="tl-size">Size <input type="range" min="30" max="300" step="5" value="${Math.round(sp.k * 100)}" data-tve-size="${l.id}"><output>${Math.round(sp.k * 100)}%</output></label>
+              <label class="check sm"><input type="checkbox" data-tve-count="${l.id}" ${sp.count ? 'checked' : ''}> Title count</label>
+              ${mine ? html`<button class="btn sm" data-tve-reset="${l.id}" title="Use the ${form.tvApp.tiles.logoFrom === 'tv' ? 'TV-wide' : 'website’s'} placement again">Reset</button><span class="muted small">Placed for the TV only</span>` : html`<span class="muted small">Drag the logo to place it on the TV only</span>`}`; })()}</div>
+            ${choose(form, `libs.${l.id}.tilePos`, 'Which part of the picture shows (also on the website)', [['', 'Centre, a little high'], ['center', 'Centre'], ['top', 'Top'], ['bottom', 'Bottom'], ['left', 'Left'], ['right', 'Right']])}
             ${image(form, `libs.${l.id}.tileBackground`, 'Tile picture')}
             ${image(form, `libs.${l.id}.tileVideo`, 'Tile video (MP4 or WebM, plays when the tile is highlighted)')}
             ${choose(form, `libs.${l.id}.tileUse`, 'Without a tile picture, use', LIB_USE)}
@@ -74,7 +129,7 @@ export async function tvApp(main, kit) {
             ${image(form, `libs.${l.id}.background`, 'Library page background (also on the TV’s library page)')}
             ${range(form, `libs.${l.id}.tileBrightness`, 'Tile brightness (0 = use the setting above)', 0, 160, 5)}</details>`)}` : ''}</div>
 
-      <div class="card"><h2>Rows and cards</h2>
+      <div class="card" data-card="rows"><h2>Rows and cards</h2>
         ${range(form, 'tvApp.rows.posterWidth', 'Poster width', 80, 200, 2)}
         ${range(form, 'tvApp.rows.wideWidth', 'Wide card width (Continue watching, episodes)', 140, 360, 2)}
         ${range(form, 'tvApp.rows.titleSize', 'Row title size', 12, 28, 1)}
@@ -83,23 +138,23 @@ export async function tvApp(main, kit) {
         ${check(form, 'tvApp.rows.progress', 'Progress bars')}
         ${range(form, 'tvApp.cards.radius', 'Corner roundness', 0, 24, 1)}</div>
 
-      <div class="card"><h2>Focus</h2><p class="muted small">How the highlighted card stands out when moving with the remote.</p>
+      <div class="card" data-card="focus"><h2>Focus</h2><p class="muted small">How the highlighted card stands out when moving with the remote.</p>
         ${choose(form, 'tvApp.cards.focus', 'Ring colour', [['theme', 'As Look and feel → TVs says'], ['white', 'White'], ['accent', 'Accent colour'], ['none', 'No ring (it only grows)']])}
         ${range(form, 'tvApp.cards.ring', 'Ring thickness', 0, 8, 1)}
         ${range(form, 'tvApp.cards.scale', 'Grows to (%)', 100, 125, 1)}</div>
 
-      <div class="card"><h2>Background</h2>
+      <div class="card" data-card="background"><h2>Background</h2>
         ${choose(form, 'tvApp.background.use', 'Behind everything', [['color', 'The background colour'], ['image', 'The background picture from Look and feel']])}
         ${form.tvApp.background.use === 'image' ? html`${range(form, 'tvApp.background.dim', 'Darken it (%)', 0, 95, 5)}${pic(tvTheme().background?.image) ? '' : html`<p class="muted small">No background picture is set in Look and feel yet.</p>`}` : ''}</div>
 
-      <div class="card"><h2>Title page</h2>
+      <div class="card" data-card="details"><h2>Title page</h2>
         ${check(form, 'tvApp.details.backdrop', 'Backdrop')}
         ${t.details.backdrop ? range(form, 'tvApp.details.brightness', 'Backdrop brightness (%)', 30, 130, 5) : ''}
         ${range(form, 'tvApp.details.overview', 'Description lines (0 = hide)', 0, 8, 1)}
         ${choose(form, 'tvApp.details.episodes', 'Episodes', [['stills', 'Pictures in a row'], ['list', 'A list']])}
         ${check(form, 'tvApp.details.similar', 'More like this')}</div>
 
-      <div class="card"><h2>Library page</h2>
+      <div class="card" data-card="library"><h2>Library page</h2>
         ${range(form, 'tvApp.library.columns', 'Posters across (0 = as many as fit)', 0, 10, 1)}
         ${check(form, 'tvApp.library.background', 'The library’s own background behind the posters')}
         ${check(form, 'tvApp.library.names', 'Names under posters')}</div>`);
@@ -134,14 +189,13 @@ export async function tvApp(main, kit) {
     return `<div class="tvp-card ${shape}${focused ? ' on' : ''}" style="background-image:${url(art)}${dims}">${art ? '' : `<b>${esc(name)}</b>`}
       ${captions ? `<span class="cap">${esc(name)}${it.show ? ` · S${it.show.season} E${it.show.episode}` : ''}</span>` : ''}${p >= 0 ? `<i style="width:${p * 100}%"></i>` : ''}</div>`;
   }
-  function tile(t, focused) {
+  function tile(t, focused, first) {
     const a = form.tvApp.tiles, lk = form.libs[t.id] || {};
     const own = +lk.tileBrightness, bright = own >= 20 && own <= 160 ? own : a.brightness;
-    const logo = pic(lk.logo);
-    const lines = [a.names && !logo ? esc(t.name) : '', a.counts ? `${t.count ?? ''} titles${t.fresh ? ` · ${t.fresh} new` : ''}` : ''].filter(Boolean);
-    return `<div class="tvp-card wide tile${focused ? ' on' : ''}" style="width:${a.width}px;height:${a.height}px">
-      <span class="art" style="background-image:${url(tileArt(t))};filter:brightness(${bright / 100})"></span>${tileArt(t) ? '' : `<b>${esc(t.name)}</b>`}
-      ${logo ? `<img class="lg" src="${esc(logo)}" style="bottom:${a.counts ? 30 : 12}px">` : ''}${lines.length ? `<span class="cap">${lines.join('<br>')}</span>` : ''}</div>`;
+    return `<div class="tvp-card wide tile${focused ? ' on' : ''}" data-goto="tiles" data-lib="${t.id}" style="width:${a.width}px;height:${a.height}px">
+      <span class="art" style="background-image:${url(tileArt(t))};background-position:${FOCUS[lk.tilePos] || '50% 30%'};filter:brightness(${bright / 100})"></span>${tileArt(t) ? '' : `<b>${esc(t.name)}</b>`}
+      <span class="shade" style="background:${shadeCss(t)}"></span>${logoBlock(t, a.width, a.height, `data-drag="lib" data-lib="${t.id}" title="Drag to move the ${esc(t.name)} logo on the TV"`)}
+      ${first ? '<span class="tvp-corner" title="Drag to resize the library tiles"></span>' : ''}</div>`;
   }
   function background() {
     const a = form.tvApp, img = a.background.use === 'image' ? pic(tvTheme().background?.image) : '';
@@ -152,7 +206,7 @@ export async function tvApp(main, kit) {
     if (!a.nav.show) return '';
     const libs = (home.libraries?.length ? home.libraries : L.libraries).map((l) => l.name);
     const tabs = ['Home', ...(a.nav.libraries ? libs : []), ...(a.nav.search ? ['Search'] : []), ...(a.nav.myList ? ['My List'] : []), ...(a.nav.upNext ? ['Up next'] : [])];
-    return `<div class="tvp-nav${a.nav.align === 'center' ? ' mid' : ''}"><img src="${esc(pic(tt.logo?.image) || '/assets/logo.png')}" style="height:${a.nav.logoHeight}px">
+    return `<div class="tvp-nav${a.nav.align === 'center' ? ' mid' : ''}" data-goto="nav"><img src="${esc(pic(tt.logo?.image) || '/assets/logo.png')}" style="height:${a.nav.logoHeight}px">
       <span class="tabs">${tabs.map((x, i) => `<span${i === 0 ? ' class="on"' : ''}>${esc(x)}</span>`).join('')}</span><span class="who">Jus</span></div>`;
   }
 
@@ -169,23 +223,24 @@ export async function tvApp(main, kit) {
     let first = true;
     const rowHtml = rows.slice(0, 4).map((r) => {
       if (r.tiles) {
-        const out = `<div class="tvp-row"><h4>${esc(a.tiles.title)}</h4><div class="cards">${tiles.map((t, i) => tile(t, !a.hero.show && first && i === 0)).join('')}</div></div>`;
+        const out = `<div class="tvp-row" data-goto="tiles"><h4>${esc(a.tiles.title)}</h4><div class="cards">${tiles.map((t, i) => tile(t, !a.hero.show && first && i === 0, i === 0)).join('')}</div></div>`;
         first = false; return out;
       }
       const shape = r.shape === 'wide' ? 'wide' : r.shape === 'square' ? 'square' : 'poster';
       const caps = a.rows.captions === 'always' || (a.rows.captions === 'auto' && (r.id === 'continue' || shape === 'wide'));
-      const out = `<div class="tvp-row"><h4>${esc(r.title)}</h4><div class="cards">${r.items.slice(0, 10).map((it, i) => card(it, shape, caps, !a.hero.show && first && i === 0)).join('')}</div></div>`;
+      const out = `<div class="tvp-row" data-goto="rows"><h4>${esc(r.title)}</h4><div class="cards">${r.items.slice(0, 10).map((it, i) => card(it, shape, caps, !a.hero.show && first && i === 0)).join('')}</div></div>`;
       first = false; return out;
     }).join('');
     const logo = a.hero.logos && spot?.logo;
     return `${background()}
-      ${a.hero.show && spot ? `<div class="tvp-hero" style="width:${heroW}px;height:${heroH}px;background-image:${url(spot.backdrop)};filter:brightness(${a.hero.brightness / 100})"></div>
+      ${a.hero.show && spot ? `<div class="tvp-hero" data-goto="hero" style="width:${heroW}px;height:${heroH}px;background-image:${url(spot.backdrop)};background-position:50% ${a.hero.focusY}%;filter:brightness(${a.hero.brightness / 100})"></div>
         <div class="tvp-fade" style="width:${heroW}px;height:${heroH}px"></div>${heroW < 960 ? `<div class="tvp-solid" style="width:${960 - heroW}px;height:${heroH}px"></div>` : ''}
-        <div class="tvp-info" style="top:${a.nav.show ? 78 : 40}px">${logo ? `<img class="hl" src="${esc(spot.logo)}">` : `<h2>${esc(spot.title)}</h2>`}
+        <div class="tvp-info tx-${a.hero.text}" data-goto="hero" style="--top:${a.nav.show ? 78 : 40}px;--rows:${rowsTop}px">${logo ? `<img class="hl" src="${esc(spot.logo)}">` : `<h2>${esc(spot.title)}</h2>`}
           <p class="mt">${esc(meta(spot))}</p>${a.hero.overview ? `<p class="ov">${esc(spot.overview || '')}</p>` : ''}
           <div class="btns"><span class="b p on">${prog(spot) >= 0 ? 'Resume' : 'Play'}</span><span class="b">More info</span></div></div>` : ''}
       ${navBar()}
-      <div class="tvp-rows" style="top:${rowsTop}px">${rowHtml || '<p class="tvp-empty">Your library is empty.</p>'}</div>`;
+      <div class="tvp-rows" style="top:${rowsTop}px">${rowHtml || '<p class="tvp-empty">Your library is empty.</p>'}</div>
+      ${a.hero.show ? `<div class="tvp-hh" style="top:${rowsTop}px" title="Drag to change where the rows start"><span>Rows start here · drag</span></div>` : ''}`;
   }
 
   function libraryView() {
@@ -265,6 +320,92 @@ export async function tvApp(main, kit) {
       } catch (err) { fail(err); }
     }
   });
+  // ── Editing on the preview and the tile editors: drag logos, the rows line and a tile's corner; click to find settings ──
+  const libTarget = (id) => {
+    const l = form.libs[id] || (form.libs[id] = {});
+    if (!l.tvTileLogo) { const c = logoConf({ id }); l.tvTileLogo = { size: c.size, count: c.count }; }
+    return l.tvTileLogo;
+  };
+  let drag = null;
+  function startDrag(e, kind, el) {
+    e.preventDefault();
+    drag = { kind, el, x0: e.clientX, y0: e.clientY, moved: false, w0: form.tvApp.tiles.width, h0: form.tvApp.tiles.height };
+    el.setPointerCapture?.(e.pointerId);
+  }
+  const onDown = (e) => {
+    const blk = e.target.closest('.blk[data-drag]');
+    if (blk) return startDrag(e, 'logo', blk);
+    if (e.target.closest('.tvp-corner')) return startDrag(e, 'corner', e.target.closest('.tvp-corner'));
+    if (e.target.closest('.tvp-hh')) return startDrag(e, 'rows', e.target.closest('.tvp-hh'));
+    const g = e.target.closest('[data-goto]');
+    if (g && screen.contains(g)) drag = { kind: 'click', el: g, x0: e.clientX, y0: e.clientY };
+  };
+  const onMove = (e) => {
+    if (!drag) return;
+    if (Math.abs(e.clientX - drag.x0) + Math.abs(e.clientY - drag.y0) > 3) drag.moved = true;
+    if (!drag.moved || drag.kind === 'click') return;
+    if (drag.kind === 'logo') {
+      const r = drag.el.parentElement.getBoundingClientRect();
+      const ax = Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width - 0.06) / 0.88));
+      const ay = Math.max(0, Math.min(1, ((e.clientY - r.top) / r.height - 0.09) / 0.82));
+      for (const [k, v] of [['--ax', ax], ['--ay', ay], ['--nx', 0], ['--ny', 0]]) drag.el.style.setProperty(k, v);
+      drag.spot = [Math.round(ax * 100), Math.round(ay * 100)];
+    } else if (drag.kind === 'rows') {
+      const r = screen.getBoundingClientRect();
+      const pct = Math.max(30, Math.min(80, Math.round(((e.clientY - r.top) / r.height) * 100)));
+      drag.pct = pct;
+      drag.el.style.top = `${pct * 5.4}px`;
+      const rows = screen.querySelector('.tvp-rows'); if (rows) rows.style.top = `${pct * 5.4}px`;
+    } else if (drag.kind === 'corner') {
+      const k = screen.getBoundingClientRect().width / 960;
+      const w = Math.max(120, Math.min(400, Math.round((drag.w0 + (e.clientX - drag.x0) / k) / 2) * 2));
+      const h = Math.max(60, Math.min(240, Math.round((drag.h0 + (e.clientY - drag.y0) / k) / 2) * 2));
+      drag.size = [w, h];
+      for (const t of screen.querySelectorAll('.tvp-card.tile')) { t.style.width = `${w}px`; t.style.height = `${h}px`; }
+    }
+  };
+  const onUp = () => {
+    const d = drag; drag = null;
+    if (!d) return;
+    if (d.kind === 'click' || !d.moved) {
+      // A click: show the settings for what was clicked (and open that library's editor).
+      const g = d.el.closest('[data-goto]') || d.el;
+      const lib = d.el.closest('[data-lib]')?.dataset.lib;
+      if (lib && g.dataset.goto === 'tiles') openLib = +lib;
+      if (lib) controls();
+      const card = box.querySelector(`[data-card="${g.dataset.goto}"]`);
+      const target = (lib && box.querySelector(`details[data-lib="${lib}"]`)) || card;
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      card?.classList.add('flash'); setTimeout(() => card?.classList.remove('flash'), 1200);
+      return;
+    }
+    if (d.kind === 'logo' && d.spot) {
+      const o = d.el.dataset.drag === 'global' ? form.tvApp.tiles.logo : libTarget(d.el.dataset.lib);
+      Object.assign(o, { place: 'free', fx: d.spot[0], fy: d.spot[1], x: 0, y: 0 });
+      if (d.el.dataset.drag === 'lib') openLib = +d.el.dataset.lib;
+    }
+    if (d.kind === 'rows' && d.pct) form.tvApp.hero.height = d.pct;
+    if (d.kind === 'corner' && d.size) [form.tvApp.tiles.width, form.tvApp.tiles.height] = d.size;
+    touched(true);
+  };
+  for (const el of [screen, box]) el.addEventListener('pointerdown', onDown);
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  // The per-library TV editors' size and count.
+  box.addEventListener('input', (e) => {
+    const sz = e.target.closest('[data-tve-size]');
+    if (sz) { libTarget(sz.dataset.tveSize).size = +sz.value; sz.nextElementSibling.textContent = `${sz.value}%`; openLib = +sz.dataset.tveSize; touched(false); }
+  });
+  box.addEventListener('change', (e) => {
+    const ct = e.target.closest('[data-tve-count]');
+    if (ct) { libTarget(ct.dataset.tveCount).count = ct.checked ? 'yes' : 'no'; openLib = +ct.dataset.tveCount; touched(true); }
+    if (e.target.matches('[data-path$="logoFrom"],[data-path$="tilePos"]')) controls();
+  });
+  box.addEventListener('click', (e) => {
+    const rs = e.target.closest('[data-tve-reset]');
+    if (rs) { delete form.libs[rs.dataset.tveReset].tvTileLogo; openLib = +rs.dataset.tveReset; touched(true); }
+  });
+  box.addEventListener('toggle', (e) => { const d = e.target.closest?.('details[data-lib]'); if (d?.open) openLib = +d.dataset.lib; }, true);
   controls();
   preview();
 }

@@ -528,3 +528,31 @@ textarea.code { width: 100%; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo,
 .gal-prev.tvl .gp-row span.t { background: linear-gradient(135deg, #7a3fb0, #2a9db3); }
 .gal-undo { padding: 8px 12px; border-radius: 8px; background: rgba(53,208,208,.1); border: 1px solid rgba(53,208,208,.35); }
 .gal-url { width: min(560px, 100%); }
+
+/* Studio → Fire TV app: logos placed like the app (anchor meets the same point on the tile), and the editing handles */
+.tvp-card.tile .art, .tve .art { position: absolute; inset: 0; background-size: cover; }
+.tvp-card.tile .shade, .tve .shade { position: absolute; inset: 0; pointer-events: none; }
+.tvp-screen .blk, .tve .blk { position: absolute; display: grid; gap: 3px; max-width: 94%;
+  left: calc(6% + var(--ax) * 88% + var(--nx) * 100%); top: calc(9% + var(--ay) * 82% + var(--ny) * 100%);
+  transform: translate(calc(var(--ax) * -100%), calc(var(--ay) * -100%)); cursor: grab; touch-action: none; user-select: none; z-index: 2; }
+.tvp-screen .blk:active, .tve .blk:active { cursor: grabbing; }
+.tvp-screen .blk:hover, .tve .blk:hover { outline: 2px dashed rgba(255,255,255,.8); outline-offset: 3px; border-radius: 4px; }
+.tvp-screen .blk img, .tve .blk img { display: block; object-fit: contain; pointer-events: none; }
+.tvp-screen .blk b, .tve .blk b { font-weight: 700; line-height: 1.05; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.6); white-space: nowrap; }
+.tvp-screen .blk small, .tve .blk small { font-size: 11px; font-weight: 700; color: rgba(255,255,255,.87); }
+.tve-wrap { margin: 8px 0; }
+.tve { position: relative; border-radius: 8px; overflow: hidden; background: #1c1830; color: #fff; font: 15px/1.25 Roboto, system-ui, sans-serif; }
+.tve-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 10px; }
+.tvp-corner { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; z-index: 3;
+  background: linear-gradient(135deg, transparent 50%, #fff 50%); border-bottom-right-radius: var(--r); opacity: .85; }
+.tvp-hh { position: absolute; left: 0; right: 0; height: 0; border-top: 2px dashed rgba(255,255,255,.55); z-index: 4; cursor: ns-resize; }
+.tvp-hh::before { content: ''; position: absolute; left: 0; right: 0; top: -8px; height: 16px; }
+.tvp-hh span { position: absolute; right: 12px; top: -11px; font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(0,0,0,.65); color: #fff; opacity: 0; transition: opacity .2s; }
+.tvp-hh:hover span, .tvp-screen:hover .tvp-hh span { opacity: 1; }
+.tvp-screen [data-goto] { cursor: pointer; }
+.tvp-info.tx-top { top: var(--top); }
+.tvp-info.tx-middle { top: calc((var(--rows) + var(--top) / 2) / 2); transform: translateY(-50%); }
+.tvp-info.tx-bottom { top: auto; bottom: calc(540px - var(--rows) + 14px); }
+.tvp-info.tx-bottom .btns { margin-bottom: 0; }
+.card.flash { animation: tvpflash 1.2s ease; }
+@keyframes tvpflash { 0%, 60% { box-shadow: 0 0 0 3px var(--cyan, #35d0d0); } 100% { box-shadow: none; } }
