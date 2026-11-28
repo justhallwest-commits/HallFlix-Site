@@ -225,6 +225,26 @@ test('Fire TV app: settings saved in the Studio reach the app at boot, with the 
   await hf.api('PUT', '/api/studio/theme', { theme });
 });
 
+test('Studio devices and health: signed-in devices with their app and connection, signing one out, and the health check', async () => {
+  // A second sign-in, as a Fire TV app on Tailscale.
+  const r = await fetch(`${hf.base}/api/login`, { method: 'POST', headers: { 'content-type': 'application/json', 'user-agent': 'Mozilla/5.0 (Linux; Android 9; AFTMM) Chrome/120 HallFlixApp/1.4 Android TV' }, body: JSON.stringify({ name: 'Jus', password: 'reel-2026' }) });
+  const tok = /hf_token=([^;]+)/.exec(r.headers.get('set-cookie') || '')?.[1];
+  assert.ok(tok);
+  await fetch(`${hf.base}/api/boot`, { headers: { authorization: `Bearer ${tok}`, 'user-agent': 'Mozilla/5.0 (Linux; Android 9; AFTMM) Chrome/120 HallFlixApp/1.4 Android TV' } });
+  const d = await hf.api('GET', '/api/studio/devices');
+  const tv = d.devices.find((x) => x.label === 'Fire TV app');
+  assert.ok(tv, 'the Fire TV shows up');
+  assert.equal(tv.app, '1.4');
+  assert.equal(tv.via, 'home', 'a local address counts as the home network');
+  assert.ok(d.devices.some((x) => x.current), 'the Studio’s own browser is marked');
+  assert.equal((await hf.api('POST', `/api/studio/devices/${tv.id}/signout`)).ok, true);
+  assert.equal((await fetch(`${hf.base}/api/boot`, { headers: { authorization: `Bearer ${tok}` } }).then((x) => x.json())).profile, null, 'signed out');
+  const h = await hf.api('GET', '/api/studio/health');
+  assert.ok(h.disks[0].total > 0 && h.disks[0].free > 0);
+  assert.ok(Array.isArray(h.addresses) && h.addresses.some((a) => a.url.startsWith('http://127.0.0.1') && a.ok), 'the address the Studio is on answers');
+  assert.equal(typeof h.counts.movies, 'number');
+});
+
 test('downloads: sizes to choose from, a smaller copy made by the transcoder, and the per-profile switch', async () => {
   const id = items['Night Drive'].id; // 640×360, so only the original is offered (no copy would be smaller)
   const info = await hf.api('GET', `/api/downloads/${id}`);
