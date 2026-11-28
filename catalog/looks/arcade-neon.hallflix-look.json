@@ -1,0 +1,22 @@
+{
+  "format": "hallflix-look",
+  "version": 1,
+  "name": "Arcade Neon",
+  "theme": {
+    "colors": {
+      "bg": "#05030a",
+      "surface": "#140b22",
+      "text": "#fbf4ff",
+      "muted": "#a597b8",
+      "accent": "#ff3fa4",
+      "accent2": "#3dff9a"
+    },
+    "fonts": {
+      "display": "Audiowide",
+      "body": "Inter"
+    },
+    "radius": 8,
+    "glow": 0.9,
+    "focusRing": "glow"
+  }
+}

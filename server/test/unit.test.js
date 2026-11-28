@@ -415,4 +415,9 @@ test('devices: what a device is, and how it connected', async () => {
   assert.equal(connection(req('ugreen-nas.tail19a457.ts.net:8780')), 'tailscale');
   assert.equal(connection(req('new.hallflix.net', { 'cf-ray': 'x' })), 'internet');
   assert.equal(connection(req('192.168.1.83:8780')), 'home');
+test('theme gallery: every built-in Fire TV layout passes the theme contract', async () => {
+  const { TV_LAYOUTS } = await import('../src/gallery.js');
+  const { checkTheme } = await import('../src/themespec.js');
+  for (const l of TV_LAYOUTS) assert.deepEqual(checkTheme({ tvApp: l.tvApp }).problems, [], l.id);
+  assert.ok(TV_LAYOUTS.some((l) => l.id === 'jellyfin'));
 });

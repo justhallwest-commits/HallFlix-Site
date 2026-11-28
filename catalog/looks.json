@@ -1,0 +1,93 @@
+{
+  "entries": [
+    {
+      "id": "cinema-gold",
+      "kind": "look",
+      "name": "Cinema Gold",
+      "author": "HallFlix",
+      "description": "A dark theatre with gold trim and big condensed titles.",
+      "url": "looks/cinema-gold.hallflix-look.json",
+      "colors": {
+        "bg": "#0b0906",
+        "surface": "#1a150d",
+        "text": "#f6efe2",
+        "muted": "#a99c84",
+        "accent": "#d9a441",
+        "accent2": "#8f5a22"
+      }
+    },
+    {
+      "id": "arctic-night",
+      "kind": "look",
+      "name": "Arctic Night",
+      "author": "HallFlix",
+      "description": "Deep navy with icy blue highlights and soft rounded cards.",
+      "url": "looks/arctic-night.hallflix-look.json",
+      "colors": {
+        "bg": "#06101c",
+        "surface": "#0f1d30",
+        "text": "#eaf4ff",
+        "muted": "#8aa3bd",
+        "accent": "#5cc8ff",
+        "accent2": "#2f6fd6"
+      }
+    },
+    {
+      "id": "arcade-neon",
+      "kind": "look",
+      "name": "Arcade Neon",
+      "author": "HallFlix",
+      "description": "Black with hot pink and electric green, in a retro arcade font.",
+      "url": "looks/arcade-neon.hallflix-look.json",
+      "colors": {
+        "bg": "#05030a",
+        "surface": "#140b22",
+        "text": "#fbf4ff",
+        "muted": "#a597b8",
+        "accent": "#ff3fa4",
+        "accent2": "#3dff9a"
+      }
+    },
+    {
+      "id": "forest-cabin",
+      "kind": "look",
+      "name": "Forest Cabin",
+      "author": "HallFlix",
+      "description": "Warm woods and moss green, calm and easy on the eyes at night.",
+      "url": "looks/forest-cabin.hallflix-look.json",
+      "colors": {
+        "bg": "#0c0f0a",
+        "surface": "#182016",
+        "text": "#eef2e6",
+        "muted": "#9ba88f",
+        "accent": "#8fc46a",
+        "accent2": "#c98a4b"
+      }
+    },
+    {
+      "id": "tv-poster-wall",
+      "kind": "tv",
+      "name": "Poster wall (Fire TV)",
+      "author": "HallFlix",
+      "description": "No big picture: big posters with names, five across in libraries. Great for browsing a large collection.",
+      "tvApp": {
+        "hero": {
+          "show": false
+        },
+        "rows": {
+          "posterWidth": 150,
+          "captions": "always",
+          "gap": 16
+        },
+        "library": {
+          "columns": 5,
+          "names": true
+        },
+        "cards": {
+          "radius": 10,
+          "scale": 107
+        }
+      }
+    }
+  ]
+}

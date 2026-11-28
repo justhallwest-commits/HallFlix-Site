@@ -1,0 +1,21 @@
+{
+  "format": "hallflix-look",
+  "version": 1,
+  "name": "Arctic Night",
+  "theme": {
+    "colors": {
+      "bg": "#06101c",
+      "surface": "#0f1d30",
+      "text": "#eaf4ff",
+      "muted": "#8aa3bd",
+      "accent": "#5cc8ff",
+      "accent2": "#2f6fd6"
+    },
+    "fonts": {
+      "display": "Outfit",
+      "body": "Inter"
+    },
+    "radius": 14,
+    "glow": 0.5
+  }
+}

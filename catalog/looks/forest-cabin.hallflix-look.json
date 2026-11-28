@@ -1,0 +1,21 @@
+{
+  "format": "hallflix-look",
+  "version": 1,
+  "name": "Forest Cabin",
+  "theme": {
+    "colors": {
+      "bg": "#0c0f0a",
+      "surface": "#182016",
+      "text": "#eef2e6",
+      "muted": "#9ba88f",
+      "accent": "#8fc46a",
+      "accent2": "#c98a4b"
+    },
+    "fonts": {
+      "display": "Outfit",
+      "body": "Inter"
+    },
+    "radius": 10,
+    "glow": 0.3
+  }
+}
