@@ -28,5 +28,7 @@ export const cfg = {
   comicCacheGB: +(env.COMIC_CACHE_GB || 4), // room for unpacked CBR/CB7 comics; the ones read longest ago are cleared first
   // The home (direct) address the Android app tries first, e.g. through Tailscale; Studio → Settings → Apps can change it.
   directUrl: env.HALLFLIX_DIRECT_URL ?? 'http://100.117.23.98:8780',
+  // The address HallFlix is reached at from the internet (checked on Studio → Health).
+  publicUrl: env.HALLFLIX_PUBLIC_URL ?? 'https://new.hallflix.net',
   version: '0.1.0',
 };

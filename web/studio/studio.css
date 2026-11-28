@@ -489,3 +489,17 @@ textarea.code { width: 100%; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo,
 .tvp-lib summary { cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 8px 0; font-weight: 600; }
 .tvp-mini { width: 64px; height: 36px; border-radius: 6px; background: #222 center / cover; flex: none; }
 .tvp-lib[open] { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+
+/* Studio → Devices and Health */
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tbl th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.tbl td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tbl td.ico { font-size: 22px; width: 36px; }
+.tbl .chip, .card > p .chip { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 12px; background: rgba(255,255,255,.06); border: 1px solid var(--line); }
+.tbl .chip.on, p .chip.on { background: rgba(53,208,208,.16); border-color: rgba(53,208,208,.5); }
+.chip.warn { background: rgba(245,165,36,.16); border-color: rgba(245,165,36,.5); }
+.chip.bad { background: rgba(229,72,77,.16); border-color: rgba(229,72,77,.55); }
+.meter { height: 8px; border-radius: 6px; background: rgba(255,255,255,.08); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--cyan, #35d0d0); }
+.health-bad p { margin: 6px 0; padding: 8px 12px; border-radius: 8px; background: rgba(229,72,77,.12); border: 1px solid rgba(229,72,77,.35); }
+.health-good { font-weight: 600; }

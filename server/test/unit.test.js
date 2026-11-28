@@ -402,3 +402,17 @@ test('Fire TV app settings: defaults, limits and choices are checked like the re
   // A TV look can carry its own Fire TV app settings too.
   assert.equal(checkTheme({ devices: { tv: { tvApp: { nav: { align: 'center' } } } } }).theme.devices.tv.tvApp.nav.align, 'center');
 });
+
+test('devices: what a device is, and how it connected', async () => {
+  const { describe } = await import('../src/devices.js');
+  const { connection } = await import('../src/auth.js');
+  assert.deepEqual([describe('Mozilla/5.0 (Linux; Android 9; AFTMM) AppleWebKit Chrome/120 HallFlixApp/1.4 Android TV').label, describe('Mozilla/5.0 (Linux; Android 9; AFTMM) AppleWebKit Chrome/120 HallFlixApp/1.4').app], ['Fire TV app', '1.4']);
+  assert.equal(describe('Mozilla/5.0 (Linux; Android 14; SM-S918U) AppleWebKit Chrome/131 Mobile Safari HallFlixApp/1.4').label, 'Android phone app');
+  assert.equal(describe('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36').label, 'Chrome on Windows');
+  assert.equal(describe('Roku/DVP-14.0 (14.0.0)').label, 'Roku channel');
+  const req = (host, h = {}) => ({ headers: { host, ...h } });
+  assert.equal(connection(req('100.117.23.98:8780')), 'tailscale');
+  assert.equal(connection(req('ugreen-nas.tail19a457.ts.net:8780')), 'tailscale');
+  assert.equal(connection(req('new.hallflix.net', { 'cf-ray': 'x' })), 'internet');
+  assert.equal(connection(req('192.168.1.83:8780')), 'home');
+});
