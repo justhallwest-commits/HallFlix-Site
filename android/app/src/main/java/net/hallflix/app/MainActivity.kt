@@ -71,6 +71,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        playFromTvHome(intent)
         web = findViewById(R.id.web)
         panel = findViewById(R.id.panel)
         splash = findViewById(R.id.splash)
@@ -289,6 +290,15 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        playFromTvHome(intent)
+    }
+
+    /** hallflix://play/<id>, from the TV's own home screen: play it now, or as soon as HallFlix has signed in. */
+    private fun playFromTvHome(i: Intent?) {
+        val id = i?.data?.takeIf { it.scheme == "hallflix" && it.host == "play" }?.lastPathSegment?.toLongOrNull() ?: return
+        i?.data = null
+        if (TvSession.ready) { playerOpen = true; TvNav.play(this, id, null) } // afterwards the web app opens the native Home again
+        else TvNav.pendingPlay = id
     }
 
     override fun onResume() {
