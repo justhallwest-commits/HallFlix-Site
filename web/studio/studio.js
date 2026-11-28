@@ -3,6 +3,7 @@ import { $, $$, api, html, raw, toast } from '/js/core.js';
 import * as tools from './tools.js';
 import { tvApp } from './tvapp.js';
 import { devicesPage, healthPage } from './system.js';
+import { galleryPage } from './gallery.js';
 import { EVENTS, PACK_NAMES, playSound } from '/js/sounds.js';
 
 const root = $('#studio');
@@ -57,7 +58,7 @@ const mins = (s) => (s >= 60 ? `${Math.round(s / 60)} min` : `${Math.round(s || 
 
 const PAGES = [
   ['overview', 'Overview'], ['libraries', 'Libraries'], ['artwork', 'Artwork'], ['metadata', 'Metadata'], ['home', 'Home screen'], ['collections', 'Collections'],
-  ['look', 'Look and feel'], ['tvapp', 'Fire TV app'], ['seasons', 'Seasons'], ['prerolls', 'Pre-rolls'], ['guard', 'Parental controls'], ['profiles', 'Profiles'], ['lyrics', 'Lyrics'], ['ratings', 'Ratings'], ['subtitles', 'Subtitles'], ['plugins', 'Plugins'], ['devices', 'Devices'], ['health', 'Health'], ['settings', 'Settings'],
+  ['look', 'Look and feel'], ['gallery', 'Theme gallery'], ['tvapp', 'Fire TV app'], ['seasons', 'Seasons'], ['prerolls', 'Pre-rolls'], ['guard', 'Parental controls'], ['profiles', 'Profiles'], ['lyrics', 'Lyrics'], ['ratings', 'Ratings'], ['subtitles', 'Subtitles'], ['plugins', 'Plugins'], ['devices', 'Devices'], ['health', 'Health'], ['settings', 'Settings'],
 ];
 let timer = null; // the current page's refresh timer, cleared on every page change
 
@@ -374,6 +375,7 @@ pages.guard = (main) => tools.guard(main, kit);
 pages.prerolls = (main) => tools.prerolls(main, kit);
 pages.devices = (main) => devicesPage(main, { html, api, toast, fail, confirmBox });
 pages.health = (main) => healthPage(main, { html, api, fail });
+pages.gallery = (main) => galleryPage(main, { html, api, toast, fail, merge, clone });
 pages.tvapp = (main) => tvApp(main, { html, raw, api, toast, fail, merge, clone, bind, check, range, choose, text, image, $ });
 
 // ---------- overview ----------
