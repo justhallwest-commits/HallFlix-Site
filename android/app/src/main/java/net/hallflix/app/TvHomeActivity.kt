@@ -196,6 +196,13 @@ class TvHomeActivity : TvScreen() {
                 else -> FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply { topMargin = top }
             })
             root.addView(area, FrameLayout.LayoutParams(-1, rowsTop, Gravity.TOP))
+            // Never let the rows sit over the title and buttons: if the text is taller than the space, the rows start lower.
+            area.clipChildren = false
+            if (TvLook.str("hero", "text", "top") != "bottom") info.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                val need = area.top + v.bottom + dp(10)
+                val lp = rows.layoutParams as? FrameLayout.LayoutParams ?: return@addOnLayoutChangeListener
+                if (lp.topMargin < need) { lp.topMargin = need; rows.layoutParams = lp }
+            }
         }
 
         // The rows: the focused row's top always sits at the same height.

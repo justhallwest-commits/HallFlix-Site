@@ -181,18 +181,18 @@ export async function tvApp(main, kit) {
       `--ring:${a.cards.focus === 'none' ? 0 : a.cards.ring}px`, `--ringc:${ringColor}`, `--zoom:${a.cards.scale / 100}`,
       `--pw:${a.rows.posterWidth}px`, `--ww:${a.rows.wideWidth}px`, `--rt:${a.rows.titleSize}px`, `--gap:${a.rows.gap}px`].join(';');
   }
-  function card(it, shape, captions, focused, size = null) {
+  function card(it, shape, captions, focused, size = null, at = '') {
     const art = shape === 'wide' ? it.thumb || it.backdrop || it.still || it.poster : it.poster || it.backdrop;
     const name = it.show?.title || it.title || it.name || '';
     const p = form.tvApp.rows.progress ? prog(it) : -1;
     const dims = size ? `;width:${size[0]}px;height:${size[1]}px` : '';
-    return `<div class="tvp-card ${shape}${focused ? ' on' : ''}" style="background-image:${url(art)}${dims}">${art ? '' : `<b>${esc(name)}</b>`}
+    return `<div class="tvp-card ${shape}${focused ? ' on' : ''}" ${at} style="background-image:${url(art)}${dims}">${art ? '' : `<b>${esc(name)}</b>`}
       ${captions ? `<span class="cap">${esc(name)}${it.show ? ` · S${it.show.season} E${it.show.episode}` : ''}</span>` : ''}${p >= 0 ? `<i style="width:${p * 100}%"></i>` : ''}</div>`;
   }
-  function tile(t, focused, first) {
+  function tile(t, focused, first, at = '') {
     const a = form.tvApp.tiles, lk = form.libs[t.id] || {};
     const own = +lk.tileBrightness, bright = own >= 20 && own <= 160 ? own : a.brightness;
-    return `<div class="tvp-card wide tile${focused ? ' on' : ''}" data-goto="tiles" data-lib="${t.id}" style="width:${a.width}px;height:${a.height}px">
+    return `<div class="tvp-card wide tile${focused ? ' on' : ''}" ${at} data-goto="tiles" data-lib="${t.id}" style="width:${a.width}px;height:${a.height}px">
       <span class="art" style="background-image:${url(tileArt(t))};background-position:${FOCUS[lk.tilePos] || '50% 30%'};filter:brightness(${bright / 100})"></span>${tileArt(t) ? '' : `<b>${esc(t.name)}</b>`}
       <span class="shade" style="background:${shadeCss(t)}"></span>${logoBlock(t, a.width, a.height, `data-drag="lib" data-lib="${t.id}" title="Drag to move the ${esc(t.name)} logo on the TV"`)}
       ${first ? '<span class="tvp-corner" title="Drag to resize the library tiles"></span>' : ''}</div>`;
@@ -220,16 +220,13 @@ export async function tvApp(main, kit) {
     const at = home.layout?.tilesAt ?? 0;
     list.forEach((r, i) => { if (i === at && tiles.length) rows.push({ tiles: true }); if (r.items?.length) rows.push(r); });
     if (at >= list.length && tiles.length) rows.push({ tiles: true });
-    let first = true;
-    const rowHtml = rows.slice(0, 4).map((r) => {
-      if (r.tiles) {
-        const out = `<div class="tvp-row" data-goto="tiles"><h4>${esc(a.tiles.title)}</h4><div class="cards">${tiles.map((t, i) => tile(t, !a.hero.show && first && i === 0, i === 0)).join('')}</div></div>`;
-        first = false; return out;
-      }
+    shownRows = rows.map((r) => (r.tiles ? { tiles: true, items: tiles } : { items: r.items.slice(0, 20) }));
+    const rowHtml = rows.map((r, ri) => {
+      const at = (ci) => `data-r="${ri}" data-c="${ci}"`;
+      if (r.tiles) return `<div class="tvp-row" data-goto="tiles"><h4>${esc(a.tiles.title)}</h4><div class="cards">${tiles.map((t, i) => tile(t, false, i === 0, at(i))).join('')}</div></div>`;
       const shape = r.shape === 'wide' ? 'wide' : r.shape === 'square' ? 'square' : 'poster';
       const caps = a.rows.captions === 'always' || (a.rows.captions === 'auto' && (r.id === 'continue' || shape === 'wide'));
-      const out = `<div class="tvp-row" data-goto="rows"><h4>${esc(r.title)}</h4><div class="cards">${r.items.slice(0, 10).map((it, i) => card(it, shape, caps, !a.hero.show && first && i === 0)).join('')}</div></div>`;
-      first = false; return out;
+      return `<div class="tvp-row" data-goto="rows"><h4>${esc(r.title)}</h4><div class="cards">${r.items.slice(0, 20).map((it, i) => card(it, shape, caps, false, null, at(i))).join('')}</div></div>`;
     }).join('');
     const logo = a.hero.logos && spot?.logo;
     return `${background()}
@@ -237,11 +234,90 @@ export async function tvApp(main, kit) {
         <div class="tvp-fade" style="width:${heroW}px;height:${heroH}px"></div>${heroW < 960 ? `<div class="tvp-solid" style="width:${960 - heroW}px;height:${heroH}px"></div>` : ''}
         <div class="tvp-info tx-${a.hero.text}" data-goto="hero" style="--top:${a.nav.show ? 78 : 40}px;--rows:${rowsTop}px">${logo ? `<img class="hl" src="${esc(spot.logo)}">` : `<h2>${esc(spot.title)}</h2>`}
           <p class="mt">${esc(meta(spot))}</p>${a.hero.overview ? `<p class="ov">${esc(spot.overview || '')}</p>` : ''}
-          <div class="btns"><span class="b p on">${prog(spot) >= 0 ? 'Resume' : 'Play'}</span><span class="b">More info</span></div></div>` : ''}
+          <div class="btns"><span class="b p">${prog(spot) >= 0 ? 'Resume' : 'Play'}</span><span class="b">More info</span></div></div>` : ''}
       ${navBar()}
       <div class="tvp-rows" style="top:${rowsTop}px">${rowHtml || '<p class="tvp-empty">Your library is empty.</p>'}</div>
       ${a.hero.show ? `<div class="tvp-hh" style="top:${rowsTop}px" title="Drag to change where the rows start"><span>Rows start here · drag</span></div>` : ''}`;
   }
+
+  // ── The preview as a TV: arrow keys move the highlight like the remote, rows scroll, the big picture follows ──
+  let shownRows = [];
+  let at = { r: -1, c: 0 }; // r = -1: the big picture's buttons
+  function itemAt(r, c) { return shownRows[r]?.items?.[c]; }
+  function showFocus(scroll = true) {
+    if (tab !== 'home') return;
+    const a = form.tvApp;
+    const hasHero = a.hero.show && !!screen.querySelector('.tvp-info');
+    if (at.r < 0 && !hasHero) at = { r: 0, c: 0 };
+    for (const el of screen.querySelectorAll('.tvp-card.on, .b.on')) el.classList.remove('on');
+    const btns = screen.querySelector('.tvp-info .btns');
+    if (at.r < 0) {
+      screen.querySelector('.tvp-info .b.p')?.classList.add('on');
+      if (btns) btns.style.opacity = '';
+      if (scroll) screen.querySelector('.tvp-rows')?.scrollTo({ top: 0, behavior: 'smooth' });
+      heroFrom((home.spotlight || [])[0], false);
+      return;
+    }
+    const el = screen.querySelector(`.tvp-card[data-r="${at.r}"][data-c="${at.c}"]`);
+    if (!el) return;
+    el.classList.add('on');
+    if (btns) btns.style.opacity = '0';
+    if (scroll) {
+      // As on the TV: the focused row's top at the top of the rows, the focused card at the left edge.
+      const rowsEl = screen.querySelector('.tvp-rows'), row = el.closest('.tvp-row'), cards = el.parentElement;
+      rowsEl?.scrollTo({ top: row.offsetTop, behavior: 'smooth' });
+      cards.scrollTo({ left: Math.max(0, el.offsetLeft - 48), behavior: 'smooth' });
+    }
+    if (a.hero.follow) heroFrom(itemAt(at.r, at.c), shownRows[at.r]?.tiles);
+  }
+  /** Show a title (or a library tile) in the big picture, as the TV does when following the highlight. */
+  function heroFrom(it, isTile) {
+    const info = screen.querySelector('.tvp-info'), hero = screen.querySelector('.tvp-hero');
+    if (!it || !info || !hero) return;
+    hero.style.backgroundImage = url(isTile ? tileArt(it) : it.backdrop || it.poster);
+    const logo = form.tvApp.hero.logos && (isTile ? pic(form.libs[it.id]?.logo) : it.logo);
+    const head = info.querySelector('.hl, h2');
+    const fresh = logo ? Object.assign(document.createElement('img'), { className: 'hl', src: logo }) : Object.assign(document.createElement('h2'), { textContent: it.show?.title || it.title || it.name || '' });
+    head?.replaceWith(fresh);
+    fresh.addEventListener?.('load', clearRows);
+    const mt = info.querySelector('.mt'); if (mt) mt.textContent = isTile ? `${it.count ?? ''} titles${it.fresh ? `  ·  ${it.fresh} new` : ''}` : meta(it);
+    const ov = info.querySelector('.ov'); if (ov) ov.textContent = isTile ? '' : it.overview || '';
+  }
+  /**
+   * Keep the rows clear of the big picture's text and buttons: if they'd overlap, the rows start lower (the TV app does
+   * the same).
+   */
+  function clearRows() {
+    const a = form.tvApp, info = screen.querySelector('.tvp-info'), rowsEl = screen.querySelector('.tvp-rows');
+    if (!info || !rowsEl || a.hero.text === 'bottom') return;
+    const sr = screen.getBoundingClientRect(), k = sr.height / 540 || 1;
+    const bottom = (info.getBoundingClientRect().bottom - sr.top) / k;
+    const set = 540 * a.hero.height / 100;
+    const top = Math.max(set, Math.ceil(bottom + 10));
+    rowsEl.style.top = `${top}px`;
+    const hh = screen.querySelector('.tvp-hh');
+    if (hh) { hh.style.top = `${top}px`; hh.querySelector('span').textContent = top > set ? 'Rows moved down to clear the buttons · drag' : 'Rows start here · drag'; }
+  }
+  screen.tabIndex = 0;
+  screen.addEventListener('keydown', (e) => {
+    if (tab !== 'home' || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+    e.preventDefault();
+    const n = shownRows.length;
+    if (e.key === 'ArrowDown') at = at.r < n - 1 ? { r: at.r + 1, c: at.r < 0 ? 0 : Math.min(at.c, (shownRows[at.r + 1]?.items.length || 1) - 1) } : at;
+    if (e.key === 'ArrowUp') at = at.r >= 0 ? { r: at.r - 1, c: at.r - 1 < 0 ? 0 : Math.min(at.c, (shownRows[at.r - 1]?.items.length || 1) - 1) } : at;
+    if (e.key === 'ArrowRight' && at.r >= 0) at = { r: at.r, c: Math.min(at.c + 1, shownRows[at.r].items.length - 1) };
+    if (e.key === 'ArrowLeft' && at.r >= 0) at = { r: at.r, c: Math.max(0, at.c - 1) };
+    showFocus();
+  });
+  // The mouse wheel scrolls the rows up and down; over a row with Shift (or a sideways swipe), along it.
+  screen.addEventListener('wheel', (e) => {
+    const cards = e.target.closest('.cards'), rowsEl = screen.querySelector('.tvp-rows');
+    if (!rowsEl) return;
+    e.preventDefault();
+    const k = screen.getBoundingClientRect().width / 960 || 1;
+    if (cards && (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY))) cards.scrollLeft += (e.deltaX || e.deltaY) / k;
+    else rowsEl.scrollTop += e.deltaY / k;
+  }, { passive: false });
 
   function libraryView() {
     const a = form.tvApp, lib = library;
@@ -285,10 +361,14 @@ export async function tvApp(main, kit) {
     }
   }
   async function preview() {
-    bar.innerHTML = `<span class="seg">${[['home', 'Home'], ['library', 'Library'], ['title', 'Title page']].map(([id, n]) => `<button class="btn sm${tab === id ? ' primary' : ''}" data-tab="${id}">${n}</button>`).join('')}</span><span class="muted small">A close match for the Fire TV app, at a 1080p TV’s size. Moving around and the exact fonts are best judged on the TV.</span>`;
+    bar.innerHTML = `<span class="seg">${[['home', 'Home'], ['library', 'Library'], ['title', 'Title page']].map(([id, n]) => `<button class="btn sm${tab === id ? ' primary' : ''}" data-tab="${id}">${n}</button>`).join('')}</span><span class="muted small">A close match for the Fire TV app. Click it and use the arrow keys like the remote; the wheel or dragging scrolls the rows (Shift + wheel along a row).</span>`;
     screen.setAttribute('style', vars());
     screen.innerHTML = tab === 'home' ? homeView() : tab === 'library' ? libraryView() : detailView();
     fit();
+    if (tab === 'home') {
+      requestAnimationFrame(() => { clearRows(); showFocus(false); });
+      for (const img of screen.querySelectorAll('.tvp-info img')) img.addEventListener('load', clearRows);
+    }
     if ((tab === 'title' && !detail) || (tab === 'library' && !library)) { await ensureData(); preview(); }
   }
   // Scale the 960×540 TV screen to the space there is.
@@ -343,7 +423,17 @@ export async function tvApp(main, kit) {
   const onMove = (e) => {
     if (!drag) return;
     if (Math.abs(e.clientX - drag.x0) + Math.abs(e.clientY - drag.y0) > 3) drag.moved = true;
-    if (!drag.moved || drag.kind === 'click') return;
+    if (!drag.moved) return;
+    if (drag.kind === 'click') {
+      // Dragging the preview scrolls it: along a row, and up and down through the rows.
+      const k = screen.getBoundingClientRect().width / 960 || 1;
+      const cards = drag.el.closest('.cards') || drag.el.querySelector?.('.cards'), rowsEl = screen.querySelector('.tvp-rows');
+      const dx = e.clientX - (drag.px ?? drag.x0), dy = e.clientY - (drag.py ?? drag.y0);
+      drag.px = e.clientX; drag.py = e.clientY; drag.panned = true;
+      if (cards) cards.scrollLeft -= dx / k;
+      if (rowsEl && screen.contains(drag.el)) rowsEl.scrollTop -= dy / k;
+      return;
+    }
     if (drag.kind === 'logo') {
       const r = drag.el.parentElement.getBoundingClientRect();
       const ax = Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width - 0.06) / 0.88));
@@ -367,7 +457,12 @@ export async function tvApp(main, kit) {
   const onUp = () => {
     const d = drag; drag = null;
     if (!d) return;
+    if (d.panned) return;
     if (d.kind === 'click' || !d.moved) {
+      // Clicking a card highlights it, as the remote would.
+      const cardEl = d.el.closest?.('.tvp-card[data-r]') || (screen.contains(d.el) && document.elementFromPoint(d.x0, d.y0)?.closest('.tvp-card[data-r]'));
+      if (cardEl) { at = { r: +cardEl.dataset.r, c: +cardEl.dataset.c }; showFocus(false); }
+      screen.focus({ preventScroll: true });
       // A click: show the settings for what was clicked (and open that library's editor).
       const g = d.el.closest('[data-goto]') || d.el;
       const lib = d.el.closest('[data-lib]')?.dataset.lib;

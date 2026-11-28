@@ -556,3 +556,11 @@ textarea.code { width: 100%; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo,
 .tvp-info.tx-bottom .btns { margin-bottom: 0; }
 .card.flash { animation: tvpflash 1.2s ease; }
 @keyframes tvpflash { 0%, 60% { box-shadow: 0 0 0 3px var(--cyan, #35d0d0); } 100% { box-shadow: none; } }
+/* The Fire TV preview scrolls like the TV: rows up and down, cards along each row (scrollbars hidden, as on a TV). */
+.tvp-screen .tvp-rows { overflow-y: auto; overflow-x: hidden; padding-bottom: 420px; scrollbar-width: none; }
+.tvp-screen .tvp-rows::-webkit-scrollbar, .tvp-screen .cards::-webkit-scrollbar { display: none; }
+.tvp-screen .tvp-row .cards { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding-right: 48px; padding-top: 10px; padding-bottom: 12px; }
+.tvp-screen:focus { outline: none; }
+.tvp-screen:focus-visible { box-shadow: 0 0 0 3px var(--cyan, #35d0d0); }
+.tvp-screen .tvp-info .btns { transition: opacity .2s; }
+.tvp-screen .tvp-card { transition: transform .14s; }
