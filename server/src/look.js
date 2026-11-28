@@ -89,9 +89,12 @@ export const DEFAULT_THEME = {
   tileCovers: { show: 'yes', place: 'br', size: 56, count: 3, style: 'angled', x: 0, y: 0 },
   // The Fire TV / Android TV app's own screens (Studio → Fire TV app). Sizes are in dp on a 960×540 TV screen.
   tvApp: {
-    hero: { show: true, height: 56, width: 72, follow: true, rotate: 12, logos: true, overview: true, brightness: 100 },
+    hero: { show: true, height: 56, width: 72, follow: true, rotate: 12, logos: true, overview: true, brightness: 100, text: 'top', focusY: 25 },
     nav: { show: true, libraries: true, search: true, myList: true, upNext: true, align: 'left', logoHeight: 30 },
-    tiles: { show: true, title: 'Libraries', width: 224, height: 126, art: 'library', names: true, counts: true, brightness: 100, videos: true },
+    tiles: { show: true, title: 'Libraries', width: 224, height: 126, art: 'library', names: true, counts: true, brightness: 100, videos: true, shade: 45,
+      // Where each library's logo (or name) sits: as on the website (Look and feel), or a TV-wide placement. A library can
+      // still have its own TV-only placement (its look's tvTileLogo), set in Studio → Fire TV app.
+      logoFrom: 'site', logo: { place: 'bl', size: 100, x: 0, y: 0, fx: -1, fy: -1, count: 'yes' } },
     rows: { titleSize: 17, gap: 18, posterWidth: 122, wideWidth: 224, captions: 'auto', progress: true },
     cards: { radius: 8, focus: 'theme', scale: 108, ring: 3 },
     background: { use: 'color', dim: 70 },

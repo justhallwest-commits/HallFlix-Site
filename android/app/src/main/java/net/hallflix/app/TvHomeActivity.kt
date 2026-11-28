@@ -23,7 +23,7 @@ import org.json.JSONObject
  * the Studio's Home layout applies; sizes, the big picture, the menu and the tiles follow Studio → Fire TV app.
  */
 class TvHomeActivity : TvScreen() {
-    private lateinit var heroImage: ImageView
+    private lateinit var heroImage: FocalImageView
     private lateinit var heroLogo: ImageView
     private lateinit var heroTitle: TextView
     private lateinit var heroMeta: TextView
@@ -132,7 +132,7 @@ class TvHomeActivity : TvScreen() {
         val heroW = (w * TvLook.num("hero", "width", 72) / 100f).toInt()
         val rowsTop = (h * TvLook.num("hero", "height", 56) / 100f).toInt()
         val heroH = (rowsTop * 1.32f).toInt().coerceAtMost(h)
-        heroImage = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; brightness(TvLook.num("hero", "brightness", 100)) }
+        heroImage = FocalImageView(this).apply { fy = TvLook.num("hero", "focusY", 25) / 100f; brightness(TvLook.num("hero", "brightness", 100)) }
         if (heroOn) {
             root.addView(heroImage, FrameLayout.LayoutParams(heroW, heroH, Gravity.END or Gravity.TOP))
             root.addView(View(this).apply {
@@ -186,7 +186,17 @@ class TvHomeActivity : TvScreen() {
         heroButtons.addView(playBtn, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(12) })
         heroButtons.addView(tvButton("More info") { shown?.let { TvNav.openItem(this, it) } })
         info.addView(heroButtons)
-        if (heroOn) root.addView(info, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply { topMargin = if (navOn) dp(78) else dp(40) })
+        // Where the title, details and buttons sit over the big picture: near the top, in the middle, or just above the rows.
+        if (heroOn) {
+            val area = FrameLayout(this)
+            val top = if (navOn) dp(78) else dp(40)
+            area.addView(info, when (TvLook.str("hero", "text", "top")) {
+                "middle" -> FrameLayout.LayoutParams(-1, -2, Gravity.CENTER_VERTICAL).apply { topMargin = top / 2 }
+                "bottom" -> FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { bottomMargin = dp(14) }
+                else -> FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply { topMargin = top }
+            })
+            root.addView(area, FrameLayout.LayoutParams(-1, rowsTop, Gravity.TOP))
+        }
 
         // The rows: the focused row's top always sits at the same height.
         rows = RecyclerView(this).apply {
@@ -388,32 +398,78 @@ class TvHomeActivity : TvScreen() {
         }
     }
 
-    /** Library tiles: each library's own picture, logo and brightness from its look; the name and count if wanted. */
+    /**
+     * Library tiles: each library's own picture (and which part of it shows), brightness, and its logo or name placed where
+     * the Studio says (dragged into place, or a corner and nudges, and a size), with the title count under it.
+     */
     private inner class TileAdapter(val tiles: List<JSONObject>, val onFocus: (JSONObject) -> Unit) : RecyclerView.Adapter<TileHolder>() {
         private val size = dp(TvLook.num("tiles", "width", 224)) to dp(TvLook.num("tiles", "height", 126))
         override fun getItemCount() = tiles.size
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TileHolder {
-            val card = makeCard(Shape.WIDE, withCaption = true, size = size)
-            val logo = ImageView(this@TvHomeActivity).apply { adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_START }
-            card.root.addView(logo, FrameLayout.LayoutParams((size.first * 0.6f).toInt(), (size.second * 0.34f).toInt(), Gravity.START or Gravity.BOTTOM).apply {
-                leftMargin = dp(12); bottomMargin = dp(if (TvLook.flag("tiles", "counts", true)) 30 else 12)
-            })
-            return TileHolder(card, logo)
+            val card = makeCard(Shape.WIDE, withCaption = false, size = size)
+            val shade = View(this@TvHomeActivity)
+            card.root.addView(shade, 2, FrameLayout.LayoutParams(-1, -1))
+            val block = column()
+            val logo = ImageView(this@TvHomeActivity).apply { adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER }
+            val name = label(18f, bold = true, lines = 2)
+            val count = label(11f, 0xDDFFFFFF.toInt(), bold = true)
+            block.addView(logo, LinearLayout.LayoutParams(-2, -2))
+            block.addView(name, LinearLayout.LayoutParams(-2, -2))
+            block.addView(count, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(3) })
+            card.root.addView(block, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
+            card.name.visibility = View.GONE
+            // Place the block whenever it's laid out: its anchor point meets the same point on the tile (so it never runs
+            // off an edge), then nudged. The placement for the library shown is kept in the block's tag.
+            block.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                val spot = v.tag as? TvLook.LogoSpot ?: return@addOnLayoutChangeListener
+                val (w, ht) = size
+                val edgeX = w * 0.06f; val edgeY = ht * 0.09f
+                v.translationX = edgeX + spot.ax * (w - 2 * edgeX) + spot.nx * w - spot.ax * v.width
+                v.translationY = edgeY + spot.ay * (ht - 2 * edgeY) + spot.ny * ht - spot.ay * v.height
+            }
+            return TileHolder(card, logo, block, name, count, shade)
         }
         override fun onBindViewHolder(h: TileHolder, position: Int) {
             val t = tiles[position]
             val c = h.card
-            c.name.text = t.optString("name")
+            val (w, ht) = size
+            val spot = TvLook.logoSpot(t)
+            val (fx, fy) = TvLook.tileFocus(t)
+            c.image.fx = fx; c.image.fy = fy
             loadImage(c.image, TvLook.tilePicture(t))
             c.image.brightness(TvLook.tileBrightness(t))
+            // Darker toward the logo, so it reads on any picture (Studio → Fire TV app → Library tiles → Darken behind).
+            val alpha = (TvLook.num("tiles", "shade", 45) * 2.55f).toInt().coerceIn(0, 255)
+            val a = alpha shl 24
+            val mid = (alpha / 3) shl 24
+            h.shade.background = GradientDrawable(when {
+                spot.ay > 0.66f -> GradientDrawable.Orientation.BOTTOM_TOP
+                spot.ay < 0.34f -> GradientDrawable.Orientation.TOP_BOTTOM
+                spot.ax < 0.34f -> GradientDrawable.Orientation.LEFT_RIGHT
+                spot.ax > 0.66f -> GradientDrawable.Orientation.RIGHT_LEFT
+                else -> GradientDrawable.Orientation.BOTTOM_TOP
+            }, intArrayOf(a, mid, 0))
+            // The logo or name, and the count, aligned toward the side they sit on.
             val logo = TvLook.tileLogo(t)
-            if (logo != null) { h.logo.visibility = View.VISIBLE; loadImage(h.logo, logo) } else { h.logo.visibility = View.GONE; h.logo.setImageDrawable(null) }
-            val parts = mutableListOf<String>()
-            if (TvLook.flag("tiles", "names", true) && logo == null) parts += t.optString("name")
-            if (TvLook.flag("tiles", "counts", true)) parts += "${t.optInt("count")} titles" + if (t.optInt("fresh") > 0) " · ${t.optInt("fresh")} new" else ""
-            c.caption?.text = parts.joinToString("\n")
-            c.caption?.maxLines = 2
-            c.caption?.visibility = if (parts.isEmpty()) View.GONE else View.VISIBLE
+            val align = if (spot.ax < 0.34f) Gravity.START else if (spot.ax > 0.66f) Gravity.END else Gravity.CENTER_HORIZONTAL
+            h.block.gravity = align
+            if (logo != null) {
+                h.logo.visibility = View.VISIBLE
+                h.logo.maxHeight = (ht * 0.30f * spot.k).toInt()
+                h.logo.maxWidth = (w * minOf(0.94f, 0.58f * maxOf(1f, spot.k))).toInt()
+                loadImage(h.logo, logo)
+            } else { h.logo.visibility = View.GONE; h.logo.setImageDrawable(null) }
+            val showName = logo == null && TvLook.flag("tiles", "names", true)
+            h.name.visibility = if (showName) View.VISIBLE else View.GONE
+            h.name.text = t.optString("name")
+            h.name.textSize = 18f * spot.k
+            h.name.gravity = align
+            h.name.maxWidth = (w * 0.9f).toInt()
+            val counts = TvLook.flag("tiles", "counts", true) && spot.count
+            h.count.visibility = if (counts) View.VISIBLE else View.GONE
+            h.count.text = "${t.optInt("count")} titles" + if (t.optInt("fresh") > 0) " · ${t.optInt("fresh")} new" else ""
+            h.block.tag = spot
+            h.block.requestLayout()
             c.bar.visibility = View.GONE; c.barTrack.visibility = View.GONE
             c.root.contentDescription = t.optString("name")
             val video = TvLook.tileVideo(t)
@@ -424,5 +480,5 @@ class TvHomeActivity : TvScreen() {
             c.root.setOnClickListener { TvNav.openLibrary(this@TvHomeActivity, t) }
         }
     }
-    private class TileHolder(val card: CardHolder, val logo: ImageView) : RecyclerView.ViewHolder(card.root)
+    private class TileHolder(val card: CardHolder, val logo: ImageView, val block: LinearLayout, val name: TextView, val count: TextView, val shade: View) : RecyclerView.ViewHolder(card.root)
 }
