@@ -243,6 +243,8 @@ test('Studio devices and health: signed-in devices with their app and connection
   assert.ok(h.disks[0].total > 0 && h.disks[0].free > 0);
   assert.ok(Array.isArray(h.addresses) && h.addresses.some((a) => a.url.startsWith('http://127.0.0.1') && a.ok), 'the address the Studio is on answers');
   assert.equal(typeof h.counts.movies, 'number');
+});
+
 test('theme gallery: looks and Fire TV layouts listed, and an unreachable online catalog is reported, not fatal', async () => {
   await hf.api('PUT', '/api/studio/gallery', { catalogUrl: 'https://127.0.0.1:9/none.json' });
   const g = await hf.api('GET', '/api/studio/gallery?refresh=1');
