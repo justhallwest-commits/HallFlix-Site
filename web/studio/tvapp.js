@@ -50,7 +50,7 @@ export async function tvApp(main, kit) {
       <div class="card"><h2>Top menu</h2>
         ${check(form, 'tvApp.nav.show', 'Show the top menu (without it, the remote’s ☰ button opens the menu)')}
         ${t.nav.show ? html`
-          ${check(form, 'tvApp.nav.libraries', 'A tab for each library')}${check(form, 'tvApp.nav.search', 'Search')}${check(form, 'tvApp.nav.myList', 'My List')}
+          ${check(form, 'tvApp.nav.libraries', 'A tab for each library')}${check(form, 'tvApp.nav.search', 'Search')}${check(form, 'tvApp.nav.myList', 'My List')}${check(form, 'tvApp.nav.upNext', 'Up next')}
           ${choose(form, 'tvApp.nav.align', 'Tabs', [['left', 'Next to the logo'], ['center', 'In the middle']])}
           ${range(form, 'tvApp.nav.logoHeight', 'Logo height', 16, 60, 1)}` : ''}</div>
 
@@ -149,7 +149,7 @@ export async function tvApp(main, kit) {
     const a = form.tvApp, tt = tvTheme();
     if (!a.nav.show) return '';
     const libs = (home.libraries?.length ? home.libraries : L.libraries).map((l) => l.name);
-    const tabs = ['Home', ...(a.nav.libraries ? libs : []), ...(a.nav.search ? ['Search'] : []), ...(a.nav.myList ? ['My List'] : [])];
+    const tabs = ['Home', ...(a.nav.libraries ? libs : []), ...(a.nav.search ? ['Search'] : []), ...(a.nav.myList ? ['My List'] : []), ...(a.nav.upNext ? ['Up next'] : [])];
     return `<div class="tvp-nav${a.nav.align === 'center' ? ' mid' : ''}"><img src="${esc(pic(tt.logo?.image) || '/assets/logo.png')}" style="height:${a.nav.logoHeight}px">
       <span class="tabs">${tabs.map((x, i) => `<span${i === 0 ? ' class="on"' : ''}>${esc(x)}</span>`).join('')}</span><span class="who">Jus</span></div>`;
   }

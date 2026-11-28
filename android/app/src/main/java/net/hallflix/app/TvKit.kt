@@ -191,6 +191,13 @@ object TvNav {
         } else toWeb(act, "location.hash = '#/library/${lib.optLong("id")}'")
     }
 
+    fun search(act: Activity, voice: Boolean = false) = act.startActivity(Intent(act, TvSearchActivity::class.java).putExtra("voice", voice))
+    fun myList(act: Activity) = act.startActivity(Intent(act, TvGridActivity::class.java)
+        .putExtra("path", "/api/mylist").putExtra("title", "My List").putExtra("empty", "Add titles with “+ My List” on their page and they’ll wait for you here."))
+    fun upNext(act: Activity) = act.startActivity(Intent(act, TvGridActivity::class.java)
+        .putExtra("path", "/api/upnext").putExtra("title", "Up next").putExtra("play", true)
+        .putExtra("empty", "When you finish an episode, the next one waits here. Press OK on it to play."))
+
     /** Play in the app's own player. start: seconds, 0 from the beginning, null to carry on where it was left. */
     fun play(act: Activity, itemId: Long, start: Double?) {
         if (itemId <= 0) return

@@ -114,8 +114,9 @@ class TvHomeActivity : Activity() {
         homeTab = tab("Home") { focusTop() }.apply { setTextColor(TvLook.text) }
         nav.addView(homeTab)
         if (TvLook.flag("nav", "libraries", true)) for (lib in TvLook.libraries.objects()) nav.addView(tab(lib.optString("name")) { TvNav.openLibrary(this, lib) })
-        if (TvLook.flag("nav", "search", true)) nav.addView(tab("Search") { TvNav.toWeb(this, "location.hash = '#/search/'") })
-        if (TvLook.flag("nav", "myList", true)) nav.addView(tab("My List") { TvNav.toWeb(this, "location.hash = '#/list'") })
+        if (TvLook.flag("nav", "search", true)) nav.addView(tab("Search") { TvNav.search(this) })
+        if (TvLook.flag("nav", "myList", true)) nav.addView(tab("My List") { TvNav.myList(this) })
+        if (TvLook.flag("nav", "upNext", true)) nav.addView(tab("Up next") { TvNav.upNext(this) })
         nav.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         nav.addView(tab(TvLook.profileName.ifEmpty { "Profile" }) { profileMenu() })
         val navOn = TvLook.flag("nav", "show", true)
@@ -245,20 +246,21 @@ class TvHomeActivity : Activity() {
     }
 
     private fun profileMenu() {
-        val opts = arrayOf("Search", "My List", "Switch profile", "My HallFlix", "Use the web version of the TV screens", "Change server")
+        val opts = arrayOf("Search", "My List", "Up next", "Switch profile", "My HallFlix", "Use the web version of the TV screens", "Change server")
         AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
             .setTitle(TvLook.profileName.ifEmpty { "HallFlix" })
             .setItems(opts) { _, which ->
                 when (which) {
-                    0 -> TvNav.toWeb(this, "location.hash = '#/search/'")
-                    1 -> TvNav.toWeb(this, "location.hash = '#/list'")
-                    2 -> TvNav.toWeb(this, "HallFlix.api('POST','/api/logout').then(function(){location.hash='#/';location.reload();})")
-                    3 -> TvNav.toWeb(this, "location.hash = '#/me'")
-                    4 -> {
+                    0 -> TvNav.search(this)
+                    1 -> TvNav.myList(this)
+                    2 -> TvNav.upNext(this)
+                    3 -> TvNav.toWeb(this, "HallFlix.api('POST','/api/logout').then(function(){location.hash='#/';location.reload();})")
+                    4 -> TvNav.toWeb(this, "location.hash = '#/me'")
+                    5 -> {
                         getSharedPreferences("hallflix", MODE_PRIVATE).edit().putBoolean("nativeTv", false).apply()
                         TvNav.toWeb(this, "location.hash = '#/'; window.dispatchEvent(new Event('hallflix-native-closed'))")
                     }
-                    5 -> TvNav.toWeb(this, "window.HallFlixNative && HallFlixNative.changeServer()")
+                    6 -> TvNav.toWeb(this, "window.HallFlixNative && HallFlixNative.changeServer()")
                 }
             }
             .show()
@@ -279,6 +281,8 @@ class TvHomeActivity : Activity() {
         }
         // The remote's Menu button always opens the menu (the only way to it when the top menu is hidden).
         if (keyCode == KeyEvent.KEYCODE_MENU) { profileMenu(); return true }
+        // The remote's search key (Android TV) opens search, listening straight away.
+        if (keyCode == KeyEvent.KEYCODE_SEARCH) { TvNav.search(this, voice = true); return true }
         return super.onKeyDown(keyCode, event)
     }
 

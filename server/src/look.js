@@ -90,7 +90,7 @@ export const DEFAULT_THEME = {
   // The Fire TV / Android TV app's own screens (Studio → Fire TV app). Sizes are in dp on a 960×540 TV screen.
   tvApp: {
     hero: { show: true, height: 56, width: 72, follow: true, rotate: 12, logos: true, overview: true, brightness: 100 },
-    nav: { show: true, libraries: true, search: true, myList: true, align: 'left', logoHeight: 30 },
+    nav: { show: true, libraries: true, search: true, myList: true, upNext: true, align: 'left', logoHeight: 30 },
     tiles: { show: true, title: 'Libraries', width: 224, height: 126, art: 'library', names: true, counts: true, brightness: 100 },
     rows: { titleSize: 17, gap: 18, posterWidth: 122, wideWidth: 224, captions: 'auto', progress: true },
     cards: { radius: 8, focus: 'theme', scale: 108, ring: 3 },

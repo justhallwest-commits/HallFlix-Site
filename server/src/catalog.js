@@ -56,12 +56,9 @@ function mediaInfo(r) {
   };
 }
 
-export async function continueRow(pid) {
-  const inProgress = await q(
-    `select ${SEL}, p.updated_at as touched ${FROM}
-     where p.profile_id = $1 and not p.watched and p.position_s > 20 and i.kind in ('movie','episode')
-     order by p.updated_at desc limit 24`, [pid]);
-  const nextUp = await q(
+/** The next episode of each show this profile is watching (finished one, hasn't started the next), newest first. */
+async function nextUpEpisodes(pid) {
+  return q(
     `with last as (
        select distinct on (i.show_id) i.show_id, i.season_no, i.episode_no, p.updated_at
        from progress p join items i on i.id = p.item_id
@@ -75,7 +72,16 @@ export async function continueRow(pid) {
      join items s on s.id = n.show_id
      left join progress p on p.item_id = n.id and p.profile_id = $1
      where p.item_id is null
-       and l.updated_at > now() - interval '120 days'`, [pid]);
+       and l.updated_at > now() - interval '120 days'
+     order by l.updated_at desc`, [pid]);
+}
+
+export async function continueRow(pid) {
+  const inProgress = await q(
+    `select ${SEL}, p.updated_at as touched ${FROM}
+     where p.profile_id = $1 and not p.watched and p.position_s > 20 and i.kind in ('movie','episode')
+     order by p.updated_at desc limit 24`, [pid]);
+  const nextUp = await nextUpEpisodes(pid);
   const shows = new Set(inProgress.filter((r) => r.show_id).map((r) => r.show_id));
   const all = [...inProgress, ...nextUp.filter((r) => !shows.has(r.show_id))];
   all.sort((a, b) => new Date(b.touched) - new Date(a.touched));
@@ -347,6 +353,13 @@ export function routes(r) {
       [profile.id, like, term, `${term.replace(/[%_\\]/g, '\\$&')}%`]);
     return { items: items.map(card) };
   });
+
+  // For the TV app's own My List and Up next screens.
+  r.get('/api/mylist', async ({ profile }) => {
+    const rows = await q(`select ${SEL} ${FROM} join mylist m on m.item_id = i.id and m.profile_id = $1 where i.kind <> 'track' order by m.added_at desc limit 300`, [profile.id]);
+    return { items: rows.map(card) };
+  });
+  r.get('/api/upnext', async ({ profile }) => ({ items: (await nextUpEpisodes(profile.id)).slice(0, 60).map(card) }));
 
   r.post('/api/mylist', async ({ profile, req }) => {
     const { itemId, on } = await readJson(req);
