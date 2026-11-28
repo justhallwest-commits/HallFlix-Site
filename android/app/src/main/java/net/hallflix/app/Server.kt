@@ -119,7 +119,30 @@ object Server {
     class ServerError(message: String) : Exception(message)
 
     /** What this device can play without help, in the server's own words (see decide() in playback.js). */
+    /**
+     * What this device can play, remembered: working it out reads every decoder, which takes a moment on a Fire TV
+     * stick, so the answer is kept (and refreshed in the background each time the app starts). Mobile data is always
+     * checked fresh.
+     */
+    @Volatile private var known: JSONObject? = null
+    private var refreshed = false
+
     fun caps(ctx: Context): JSONObject {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val key = "caps:" + android.os.Build.FINGERPRINT
+        val have = known ?: prefs.getString(key, null)?.let { try { JSONObject(it) } catch (e: Exception) { null } }
+        if (have != null) {
+            known = have
+            if (!refreshed) { refreshed = true; Thread { try { val f = detect(ctx); known = f; prefs.edit().putString(key, f.toString()).apply() } catch (_: Exception) { } }.start() }
+            return JSONObject(have.toString()).apply { if (onMobileData(ctx)) put("network", "cellular") }
+        }
+        val fresh = detect(ctx)
+        known = fresh; refreshed = true
+        prefs.edit().putString(key, fresh.toString()).apply()
+        return JSONObject(fresh.toString()).apply { if (onMobileData(ctx)) put("network", "cellular") }
+    }
+
+    private fun detect(ctx: Context): JSONObject {
         val decoders = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { !it.isEncoder }
         fun has(mime: String) = decoders.any { ci -> ci.supportedTypes.any { it.equals(mime, ignoreCase = true) } }
         fun hevc10(): Boolean = decoders.any { ci ->
@@ -146,7 +169,6 @@ object Server {
             .put("hlsHevc", has("video/hevc"))
             .put("audioSwitch", true)
             .put("maxHeight", 0)
-            .apply { if (onMobileData(ctx)) put("network", "cellular") }
     }
 
     /** On mobile data (not Wi-Fi or Ethernet): the server then holds films to the Studio's "Quality on mobile data". */

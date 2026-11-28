@@ -72,6 +72,14 @@ class PlayerActivity : Activity() {
     private var retries = 0
     private var finished = false
     private var nextUp: Runnable? = null
+    /** The credits (Studio mark) have been handled for this title: the countdown started, or skipped. */
+    private var creditsDone = false
+    /** Episodes that started on their own, one after another, since anyone last pressed a button. */
+    private var autoPlays = 0
+    private var lastInput = android.os.SystemClock.uptimeMillis()
+    /** The next title's play answer, asked for during the credits so it starts at once: item id → answer. */
+    private var prefetched: Pair<Long, JSONObject>? = null
+    private var prefetchedAt = 0L
     private val remoteIo = Executors.newSingleThreadExecutor()
     // The same id and name the web app uses on this device, so the phone remote (and Play on TV) sees one screen.
     private var deviceId = java.util.UUID.randomUUID().toString().take(12)
@@ -145,7 +153,10 @@ class PlayerActivity : Activity() {
             try {
                 val body = JSONObject().put("itemId", itemId).put("caps", caps).put("prerolls", prerolls)
                 if (startAt != null) body.put("start", startAt)
-                val queue = Server.call(server, token, "POST", "/api/play", body).getJSONArray("queue")
+                // Used only while fresh: a server stream not asked for within a minute may have been tidied away.
+                val ready = prefetched?.takeIf { it.first == itemId && startAt == null && android.os.SystemClock.uptimeMillis() - prefetchedAt < 60_000 }?.second
+                prefetched = null
+                val queue = (ready ?: Server.call(server, token, "POST", "/api/play", body)).getJSONArray("queue")
                 val list = (0 until queue.length()).map { i ->
                     val q = queue.getJSONObject(i)
                     resolve(q, if (q.optString("kind") == "main") q.optDouble("resumeAt", 0.0) else 0.0)
@@ -153,6 +164,7 @@ class PlayerActivity : Activity() {
                 ui.post {
                     if (isFinishing) return@post
                     stopSessions()
+                    creditsDone = false
                     entries = list
                     resumeAt = list.lastOrNull()?.json?.optDouble("resumeAt", 0.0) ?: 0.0
                     resumed = false
@@ -309,19 +321,60 @@ class PlayerActivity : Activity() {
         val e = entries.lastOrNull() ?: return finish()
         report(ended = true)
         val next = e.json.optJSONObject("next") ?: return finish()
-        var left = 8
+        if (nextUp != null) return // already counting down from the credits
+        countdown(next, 8)
+    }
+
+    /**
+     * "Up next in 8…" then the next episode plays. From the credits mark it starts early (left keeps watching the credits).
+     * After three episodes in a row with nobody pressing anything for 90 minutes, it asks "Still watching?" instead.
+     */
+    private fun countdown(next: JSONObject, seconds: Int, fromCredits: Boolean = false) {
+        nextUp?.let { ui.removeCallbacks(it) }
+        prefetch(next.optLong("id"))
+        var left = seconds
         val show = next.optJSONObject("show")
         val label = if (show != null) "S${show.optInt("season")} E${show.optInt("episode")} · ${next.optString("title")}" else next.optString("title")
         val tickDown = object : Runnable {
             override fun run() {
-                if (left <= 0) { nextUp = null; playNext(next.getLong("id")); return }
-                showMessage("Up next in $left", label, "Play now") { ui.removeCallbacks(this); nextUp = null; playNext(next.getLong("id")) }
+                if (left <= 0) {
+                    nextUp = null
+                    val idle = android.os.SystemClock.uptimeMillis() - lastInput
+                    if (autoPlays >= 3 && idle > 90 * 60_000L) { stillWatching(next); return }
+                    autoPlays++
+                    playNext(next.getLong("id"))
+                    return
+                }
+                showMessage(if (fromCredits) "Up next in $left  ·  ← to keep watching" else "Up next in $left", label, "Play now") {
+                    ui.removeCallbacks(this); nextUp = null; autoPlays = 0; playNext(next.getLong("id"))
+                }
                 left--
                 ui.postDelayed(this, 1000)
             }
         }
         nextUp = tickDown
         tickDown.run()
+    }
+
+    /** Nobody has touched the remote for a long while: ask before playing on, and stop if there's no answer. */
+    private fun stillWatching(next: JSONObject) {
+        exo.pause()
+        val giveUp = Runnable { finish() }
+        showMessage("Are you still watching?", "Nothing has been pressed for a while, so HallFlix paused.", "Keep watching") {
+            ui.removeCallbacks(giveUp); autoPlays = 0; lastInput = android.os.SystemClock.uptimeMillis(); playNext(next.getLong("id"))
+        }
+        ui.postDelayed(giveUp, 60_000)
+    }
+
+    /** Ask for the next title's stream now, during the credits, so it starts the moment it's needed. */
+    private fun prefetch(id: Long) {
+        if (id <= 0 || offlineId > 0 || (prefetched?.first == id && android.os.SystemClock.uptimeMillis() - prefetchedAt < 60_000)) return
+        io.execute {
+            try {
+                val r = Server.call(server, token, "POST", "/api/play", JSONObject().put("itemId", id).put("caps", caps).put("prerolls", false))
+                ui.post { if (!isFinishing) { prefetched = id to r; prefetchedAt = android.os.SystemClock.uptimeMillis() } }
+            } catch (_: Exception) { /* it's asked for again when it plays */ }
+        }
     }
 
     private fun playNext(id: Long) { if (offlineId > 0) { offlineId = id; startOffline(id) } else start(id, null, prerolls = false) }
@@ -357,6 +410,14 @@ class PlayerActivity : Activity() {
                 introShown = true
                 showMessage("Intro", "Skip ahead to the episode", "Skip intro") { view.player?.seekTo(((end - e!!.offset) * 1000).toLong().coerceAtLeast(0)); hideMessage(); introShown = false }
             } else if (!inIntro && introShown) { introShown = false; if (nextUp == null) hideMessage() }
+            // The credits mark: the next episode is offered straight away; a film offers to skip the credits.
+            val credits = m?.optDouble("credits", 0.0) ?: 0.0
+            if (e != null && e.main && credits > 0 && !creditsDone && nextUp == null && exo.isPlaying && position(e) >= credits) {
+                creditsDone = true
+                val next = e.json.optJSONObject("next")
+                if (next != null) countdown(next, 12, fromCredits = true)
+                else showMessage("Credits", "That's the end of ${e.json.optString("title").ifEmpty { "the film" }}", "Skip credits") { finish() }
+            }
             ui.postDelayed(this, 1000)
         }
     }
@@ -476,6 +537,12 @@ class PlayerActivity : Activity() {
     private fun hideMessage() { findViewById<View>(R.id.message).visibility = View.GONE }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) { lastInput = android.os.SystemClock.uptimeMillis(); autoPlays = 0 }
+        // Counting down over the credits: Left (or Play/Pause) keeps watching them.
+        if (nextUp != null && event.action == KeyEvent.ACTION_UP && event.keyCode in listOf(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            && exo.playbackState != Player.STATE_ENDED) {
+            nextUp?.let { ui.removeCallbacks(it) }; nextUp = null; hideMessage(); return true
+        }
         val msg = findViewById<View>(R.id.message).visibility == View.VISIBLE
         if (event.keyCode == KeyEvent.KEYCODE_BACK) return super.dispatchKeyEvent(event)
         if (msg) return super.dispatchKeyEvent(event)
