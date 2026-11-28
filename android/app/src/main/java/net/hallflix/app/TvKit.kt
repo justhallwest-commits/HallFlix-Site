@@ -582,7 +582,7 @@ abstract class TvScreen : Activity() {
 
     private fun arm() { idle.removeCallbacks(wake); if (TvLook.screensaver != "off") idle.postDelayed(wake, 5 * 60_000L) }
 
-    override fun onResume() { super.onResume(); arm() }
+    override fun onResume() { super.onResume(); arm(); Updates.check(this) }
     override fun onPause() { idle.removeCallbacks(wake); stopSaver(); super.onPause() }
 
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {

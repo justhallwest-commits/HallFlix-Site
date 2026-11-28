@@ -14,6 +14,9 @@
 
     <!-- Fire TV puts a sideloaded app's icon (not its banner) in the home-screen tile, squeezed into a square.
          So on TVs the icon is a square made for that (res/mipmap-television-*); phones keep their own icon. -->
+    <!-- So "Update available" can hand a downloaded update to Android's installer (Updates.kt). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:allowBackup="true"
         android:banner="@drawable/banner"
@@ -54,6 +57,13 @@
             android:theme="@style/HallFlix.Player" />
 
         <!-- The native TV screens (home, library, title page); the web app opens them on TVs. -->
+        <!-- The welcome ident after signing in, in the app's own player. -->
+        <activity android:name=".IdentActivity" android:exported="false" android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />
+        <!-- Shares a downloaded update with the installer. -->
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.updates" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/updates" />
+        </provider>
         <activity android:name=".TvHomeActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />
         <activity android:name=".TvLibraryActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />
         <activity android:name=".TvGridActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />

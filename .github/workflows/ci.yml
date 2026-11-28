@@ -86,4 +86,12 @@ jobs:
           - hallflix-roku.zip: upload it to your Roku's Developer Settings page (see docker/INSTALL.md)."
           gh release view apps >/dev/null 2>&1 || gh release create apps --title "HallFlix apps" --notes "$notes" --latest=false
           gh release edit apps --notes "$notes" --title "HallFlix apps (build ${{ github.run_number }})"
-          gh release upload apps hallflix.apk hallflix-roku.zip --clobber
+          # version.json: what the app checks to offer "Update available", with the signing key's fingerprint so an app
+          # signed with another key knows an update can't install over it.
+          signer=""
+          if [ -n "$HALLFLIX_KEYSTORE" ]; then
+            signer=$(keytool -list -v -keystore "$HALLFLIX_KEYSTORE" -storetype PKCS12 -storepass "$HALLFLIX_KEYSTORE_PASSWORD" 2>/dev/null | sed -n 's/.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')
+          fi
+          printf '{"versionCode":%s,"versionName":"1.0.%s","signer":"%s","sha":"%s","built":"%s"}\n' "${{ github.run_number }}" "${{ github.run_number }}" "$signer" "${GITHUB_SHA::7}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > version.json
+          cat version.json
+          gh release upload apps hallflix.apk hallflix-roku.zip version.json --clobber
