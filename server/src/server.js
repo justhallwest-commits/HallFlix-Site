@@ -11,6 +11,7 @@ import * as playback from './playback.js';
 import * as downloads from './downloads.js';
 import * as ident from './ident.js';
 import * as devicesMod from './devices.js';
+import * as galleryMod from './gallery.js';
 import * as studio from './studio.js';
 import * as manage from './manage.js';
 import * as extras from './extras.js';
@@ -127,6 +128,7 @@ videosMod.routes(r);
 subtitlesMod.routes(r);
 musicMod.routes(r);
 devicesMod.routes(r);
+galleryMod.routes(r);
 
 // TMDb artwork, fetched once and then served from the NAS.
 const SIZES = new Set(['w185', 'w300', 'w342', 'w500', 'w780', 'w1280', 'original']);

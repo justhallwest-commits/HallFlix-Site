@@ -1,0 +1,22 @@
+{
+  "format": "hallflix-look",
+  "version": 1,
+  "name": "Cinema Gold",
+  "theme": {
+    "colors": {
+      "bg": "#0b0906",
+      "surface": "#1a150d",
+      "text": "#f6efe2",
+      "muted": "#a99c84",
+      "accent": "#d9a441",
+      "accent2": "#8f5a22"
+    },
+    "fonts": {
+      "display": "Bebas Neue",
+      "body": "Inter"
+    },
+    "radius": 4,
+    "glow": 0.35,
+    "focusRing": "glow"
+  }
+}

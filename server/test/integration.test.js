@@ -253,6 +253,17 @@ test('Studio devices and health: signed-in devices with their app and connection
   assert.equal(typeof h.counts.movies, 'number');
 });
 
+test('theme gallery: looks and Fire TV layouts listed, and an unreachable online catalog is reported, not fatal', async () => {
+  await hf.api('PUT', '/api/studio/gallery', { catalogUrl: 'https://127.0.0.1:9/none.json' });
+  const g = await hf.api('GET', '/api/studio/gallery?refresh=1');
+  assert.ok(g.looks.length >= 20 && g.looks.every((x) => x.theme && x.name));
+  assert.ok(g.tvLayouts.find((l) => l.id === 'streaming'));
+  assert.ok(g.onlineError, 'the error is shown');
+  assert.equal((await hf.api('PUT', '/api/studio/gallery', { catalogUrl: 'http://not-https.example' })).$status, 400);
+  assert.equal((await hf.api('POST', '/api/studio/gallery/install', { id: 'nothing-here' })).$status, 404);
+  await hf.api('PUT', '/api/studio/gallery', { catalogUrl: '' });
+});
+
 test('downloads: sizes to choose from, a smaller copy made by the transcoder, and the per-profile switch', async () => {
   const id = items['Night Drive'].id; // 640×360, so only the original is offered (no copy would be smaller)
   const info = await hf.api('GET', `/api/downloads/${id}`);

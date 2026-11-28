@@ -503,3 +503,28 @@ textarea.code { width: 100%; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo,
 .meter i { display: block; height: 100%; background: var(--cyan, #35d0d0); }
 .health-bad p { margin: 6px 0; padding: 8px 12px; border-radius: 8px; background: rgba(229,72,77,.12); border: 1px solid rgba(229,72,77,.35); }
 .health-good { font-weight: 600; }
+/* Studio → Theme gallery */
+.gal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.gal-card { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel, rgba(255,255,255,.03)); display: flex; flex-direction: column; }
+.gal-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.gal-body p { margin: 6px 0 10px; flex: 1; }
+.gal-body .row-btns { margin: 0; flex-wrap: wrap; }
+.gal-prev { position: relative; aspect-ratio: 16 / 9; overflow: hidden; }
+.gal-prev .gp-bar { position: absolute; left: 8%; right: 8%; top: 7%; display: flex; gap: 5px; align-items: center; z-index: 2; }
+.gal-prev .gp-bar.mid { justify-content: center; }
+.gal-prev .gp-bar i { width: 22px; height: 7px; border-radius: 3px; margin-right: 8px; }
+.gal-prev .gp-bar span { width: 18px; height: 4px; border-radius: 2px; background: currentColor; opacity: .5; }
+.gal-prev .gp-hero { position: absolute; right: 0; top: 0; width: 72%; height: 58%; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 0 8% 0; }
+.gal-prev:not(.tvl) .gp-hero { left: 0; width: auto; padding-left: 8%; }
+.gal-prev .gp-hero b { font-size: 15px; } .gal-prev .gp-hero em { display: block; width: 34px; height: 8px; border-radius: 3px; margin-top: 5px; }
+.gal-prev .gp-row { position: absolute; left: 8%; bottom: 10%; display: flex; gap: 5px; }
+.gal-prev .gp-row span { width: 26px; height: 38px; border-radius: 4px; }
+.gal-prev.tvl { background: #0d0b18; color: #ddd; }
+.gal-prev.tvl .gp-hero { background: linear-gradient(90deg, #0d0b18, transparent 60%), linear-gradient(135deg, #5b2a86, #2a9db3); }
+.gal-prev.tvl .gp-bar i { background: #35d0d0; }
+.gal-prev.tvl .gp-rows { position: absolute; left: 8%; right: 0; display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
+.gal-prev.tvl .gp-rows .gp-row { position: static; }
+.gal-prev.tvl .gp-row span { background: #2b2546; border-radius: 3px; }
+.gal-prev.tvl .gp-row span.t { background: linear-gradient(135deg, #7a3fb0, #2a9db3); }
+.gal-undo { padding: 8px 12px; border-radius: 8px; background: rgba(53,208,208,.1); border: 1px solid rgba(53,208,208,.35); }
+.gal-url { width: min(560px, 100%); }
