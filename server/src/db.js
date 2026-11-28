@@ -112,6 +112,10 @@ export const MIGRATIONS = [
    update items set tags = '{}', locked = locked - 'tags', edits = edits - 'tags' where kind = 'clip';`,
   // 11: how loud pre-rolls, idents and features are, so pre-rolls can play at the movie's level. Keyed by file path.
   `create table loudness (path text primary key, mtime bigint not null, lufs real not null, measured_at timestamptz not null default now());`,
+  // 12: what each signed-in device is and how it connects (Studio → Devices).
+  `alter table sessions add column ua text;
+   alter table sessions add column via text;
+   alter table sessions add column ip text;`,
 ];
 
 export async function migrate({ retries = 30 } = {}) {

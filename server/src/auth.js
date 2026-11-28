@@ -45,6 +45,18 @@ export async function login(req, { profileId, name, password }) {
 
 export const publicProfile = (p) => ({ id: p.id, name: p.name, admin: p.is_admin, avatar: p.avatar, color: p.color });
 
+/**
+ * How a request reached HallFlix: "tailscale" (a 100.x address or a .ts.net name), "internet" (through Cloudflare),
+ * "home" (the home network or the NAS itself), or "direct".
+ */
+export function connection(req) {
+  const host = String(req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d+\.\d+$/.test(host) || host.endsWith('.ts.net')) return 'tailscale';
+  if (req.headers['cf-connecting-ip'] || req.headers['cf-ray']) return 'internet';
+  if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host) || !host.includes('.')) return 'home';
+  return 'direct';
+}
+
 export function tokenFrom(ctx) {
   const h = ctx.req.headers.authorization;
   if (h && h.startsWith('Bearer ')) return h.slice(7);
@@ -60,9 +72,15 @@ export async function authenticate(ctx) {
   const p = await q1(`select p.* from sessions s join profiles p on p.id = s.profile_id where s.token=$1`, [token]);
   if (!p) return null;
   const now = Date.now();
-  if (now - (seen.get(token) || 0) > 3600e3) {
-    seen.set(token, now);
-    q('update sessions set seen_at=now() where token=$1', [token]).catch(() => {});
+  // Every few minutes: when it was last used, which app or browser, and how it connected (Studio → Devices).
+  const via = connection(ctx.req);
+  const key = `${token}|${via}`;
+  if (now - (seen.get(key) || 0) > 5 * 60e3) {
+    seen.set(key, now);
+    // The app's own native calls (Android's default agent) don't replace what the app or browser said it was.
+    const ua = String(ctx.req.headers['user-agent'] || '');
+    q(`update sessions set seen_at=now(), via=$2, ip=$3, ua=coalesce($4, ua) where token=$1`,
+      [token, via, clientIp(ctx.req), /^(Dalvik|okhttp|Java)/i.test(ua) ? null : ua.slice(0, 300)]).catch(() => {});
   }
   return p;
 }

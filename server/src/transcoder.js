@@ -265,7 +265,7 @@ export async function startTranscoder(port = cfg.transcoderPort) {
       const url = new URL(req.url, 'http://x');
       const parts = url.pathname.split('/').filter(Boolean);
       if (req.method === 'GET' && url.pathname === '/status') {
-        return json(res, 200, { ok: true, hw: state.hw?.type || 'software', tonemap: state.tonemap, sessions: sessions.size });
+        return json(res, 200, { ok: true, hw: state.hw?.type || 'software', tonemap: state.tonemap, sessions: sessions.size, jobs: [...jobs.values()].filter((j) => j.state !== 'ready').length });
       }
       if (req.method === 'POST' && url.pathname === '/sessions') return json(res, 200, await create(await readJson(req)));
       if (req.method === 'POST' && url.pathname === '/jobs') return json(res, 200, addJob(await readJson(req)));
