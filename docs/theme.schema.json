@@ -1172,6 +1172,10 @@
                   "type": "boolean",
                   "default": true
                 },
+                "upNext": {
+                  "type": "boolean",
+                  "default": true
+                },
                 "align": {
                   "enum": [
                     "left",

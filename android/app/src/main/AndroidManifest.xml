@@ -49,6 +49,8 @@
         <!-- The native TV screens (home, library, title page); the web app opens them on TVs. -->
         <activity android:name=".TvHomeActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />
         <activity android:name=".TvLibraryActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />
+        <activity android:name=".TvGridActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />
+        <activity android:name=".TvSearchActivity" android:exported="false" android:windowSoftInputMode="adjustNothing|stateVisible" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />
         <activity android:name=".TvDetailsActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|smallestScreenSize" />
 
         <service

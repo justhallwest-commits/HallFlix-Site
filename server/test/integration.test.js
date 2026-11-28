@@ -223,6 +223,14 @@ test('Fire TV app: settings saved in the Studio reach the app at boot, with the 
   assert.equal(t.rows.wideWidth, 224, 'unset values come with their defaults');
   assert.equal(t.hero.show, true);
   await hf.api('PUT', '/api/studio/theme', { theme });
+  // The TV's own My List and Up next screens.
+  const movie = (await hf.api('GET', '/api/search?q=a')).items.find((x) => x.kind === 'movie');
+  await hf.api('POST', '/api/mylist', { itemId: movie.id, on: true });
+  assert.equal((await hf.api('GET', '/api/mylist')).items[0].id, movie.id);
+  await hf.api('POST', '/api/mylist', { itemId: movie.id, on: false });
+  assert.ok(!(await hf.api('GET', '/api/mylist')).items.some((x) => x.id === movie.id));
+  const up = await hf.api('GET', '/api/upnext');
+  assert.ok(Array.isArray(up.items) && up.items.every((x) => x.kind === 'episode'));
 });
 
 test('downloads: sizes to choose from, a smaller copy made by the transcoder, and the per-profile switch', async () => {
