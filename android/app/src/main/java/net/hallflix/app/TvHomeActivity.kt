@@ -178,6 +178,10 @@ class TvHomeActivity : Activity() {
             }
             if (tilesAt >= rowList.size && tiles.isNotEmpty()) list += HomeRow(tilesTitle, tiles, Shape.WIDE, tiles = true)
             if (list.isEmpty() && spotlight.isEmpty()) { status.text = "Your library is empty.\nAdd folders in the Studio on a computer."; return@get }
+            // Continue watching on the TV's own home screen too (Android TV and Google TV).
+            TvWatchNext.sync(this, rowList.firstOrNull { it.optString("id") == "continue" }?.optJSONArray("items")?.objects().orEmpty())
+            // A title picked on the TV's home screen while HallFlix was starting: play it now.
+            if (TvNav.pendingPlay > 0) { val id = TvNav.pendingPlay; TvNav.pendingPlay = 0; refreshOnReturn = true; TvNav.play(this, id, null) }
             val inRows = rows.hasFocus()
             rows.adapter = RowsAdapter(list)
             if (!quiet) { spot = 0; showSpot() }
