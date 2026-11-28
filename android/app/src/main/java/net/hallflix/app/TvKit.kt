@@ -71,6 +71,16 @@ object TvLook {
     var loaded = false
     /** theme.tvApp, with HallFlix's defaults already filled in by the server. */
     var app = JSONObject()
+    /** The look's fonts (theme.fonts): headings and buttons use the display font, everything else the body font. */
+    var displayFont = "Outfit"
+    var bodyFont = "Inter"
+    /** theme.screensaver: "off", "tv" (TVs only) or "all". The native screens are always on a TV. */
+    var screensaver = "tv"
+    /** Uploaded videos → their TV-safe copies (see ident.js on the server). */
+    var tvCopies = JSONObject()
+
+    /** A TV-safe copy of an uploaded video when the server has made one. */
+    fun tvVideo(url: String?): String? = url?.let { tvCopies.optString(it).ifEmpty { it } }
     private var libLooks = JSONObject()
 
     private fun color(o: JSONObject?, key: String, fallback: Int): Int {
@@ -91,6 +101,9 @@ object TvLook {
         bg = color(c, "bg", bg); surface = color(c, "surface", surface); text = color(c, "text", text)
         muted = color(c, "muted", muted); accent = color(c, "accent", accent); accent2 = color(c, "accent2", accent2)
         app = theme.optJSONObject("tvApp") ?: JSONObject()
+        theme.optJSONObject("fonts")?.let { f -> displayFont = f.optString("display").ifEmpty { displayFont }; bodyFont = f.optString("body").ifEmpty { bodyFont } }
+        screensaver = theme.optString("screensaver").ifEmpty { "tv" }
+        tvCopies = boot.optJSONObject("tvIdents") ?: JSONObject()
         val ring = str("cards", "focus", "theme")
         val themeRing = theme.optJSONObject("tv")?.optString("focus") ?: "white"
         showFocus = ring != "none"
@@ -132,6 +145,21 @@ object TvLook {
     fun tileBrightness(tile: JSONObject): Int {
         val own = libLook(tile.optLong("id")).optInt("tileBrightness", 0)
         return if (own in 20..160) own else num("tiles", "brightness", 100)
+    }
+
+    private fun isVideo(u: String?) = !u.isNullOrBlank() && Regex("\\.(mp4|webm|m4v|mov)(\\?|$)", RegexOption.IGNORE_CASE).containsMatchIn(u)
+
+    /** A library tile's video (the website's rules: its tile video, a video tile picture, or a video page background). */
+    fun tileVideo(tile: JSONObject): String? {
+        if (!flag("tiles", "videos", true)) return null
+        val lk = libLook(tile.optLong("id"))
+        val v = when {
+            isVideo(lk.optString("tileVideo")) -> lk.optString("tileVideo")
+            isVideo(lk.optString("tileBackground")) -> lk.optString("tileBackground")
+            lk.optString("tileUse") != "artwork" && lk.optString("tileBackground").isBlank() && isVideo(lk.optString("background")) -> lk.optString("background")
+            else -> null
+        }
+        return tvVideo(v)
     }
 
     /** The background behind a library's page, if it has one and the Fire TV app shows them. */
@@ -232,10 +260,26 @@ object TvNav {
 
 fun Context.dp(n: Number): Int = (n.toFloat() * resources.displayMetrics.density + 0.5f).toInt()
 
+/** The look's fonts, bundled in the app (assets/fonts, converted from the website's own font files). */
+object TvFonts {
+    private val cache = HashMap<String, Typeface?>()
+    private val files = mapOf("outfit" to "outfit", "inter" to "inter", "bebas neue" to "bebas", "audiowide" to "audiowide")
+    fun get(ctx: Context, name: String, bold: Boolean): Typeface? {
+        val n = name.trim().lowercase()
+        if (n == "georgia") return Typeface.create(Typeface.SERIF, if (bold) Typeface.BOLD else Typeface.NORMAL)
+        if (n == "system" || n.isEmpty()) return Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
+        val base = files[n] ?: return null
+        // Outfit and Inter come in regular and bold; Bebas Neue and Audiowide have one weight.
+        val file = if (base == "outfit" || base == "inter") "fonts/$base-${if (bold) "bold" else "regular"}.ttf" else "fonts/$base.ttf"
+        return cache.getOrPut(file) { try { Typeface.createFromAsset(ctx.assets, file) } catch (e: Exception) { null } }
+    }
+}
+
 fun Context.label(size: Float, color: Int = TvLook.text, bold: Boolean = false, lines: Int = 1): TextView = TextView(this).apply {
     textSize = size
     setTextColor(color)
-    if (bold) typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+    typeface = TvFonts.get(this@label, if (bold) TvLook.displayFont else TvLook.bodyFont, bold)
+        ?: if (bold) Typeface.create("sans-serif-medium", Typeface.BOLD) else Typeface.DEFAULT
     maxLines = lines
     ellipsize = TextUtils.TruncateAt.END
     includeFontPadding = false
@@ -463,3 +507,92 @@ class Debounce(private val ms: Long) {
 
 fun Activity.row(): LinearLayout = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
 fun Activity.column(): LinearLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+
+/**
+ * The base of every native TV screen: after five minutes with no button pressed, a screensaver drifts slowly across
+ * backdrops (the Studio's screensaver pictures, title backdrops, or both, from /api/screensaver) with the time and the
+ * logo. Any button wakes it without doing anything else. Look and feel → Screensaver "Off" turns it off.
+ */
+abstract class TvScreen : Activity() {
+    private val idle = Handler(Looper.getMainLooper())
+    private var saver: FrameLayout? = null
+    private val wake = Runnable { startSaver() }
+
+    private fun arm() { idle.removeCallbacks(wake); if (TvLook.screensaver != "off") idle.postDelayed(wake, 5 * 60_000L) }
+
+    override fun onResume() { super.onResume(); arm() }
+    override fun onPause() { idle.removeCallbacks(wake); stopSaver(); super.onPause() }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (saver != null) { if (event.action == android.view.KeyEvent.ACTION_UP) { stopSaver(); arm() }; return true }
+        arm()
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun stopSaver() {
+        val s = saver ?: return
+        saver = null
+        s.animate().alpha(0f).setDuration(250).withEndAction { (s.parent as? ViewGroup)?.removeView(s); s.tag?.let { (it as? Runnable)?.let { r -> idle.removeCallbacks(r) } } }.start()
+    }
+
+    private fun startSaver() {
+        if (saver != null || isFinishing) return
+        Thread {
+            val list = try { Server.list(TvSession.server, TvSession.token, "/api/screensaver").objects().filter { TvLook.usable(it.optString("image")) != null } } catch (e: Exception) { emptyList() }
+            runOnUiThread { if (list.size >= 2 && !isFinishing && saver == null && hasWindowFocus()) showSaver(list) else arm() }
+        }.start()
+    }
+
+    private fun picture(u: String): String = when {
+        u.startsWith("/img/t/original/") -> u.replace("/img/t/original/", "/img/t/w1280/") // a TV-sized copy of TMDB art
+        else -> TvLook.fit(u, 1280)
+    }
+
+    private fun showSaver(list: List<JSONObject>) {
+        val w = resources.displayMetrics.widthPixels.toFloat()
+        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK); alpha = 0f; isClickable = true }
+        val layers = List(2) { ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; alpha = 0f } }
+        for (l in layers) root.addView(l, FrameLayout.LayoutParams(-1, -1))
+        root.addView(View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xCC000000.toInt(), 0x00000000, 0x00000000))
+        }, FrameLayout.LayoutParams(-1, -1))
+        val info = column().apply { setPadding(dp(48), 0, dp(48), dp(40)) }
+        val logo = ImageView(this).apply { adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_START }
+        if (TvLook.logo != null) loadImage(logo, TvLook.logo) else logo.setImageResource(R.drawable.logo)
+        info.addView(logo, LinearLayout.LayoutParams(-2, dp(28)).apply { bottomMargin = dp(10) })
+        val title = label(22f, Color.WHITE, bold = true)
+        val sub = label(14f, 0xCCFFFFFF.toInt())
+        info.addView(title); info.addView(sub)
+        root.addView(info, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM or Gravity.START))
+        val clock = label(28f, Color.WHITE, bold = true).apply { setPadding(0, dp(32), dp(48), 0) }
+        root.addView(clock, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END))
+        (window.decorView as ViewGroup).addView(root, ViewGroup.LayoutParams(-1, -1))
+        saver = root
+        root.animate().alpha(1f).setDuration(600).start()
+        var i = -1
+        var layer = 0
+        val fmt = android.text.format.DateFormat.getTimeFormat(this)
+        val next = object : Runnable {
+            override fun run() {
+                if (saver !== root) return
+                i = (i + 1) % list.size; layer = 1 - layer
+                val it = list[i]
+                val v = layers[layer]
+                loadImage(v, picture(it.optString("image")))
+                // A slow drift and zoom over the twelve seconds each picture shows.
+                val dir = if (i % 2 == 0) 1 else -1
+                v.scaleX = 1.04f; v.scaleY = 1.04f; v.translationX = -dir * w * 0.02f
+                v.animate().alpha(1f).setDuration(1200).start()
+                v.animate().scaleX(1.14f).scaleY(1.14f).translationX(dir * w * 0.02f).setDuration(13_000).setInterpolator(android.view.animation.LinearInterpolator()).start()
+                layers[1 - layer].animate().alpha(0f).setDuration(1200).start()
+                title.text = it.optString("title")
+                sub.text = it.optString("sub")
+                clock.text = fmt.format(java.util.Date())
+                idle.postDelayed(this, 12_000)
+            }
+        }
+        root.tag = next
+        next.run()
+    }
+}

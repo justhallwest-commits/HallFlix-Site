@@ -33,7 +33,7 @@ export async function tvApp(main, kit) {
     const libs = home.libraries?.length ? home.libraries : L.libraries.map((l) => ({ id: l.id, name: l.name, kind: l.kind, backdrop: l.art }));
     box.innerHTML = String(html`
       <div class="card"><h2>Fire TV app</h2>
-        <p class="muted small">How HallFlix looks on Fire TV and Android TV, where the app draws Home, the libraries and title pages itself so it stays quick on a Fire TV stick. Colours, the logo and the focus ring come from <a href="#look">Look and feel</a> (the 📺 TVs look when it has one). The preview uses your own titles. Changes reach the TV the next time the app opens.</p>
+        <p class="muted small">Seasons (<a href="#seasons">Seasons</a>) change the TV too: a season’s colours, logo, background and library pictures show on the TV while it runs.</p><p class="muted small">How HallFlix looks on Fire TV and Android TV, where the app draws Home, the libraries and title pages itself so it stays quick on a Fire TV stick. Colours, the logo and the focus ring come from <a href="#look">Look and feel</a> (the 📺 TVs look when it has one). The preview uses your own titles. Changes reach the TV the next time the app opens.</p>
         <div class="row-btns"><button class="btn primary" data-save ${dirty ? '' : 'disabled'}>Save</button><button class="btn" data-undo ${dirty ? '' : 'disabled'}>Undo changes</button><button class="btn" data-reset>HallFlix defaults</button></div></div>
 
       <div class="card"><h2>Big picture</h2><p class="muted small">The large artwork at the top of Home, like the Jellyfin and Netflix TV apps.</p>
@@ -63,10 +63,12 @@ export async function tvApp(main, kit) {
           <div class="row-btns"><button class="btn sm" data-ratio="16:9">16:9</button><button class="btn sm" data-ratio="2:1">2:1</button><button class="btn sm" data-ratio="21:9">21:9</button><button class="btn sm" data-ratio="4:3">4:3</button><span class="muted small">Make the height fit the width</span></div>
           ${choose(form, 'tvApp.tiles.art', 'Tile pictures', [['library', 'Each library’s own picture (below), else new artwork'], ['newest', 'Always new artwork from the library']])}
           ${range(form, 'tvApp.tiles.brightness', 'Brightness (unless a library sets its own)', 30, 130, 5)}
+          ${check(form, 'tvApp.tiles.videos', 'Play a library’s tile video on the highlighted tile (muted; a TV-sized copy is made for Fire TV)')}
           ${check(form, 'tvApp.tiles.names', 'Library names (hidden when a library has a logo)')}${check(form, 'tvApp.tiles.counts', 'How many titles, and how many are new')}
           <h3>Each library</h3><p class="muted small">The same pictures and logos the website’s tiles use, so one change updates both.</p>
           ${libs.map((l) => html`<details class="tvp-lib"><summary><span class="tvp-mini" style="background-image:url('${encodeURI(tileArt(l))}')"></span>${l.name}</summary>
             ${image(form, `libs.${l.id}.tileBackground`, 'Tile picture')}
+            ${image(form, `libs.${l.id}.tileVideo`, 'Tile video (MP4 or WebM, plays when the tile is highlighted)')}
             ${choose(form, `libs.${l.id}.tileUse`, 'Without a tile picture, use', LIB_USE)}
             ${image(form, `libs.${l.id}.logo`, 'Logo (a see-through PNG works best)')}
             ${image(form, `libs.${l.id}.background`, 'Library page background (also on the TV’s library page)')}

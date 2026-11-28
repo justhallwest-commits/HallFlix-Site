@@ -13,7 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
 import org.json.JSONObject
 
 /** A movies or shows library as a grid of posters, with sorting and a watched filter. Loads 60 at a time. */
-class TvLibraryActivity : Activity() {
+class TvLibraryActivity : TvScreen() {
     private var libId = 0L
     private lateinit var grid: RecyclerView
     private lateinit var count: TextView

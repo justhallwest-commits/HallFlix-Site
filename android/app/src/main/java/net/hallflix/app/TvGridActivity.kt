@@ -14,7 +14,7 @@ import org.json.JSONObject
  * A simple native grid of titles from one endpoint: My List (/api/mylist) and Up next (/api/upnext, the next episode of
  * each show being watched; OK plays it straight away). Refreshes when coming back from the player or a title page.
  */
-class TvGridActivity : Activity() {
+class TvGridActivity : TvScreen() {
     private lateinit var grid: RecyclerView
     private lateinit var status: TextView
     private lateinit var count: TextView

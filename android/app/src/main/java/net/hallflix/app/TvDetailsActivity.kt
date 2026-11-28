@@ -21,7 +21,7 @@ import org.json.JSONObject
  * A movie's or show's page: big backdrop, logo, details, Play / Resume, From the beginning, My List, seasons and
  * episodes, and More like this. "More" opens the web app's page for the rest (cast, ratings, trailer, extras).
  */
-class TvDetailsActivity : Activity() {
+class TvDetailsActivity : TvScreen() {
     private var itemId = 0L
     private var focusEp = 0L
     private var data: JSONObject? = null
