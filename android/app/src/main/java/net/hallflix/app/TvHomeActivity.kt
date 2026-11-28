@@ -22,7 +22,7 @@ import org.json.JSONObject
  * (Continue watching, My List, new in each library, genres…). Rows, order and hidden sections come from /api/home, so
  * the Studio's Home layout applies; sizes, the big picture, the menu and the tiles follow Studio → Fire TV app.
  */
-class TvHomeActivity : Activity() {
+class TvHomeActivity : TvScreen() {
     private lateinit var heroImage: ImageView
     private lateinit var heroLogo: ImageView
     private lateinit var heroTitle: TextView
@@ -52,7 +52,56 @@ class TvHomeActivity : Activity() {
         load()
     }
 
+    // ── Library tile videos: one small player shared by all tiles; only the focused tile plays, muted and looping ──
+    private var tilePlayer: androidx.media3.exoplayer.ExoPlayer? = null
+    private var tileTexture: android.view.TextureView? = null
+    private val tileDelay = Debounce(700)
+
+    private fun playTile(frame: FrameLayout, url: String) {
+        tileDelay.run {
+            if (!frame.isFocused || isFinishing) return@run
+            stopTile()
+            val p = tilePlayer ?: androidx.media3.exoplayer.ExoPlayer.Builder(this).build().also { pl ->
+                pl.volume = 0f
+                pl.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ONE
+                pl.addListener(object : androidx.media3.common.Player.Listener {
+                    override fun onRenderedFirstFrame() { tileTexture?.animate()?.alpha(1f)?.setDuration(300)?.start() }
+                    override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) { tileTexture?.let { crop(it, size.width, size.height) } }
+                })
+                tilePlayer = pl
+            }
+            val tv = android.view.TextureView(this).apply { alpha = 0f }
+            frame.addView(tv, 2, FrameLayout.LayoutParams(-1, -1)) // above the picture, under the shade, logo and name
+            tileTexture = tv
+            p.setVideoTextureView(tv)
+            p.setMediaItem(androidx.media3.common.MediaItem.fromUri(TvSession.abs(url) ?: return@run))
+            p.prepare()
+            p.playWhenReady = true
+        }
+    }
+
+    /** Fill the tile without stretching (the middle of the video, like a picture's centre crop). */
+    private fun crop(v: android.view.TextureView, vw: Int, vh: Int) {
+        if (vw <= 0 || vh <= 0 || v.width <= 0 || v.height <= 0) return
+        val scale = maxOf(v.width / vw.toFloat(), v.height / vh.toFloat())
+        val m = android.graphics.Matrix()
+        m.setScale(vw * scale / v.width, vh * scale / v.height, v.width / 2f, v.height / 2f)
+        v.setTransform(m)
+    }
+
+    private fun stopTile() {
+        tileDelay.cancel()
+        tilePlayer?.let { it.stop(); it.clearVideoSurface() }
+        tileTexture?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        tileTexture = null
+    }
+
+    override fun onPause() { stopTile(); super.onPause() }
+
     override fun onDestroy() {
+        stopTile()
+        tilePlayer?.release()
+        tilePlayer = null
         TvNav.open -= this
         rotate.removeCallbacksAndMessages(null)
         follow.cancel()
@@ -363,7 +412,11 @@ class TvHomeActivity : Activity() {
             c.caption?.visibility = if (parts.isEmpty()) View.GONE else View.VISIBLE
             c.bar.visibility = View.GONE; c.barTrack.visibility = View.GONE
             c.root.contentDescription = t.optString("name")
-            c.root.zoomOnFocus(cardScale()) { has -> if (has) onFocus(t) }
+            val video = TvLook.tileVideo(t)
+            c.root.zoomOnFocus(cardScale()) { has ->
+                if (has) { onFocus(t); if (video != null) playTile(c.root, video) }
+                else if (tileTexture?.parent === c.root) stopTile()
+            }
             c.root.setOnClickListener { TvNav.openLibrary(this@TvHomeActivity, t) }
         }
     }

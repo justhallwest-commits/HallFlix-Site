@@ -26,7 +26,7 @@ import org.json.JSONObject
  * movies under two hours", the same /api/search the website uses). Speaking works through the Fire TV keyboard's
  * microphone, and on Android TV / Google TV the Speak button (or the remote's search key) listens directly.
  */
-class TvSearchActivity : Activity() {
+class TvSearchActivity : TvScreen() {
     private lateinit var field: EditText
     private lateinit var grid: RecyclerView
     private lateinit var status: TextView

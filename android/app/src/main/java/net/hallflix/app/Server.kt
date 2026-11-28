@@ -118,6 +118,20 @@ object Server {
 
     class ServerError(message: String) : Exception(message)
 
+    /** A GET whose answer is a list (like /api/screensaver). */
+    fun list(server: String, token: String?, path: String): JSONArray {
+        val c = URL(server + path).openConnection() as HttpURLConnection
+        c.connectTimeout = 10_000
+        c.readTimeout = 30_000
+        c.setRequestProperty("Accept", "application/json")
+        if (token != null) c.setRequestProperty("Authorization", "Bearer $token")
+        val code = c.responseCode
+        val text = (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+        c.disconnect()
+        if (code >= 400) throw ServerError("The server answered $code")
+        return try { JSONArray(text) } catch (e: Exception) { JSONArray() }
+    }
+
     /** What this device can play without help, in the server's own words (see decide() in playback.js). */
     /**
      * What this device can play, remembered: working it out reads every decoder, which takes a moment on a Fire TV

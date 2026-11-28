@@ -54,12 +54,19 @@ export function makeTvCopy(url) {
   return job;
 }
 
-/** Every welcome ident in a look (the main one and any per-device or seasonal ones). */
+const VIDEO = /\.(mp4|webm|mov|m4v)$/i;
+const LIB_VIDEO_KEYS = ['tileVideo', 'tileBackground', 'background'];
+
+/**
+ * Every uploaded video a TV may play in a look: welcome idents (main, per-device, seasonal), and library tile and page
+ * videos (the TV app plays the focused library tile's video).
+ */
 export function identsIn(look) {
   const found = new Set();
   const walk = (o) => {
     if (!o || typeof o !== 'object') return;
     if (o.splash && typeof o.splash.video === 'string' && o.splash.video) found.add(o.splash.video);
+    for (const k of LIB_VIDEO_KEYS) if (typeof o[k] === 'string' && VIDEO.test(o[k])) found.add(o[k]);
     for (const v of Object.values(o)) walk(v);
   };
   walk(look);
