@@ -1238,6 +1238,10 @@
                   "minimum": 30,
                   "maximum": 130,
                   "default": 100
+                },
+                "videos": {
+                  "type": "boolean",
+                  "default": true
                 }
               }
             },
